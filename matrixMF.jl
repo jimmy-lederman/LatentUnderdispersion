@@ -1,4 +1,4 @@
-using ProgressBars
+using ProgressMeter
 
 abstract type matrixMF end
 
@@ -14,8 +14,8 @@ function fit(model::matrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     end
 
     S = nburnin + nsamples
-    for s in ProgressBar(1:S)
-        data, state = backward_sample(model, data, state, mask)
+    @showprogress for s in 1:S
+        ~, state = backward_sample(model, data, state, mask)
         if s > nburnin && mod(s,nthin) == 0
             push!(samplelist, state)
         end
@@ -27,8 +27,7 @@ function gewekeTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nbu
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
     # sample forward from the prior and likelihood
-
-    for i in ProgressBar(1:nsamples)
+    @showprogress for i in 1:nsamples
         ~, state = forward_sample(model)
         #  we will only collect the states
         for key in varlist
@@ -40,14 +39,14 @@ function gewekeTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nbu
     data, state = forward_sample(model)
     
     # burn-in samples
-    for i in ProgressBar(1:nburnin)
+    @showprogress for i in 1:nburnin
         # perform a single Gibbs transition
         ~, state = backward_sample(model, data, state)
         # generate data from the new state
         data, ~ = forward_sample(model, state)
     end
     
-    for i in ProgressBar(1:(nsamples*nthin))
+    @showprogress for i in 1:(nsamples*nthin)
         # perform a single Gibbs transition
         ~, state = backward_sample(model, data, state)
         # generate data from the new state
@@ -67,7 +66,7 @@ end
 function gandyscottTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
-    for i in ProgressBar(1:nsamples)
+    @showprogress for i in 1:nsamples
         #forward set
         data, state = forward_sample(model)
         for key in varlist
@@ -88,7 +87,7 @@ end
 function scheinTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
-    for i in ProgressBar(1:nsamples)
+    @showprogress for i in 1:nsamples
         #forward set
         data, state = forward_sample(model)
         for key in varlist

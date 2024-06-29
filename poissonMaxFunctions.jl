@@ -8,6 +8,8 @@ end
 
 
 function sampleIndex(Y,D,dist)
+    #this is an approximation for stability; take out if
+    #testing for correctness
     if pdf(dist, Y) < 10e-3
         if Y > mean(dist)
             index = rand(DiscreteUniform(1,D))
@@ -20,26 +22,26 @@ function sampleIndex(Y,D,dist)
         totalmasstried = 0
         for d in D:-1:1
             if d == 1
-                index = d
+                index = D
                 break
             end
             b1 = [1-p for p in b]
             probY = probYatIteration(Y,d,dist)
-            push!(b, probY)
+            
             if isempty(b1)
                 stopprobtemp = probY
             else
                 stopprobtemp = probY .* prod(b1)
             end
             stopprob = stopprobtemp / (1-totalmasstried)
-            totalmasstried += stopprobtemp 
-            stop = rand(Bernoulli(round(stopprob, digits=6)))
+            stop = rand(Bernoulli(stopprob))
             if stop
                 break
             end
+            totalmasstried += stopprobtemp 
+            push!(b, probY)
             index += 1
         end
-        
     end
     return index
 end

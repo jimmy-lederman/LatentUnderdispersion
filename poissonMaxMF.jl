@@ -3,14 +3,14 @@ include("poissonMaxFunctions.jl")
 using Distributions
 
 struct maxPoissonMF <: matrixMF
-    N::Int
-    M::Int
-    K::Int
-    a::Int
-    b::Int
-    c::Int
-    d::Int
-    D::Int
+    N::Int64
+    M::Int64
+    K::Int64
+    a::Float64
+    b::Float64
+    c::Float64
+    d::Float64
+    D::Int64
 end
 
 function evaluateLikelihod(model::maxPoissonMF, state, data, mask)
@@ -70,7 +70,7 @@ function backward_sample(model::maxPoissonMF, data, state, mask=nothing)
     for n in 1:model.N
         for k in 1:model.K
             post_shape = model.a + sum(Z_NMK[n, :, k])
-            post_rate = 1/model.b + model.D*sum(V_KM[k, :])
+            post_rate = model.b + model.D*sum(V_KM[k, :])
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
@@ -78,7 +78,7 @@ function backward_sample(model::maxPoissonMF, data, state, mask=nothing)
     for m in 1:model.M
         for k in 1:K
             post_shape = model.c + sum(Z_NMK[:, m, k])
-            post_rate = 1/model.d + model.D*sum(U_NK[:, k])
+            post_rate = model.d + model.D*sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
@@ -86,13 +86,13 @@ function backward_sample(model::maxPoissonMF, data, state, mask=nothing)
     return data, state
 end
 
-N = 20
-M = 20
-K = 2
-a = b = c = d = 1
-D = 10
-model = maxPoissonMF(N,M,K,a,b,c,d,D)
-data, state = forward_sample(model)
-posteriorsamples = fit(model, data, nsamples=100,nburnin=100,nthin=1)
-print(evaluateInfoRate(model, data, posteriorsamples))
+# N = 100
+# M = 100
+# K = 2
+# a = b = c = d = 1
+# D = 10
+# model = maxPoissonMF(N,M,K,a,b,c,d,D)
+# data, state = forward_sample(model)
+# posteriorsamples = fit(model, data, nsamples=100,nburnin=100,nthin=1)
+# print(evaluateInfoRate(model, data, posteriorsamples))
 #fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)

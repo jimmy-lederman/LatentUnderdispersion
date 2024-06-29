@@ -2,13 +2,13 @@ include("matrixMF.jl")
 using Distributions
 
 struct poissonMF <: matrixMF
-    N::Int
-    M::Int
-    K::Int
-    a::Int
-    b::Int
-    c::Int
-    d::Int
+    N::Int64
+    M::Int64
+    K::Int64
+    a::Float64
+    b::Float64
+    c::Float64
+    d::Float64
 end
 
 function evaluateLikelihod(model::poissonMF, state, data, mask=nothing)
@@ -49,7 +49,7 @@ function backward_sample(model::poissonMF, data, state, mask=nothing)
     if !isnothing(mask)
         Mu_NM = U_NK * V_KM
     end
-    # Loop over the non-zeros in Y_DV and allocate
+    # Loop over the non-zeros in Y_NM and allocate
     for n in 1:model.N
         for m in 1:model.M
             if !isnothing(mask)
@@ -68,7 +68,7 @@ function backward_sample(model::poissonMF, data, state, mask=nothing)
     for n in 1:model.N
         for k in 1:model.K
             post_shape = model.a + sum(Y_NMK[n, :, k])
-            post_rate = 1/model.b + sum(V_KM[k, :])
+            post_rate = model.b + sum(V_KM[k, :])
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
@@ -76,7 +76,7 @@ function backward_sample(model::poissonMF, data, state, mask=nothing)
     for m in 1:model.M
         for k in 1:K
             post_shape = model.c + sum(Y_NMK[:, m, k])
-            post_rate = 1/model.d + sum(U_NK[:, k])
+            post_rate = model.d + sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
@@ -84,11 +84,11 @@ function backward_sample(model::poissonMF, data, state, mask=nothing)
     return data, state
 end
 
-N = 100
-M = 100
-K = 10
-a = b = c = d = 1
-model = poissonMF(N,M,K,a,b,c,d)
-# data, state = forward_sample(model)
-# posteriorsamples = fit(model, data)
-fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)
+# N = 100
+# M = 100
+# K = 10
+# a = b = c = d = 1
+# model = poissonMF(N,M,K,a,b,c,d)
+# # data, state = forward_sample(model)
+# # posteriorsamples = fit(model, data)
+# fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)
