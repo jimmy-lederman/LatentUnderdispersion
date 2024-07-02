@@ -21,13 +21,8 @@ function sampleIndex(Y,D,dist)
         b  = []
         totalmasstried = 0
         for d in D:-1:1
-            if d == 1
-                index = D
-                break
-            end
             b1 = [1-p for p in b]
             probY = probYatIteration(Y,d,dist)
-            
             if isempty(b1)
                 stopprobtemp = probY
             else
@@ -36,6 +31,10 @@ function sampleIndex(Y,D,dist)
             stopprob = stopprobtemp / (1-totalmasstried)
             stop = rand(Bernoulli(stopprob))
             if stop
+                break
+            end
+            if d == 2
+                index = D
                 break
             end
             totalmasstried += stopprobtemp 

@@ -1,8 +1,8 @@
 using ProgressMeter
 
-abstract type matrixMF end
+abstract type MatrixMF end
 
-function fit(model::matrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, mask=nothing)
+function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, mask=nothing, verbose=true)
     #some checks
     Y_NM = data["Y_NM"]
     @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
@@ -12,18 +12,23 @@ function fit(model::matrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     if initialize
         state = sample_prior(model)
     end
-
     S = nburnin + nsamples
-    @showprogress for s in 1:S
+    if verbose
+        prog = Progress(S, desc="Burnin+Samples...")
+    end
+    for s in 1:S
         ~, state = backward_sample(model, data, state, mask)
         if s > nburnin && mod(s,nthin) == 0
             push!(samplelist, state)
         end
+        if verbose next!(prog) end
     end
+    if verbose finish!(prog) end
+
     return samplelist
 end
 
-function gewekeTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nburnin=1000, nthin=5)
+function gewekeTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nburnin=1000, nthin=5)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
     # sample forward from the prior and likelihood
@@ -63,7 +68,7 @@ function gewekeTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nbu
     return f_samples, b_samples
 end
 
-function gandyscottTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
+function gandyscottTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
     @showprogress for i in 1:nsamples
@@ -84,7 +89,7 @@ function gandyscottTest(model::matrixMF, varlist::Vector{String}; nsamples=1000,
     return f_samples, b_samples
 end
 
-function scheinTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
+function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nthin=5)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
     @showprogress for i in 1:nsamples
@@ -104,22 +109,25 @@ function scheinTest(model::matrixMF, varlist::Vector{String}; nsamples=1000, nth
     return f_samples, b_samples
 end
 
-function evaluateInfoRate(model::matrixMF, data, samples, mask=nothing)
+function evaluateInfoRate(model::MatrixMF, data, samples, mask=nothing)
     S = size(samples)[1]
     if !isnothing(mask)
-        I = countnz(mask)
+        I = count(x -> x != 0, mask)
     else
         I = model.N*model.M
     end
     inforatetotal = 0
-    L_NMS = zeros(S, model.N, model.M)
-    for (i, state) in enumerate(samples)
-        L_NMS[i, :, :] .= evaluateLikelihod(model, state, data, mask)
+    for row in 1:model.N
+        for col in 1:model.M
+            if !isnothing(mask) && mask[row,col]
+                pointtotal = 0
+                for sample in samples
+
+                    pointtotal += evaluateLikelihod(model, sample, data, row, col)
+                end
+                inforatetotal += log((1/S)*pointtotal)
+            end
+        end
     end
-    #take mean accross samples
-    L_NM = dropdims(mean(L_NMS, dims=3), dims=3)
-    print(size(L_NM))
-    #take logarithms for all heldout points
-    L_NM[L_NM .!= 0] .= log.(L_NM[L_NM .!= 0])
-    return exp(sum(L_NM)/I)
+    return exp(inforatetotal/I)
 end

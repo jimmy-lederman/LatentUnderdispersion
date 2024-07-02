@@ -1,7 +1,7 @@
 include("matrixMF.jl")
 using Distributions
 
-struct poissonMF <: matrixMF
+struct PoissonMF <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
@@ -11,25 +11,20 @@ struct poissonMF <: matrixMF
     d::Float64
 end
 
-function evaluateLikelihod(model::poissonMF, state, data, mask=nothing)
-    Y_NM = data["Y_NM"]
-    Mu_NM = state["U_NK"] * state["V_KM"]
-    lik = pdf.(Poisson.(Mu_NM), Y_NM)
-    if !isnothing(mask)
-        return lik .* mask
-    else
-        return lik
-    end
+function evaluateLikelihod(model::PoissonMF, state, data, row, col)
+    Y = data["Y_NM"][row,col]
+    mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
+    return pdf(Poisson(mu), Y)
 end
 
-function sample_prior(model::poissonMF)
+function sample_prior(model::PoissonMF)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM)
     return state
 end
 
-function forward_sample(model::poissonMF, state=nothing)
+function forward_sample(model::PoissonMF, state=nothing)
     if isnothing(state)
         state = sample_prior(model)
     end
@@ -39,7 +34,7 @@ function forward_sample(model::poissonMF, state=nothing)
     return data, state 
 end
 
-function backward_sample(model::poissonMF, data, state, mask=nothing)
+function backward_sample(model::PoissonMF, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
