@@ -45,10 +45,14 @@ function sampleIndex(Y,D,dist)
     return index
 end
 
-function truncInverseTransform(D, Y, dist)
+function backupTruncation(D, Y, dist)
     Fmax = cdf(dist, Y)
-    u_n = rand(Uniform(0,Fmax), D)
-    return quantile(dist, u_n)
+    if Fmax == 0
+        return rand(dist, D)
+    else
+        u_n = rand(Uniform(0,Fmax), D)
+        return quantile(dist, u_n)
+    end
 end
 
 function sampleSumGivenMax(Y,D,dist)
@@ -59,8 +63,8 @@ function sampleSumGivenMax(Y,D,dist)
         return sum(sample1) + Y + sum(sample2)
     catch ex
         #the built in truncation does not work if mu is too different than Y
-        sample1 = truncInverseTransform(index-1, Y-1, dist)
-        sample2 = truncInverseTransform(D-index, Y, dist)
+        sample1 = backupTruncation(index-1, Y-1, dist)
+        sample2 = backupTruncation(D-index, Y, dist)
         return sum(sample1) + Y + sum(sample2)
     end
 end

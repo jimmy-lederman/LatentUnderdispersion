@@ -14,10 +14,11 @@ struct MaxPoissonMF <: MatrixMF
     D::Int64
 end
 
-function evaluateLikelihod(model::MaxPoissonMF, state, data, row, col)
+function evalulateLogLikelihood(model::MaxPoissonMF, state, data, row, col)
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-    return pdf(OrderStatistic(Poisson(mu), model.D, model.D), Y)
+    println(Y, " ", mu)
+    return logpdf(OrderStatistic(Poisson(mu), model.D, model.D), Y)
 end
 
 function sample_prior(model::MaxPoissonMF)
@@ -72,7 +73,7 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
     end
 
     for m in 1:model.M
-        for k in 1:K
+        for k in 1:model.K
             post_shape = model.c + sum(Z_NMK[:, m, k])
             post_rate = model.d + model.D*sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]

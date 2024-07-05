@@ -1,5 +1,6 @@
 include("matrixMF.jl")
 using Distributions
+using LinearAlgebra
 
 struct PoissonMF <: MatrixMF
     N::Int64
@@ -11,10 +12,10 @@ struct PoissonMF <: MatrixMF
     d::Float64
 end
 
-function evaluateLikelihod(model::PoissonMF, state, data, row, col)
+function evalulateLogLikelihood(model::PoissonMF, state, data, row, col)
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-    return pdf(Poisson(mu), Y)
+    return logpdf(Poisson(mu), Y)
 end
 
 function sample_prior(model::PoissonMF)
@@ -69,7 +70,7 @@ function backward_sample(model::PoissonMF, data, state, mask=nothing)
     end
 
     for m in 1:model.M
-        for k in 1:K
+        for k in 1:model.K
             post_shape = model.c + sum(Y_NMK[:, m, k])
             post_rate = model.d + sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]

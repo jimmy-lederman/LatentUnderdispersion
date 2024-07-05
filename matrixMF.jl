@@ -1,5 +1,10 @@
 using ProgressMeter
 
+function logsumexp(arr::AbstractVector{T}) where T <: Real
+    m = maximum(arr)
+    m + log(sum(exp.(arr .- m)))
+end
+
 abstract type MatrixMF end
 
 function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, mask=nothing, verbose=true)
@@ -111,23 +116,21 @@ end
 
 function evaluateInfoRate(model::MatrixMF, data, samples, mask=nothing)
     S = size(samples)[1]
-    if !isnothing(mask)
-        I = count(x -> x != 0, mask)
-    else
-        I = model.N*model.M
-    end
+    I = 0 #total number of masked points
     inforatetotal = 0
     for row in 1:model.N
         for col in 1:model.M
             if !isnothing(mask) && mask[row,col]
-                pointtotal = 0
-                for sample in samples
-
-                    pointtotal += evaluateLikelihod(model, sample, data, row, col)
+                llikvector = Vector{Float64}(undef, S)
+                for s in 1:S
+                    sample = samples[s]
+                    llik = evalulateLogLikelihood(model, sample, data, row, col)
+                    llikvector[s] = llik
                 end
-                inforatetotal += log((1/S)*pointtotal)
+                inforatetotal += logsumexp(llikvector) - log(S)
+                I += 1
             end
         end
     end
-    return exp(inforatetotal/I)
+    return inforatetotal/I
 end
