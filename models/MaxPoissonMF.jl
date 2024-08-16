@@ -1,7 +1,9 @@
-include("matrixMF.jl")
-include("poissonMaxFunctions.jl")
+include("MatrixMF.jl")
+include("PoissonMaxFunctions.jl")
 using Distributions
-using LinearAlgebra
+using LogExpFunctions
+using PyCall
+using SymPy
 
 struct MaxPoissonMF <: MatrixMF
     N::Int64
@@ -14,12 +16,15 @@ struct MaxPoissonMF <: MatrixMF
     D::Int64
 end
 
+
 function evalulateLogLikelihood(model::MaxPoissonMF, state, data, row, col)
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-    println(Y, " ", mu)
-    return logpdf(OrderStatistic(Poisson(mu), model.D, model.D), Y)
+    return logpmfMaxPoisson(Y,mu,model.D)
 end
+
+
+
 
 function sample_prior(model::MaxPoissonMF)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
@@ -28,13 +33,22 @@ function sample_prior(model::MaxPoissonMF)
     return state
 end
 
-function forward_sample(model::MaxPoissonMF, state=nothing)
+function forward_sample(model::MaxPoissonMF; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model)
     end
     Mu_NM = state["U_NK"] * state["V_KM"]
     Y_NM = rand.(OrderStatistic.(Poisson.(Mu_NM), model.D, model.D))
+    Z_NMK = zeros(Int, model.N, model.M, model.K)
+    # for n in 1:model.N
+    #     for m in 1:model.M
+    #         for k in 1:model.K
+    #             Z_NMK[n,m,k] = rand(Poisson(state["U_NK"][n,k]*state["V_KM"][k,m]))
+    #         end
+    #     end
+    # end
     data = Dict("Y_NM" => Y_NM)
+    state = Dict("U_NK" => state["U_NK"], "V_KM" => state["V_KM"], "Z_NMK"=> Z_NMK)
     return data, state 
 end
 
@@ -45,9 +59,10 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
     V_KM = copy(state["V_KM"])
     Z_NM = zeros(Int, model.N, model.M)
     Z_NMK = zeros(Int, model.N, model.M, model.K)
+    Z_NMK = copy(state["Z_NMK"])
     P_K = zeros(model.K)
     Mu_NM = U_NK * V_KM
-    # Loop over the non-zeros in Y_DV and allocate
+    #Loop over the non-zeros in Y_DV and allocate
     for n in 1:model.N
         for m in 1:model.M
             if !isnothing(mask)
@@ -79,7 +94,7 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Z_NMK"=>Z_NMK)
     return data, state
 end
 

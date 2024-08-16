@@ -1,2 +1,6 @@
 *ipynb
 output/
+data/
+synthetic/
+experiments/
+debug/

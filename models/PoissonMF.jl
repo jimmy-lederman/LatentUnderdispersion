@@ -1,6 +1,5 @@
-include("matrixMF.jl")
+include("MatrixMF.jl")
 using Distributions
-using LinearAlgebra
 
 struct PoissonMF <: MatrixMF
     N::Int64
