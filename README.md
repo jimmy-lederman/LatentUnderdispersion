@@ -1,2 +1,2 @@
-# poisson_mf_julia
+# DiscreteOrderStatisticModels
 Poisson matrix factorization with Gibbs sampling in Julia
