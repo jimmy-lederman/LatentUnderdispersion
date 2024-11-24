@@ -1,7 +1,6 @@
 include("../helper/MatrixMF.jl")
 using Distributions
 using LinearAlgebra
-using Base.Threads
 
 struct PoissonMF <: MatrixMF
     N::Int64
@@ -42,39 +41,36 @@ function backward_sample(model::PoissonMF, data, state, mask=nothing)
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
     Y_NMK = zeros(model.N, model.M, model.K)
+    P_K = zeros(model.K)
     if !isnothing(mask)
         Mu_NM = U_NK * V_KM
     end
     # Loop over the non-zeros in Y_NM and allocate
-    locker = Threads.SpinLock()
-    @views @threads for idx in 1:(model.N * model.M)
-        n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1    
-        if !isnothing(mask)
-            if mask[n,m] == 1
-                lock(locker)
-                Y_NM[n,m] = rand(Poisson(Mu_NM[n,m]))
-                unlock(locker)
+    for n in 1:model.N
+        for m in 1:model.M
+            if !isnothing(mask)
+                if mask[n,m] == 1
+                    Y_NM[n,m] = rand(Poisson(Mu_NM[n,m]))
+                end
+            end
+            if Y_NM[n, m] > 0
+                P_K[:] = U_NK[n, :] .* V_KM[:, m]
+                P_K[:] = P_K / sum(P_K)
+                Y_NMK[n, m, :] = rand(Multinomial(Y_NM[n, m], P_K))
             end
         end
-        if Y_NM[n, m] > 0
-            P_K = U_NK[n, :] .* V_KM[:, m]
-            y_k = rand(Multinomial(Y_NM[n, m],  P_K / sum(P_K)))
-            Y_NMK[n, m, :] = y_k
-        end
     end
-    @assert sum(Y_NMK) == sum(Y_NM)
-    
-    @views for n in 1:model.N
-        @views for k in 1:model.K
+
+    for n in 1:model.N
+        for k in 1:model.K
             post_shape = model.a + sum(Y_NMK[n, :, k])
             post_rate = model.b + sum(V_KM[k, :])
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
 
-    @views for m in 1:model.M
-        @views for k in 1:model.K
+    for m in 1:model.M
+        for k in 1:model.K
             post_shape = model.c + sum(Y_NMK[:, m, k])
             post_rate = model.d + sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]

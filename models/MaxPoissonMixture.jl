@@ -1,14 +1,7 @@
-include("MatrixMF.jl")
-include("PoissonMaxFunctions.jl")
+include("../helper/MatrixMF.jl")
+include("../helper/PoissonMaxFunctions.jl")
 using Distributions
-#using LogExpFunctions
-using PyCall
-using SymPy
-
-function logsumexp(arr::AbstractVector{T}) where T <: Real
-    m = maximum(arr)
-    m + log(sum(exp.(arr .- m)))
-end
+using Base.Threads
 
 struct MaxPoissonMixture <: MatrixMF
     N::Int64
@@ -27,11 +20,12 @@ function evalulateLogLikelihood(model::MaxPoissonMixture, state, data, info, row
     @assert size(data["Y_NM"])[2] == 1
     home = info["I_NM"][row,1]
     away = info["I_NM"][row,2]
+    dist = info["dist_NM"]
 
     A_T = state["A_T"]
     B_T = state["B_T"]
 
-    mu = A_T[home] +B_T[away] + dist[home,away]*state["U_K"][state["Z_TT"][home,away]]
+    mu = A_T[home] + B_T[away] + dist[row,1]*state["U_K"][state["Z_TT"][home,away]]
 
     return logpmfMaxPoisson(Y,mu,model.D)
 end
@@ -128,7 +122,7 @@ function backward_sample(model::MaxPoissonMixture, data, state, mask=nothing)
 
     #unfortunately, to impute the held out data points and
     #sample poissons from maximum, we must loop over N
-    for n in 1:model.N
+    @views @threads for n in 1:model.N
         home = home_N[n]
         away = away_N[n]
         if !isnothing(mask) && mask[n,1] == 1
@@ -145,7 +139,8 @@ function backward_sample(model::MaxPoissonMixture, data, state, mask=nothing)
     #loop over R (R <<< N)
     Z_R3 = zeros(R,3)
     P_3 = zeros(3)
-    for r in 1:R
+    locker = Threads.SpinLock()
+    @views @threads for r in 1:R
         #access pre-calculated route info
         home = routes_R4[r,1]
         away = routes_R4[r,2]
@@ -155,11 +150,12 @@ function backward_sample(model::MaxPoissonMixture, data, state, mask=nothing)
         numflights = length(indices)
         #thin
         if Zr > 0
-            P_3[1] = A_T[home]
-            P_3[2] = B_T[away]
-            P_3[3] = distance*U_K[Z_TT[home,away]]
-            P_3 = P_3 ./ sum(P_3)
-            Z_R3[r, :] = rand(Multinomial(Zr, P_3))
+            P_3 = vcat(A_T[home], B_T[away], distance*U_K[Z_TT[home,away]])
+            # P_3[1] = A_T[home]
+            # P_3[2] = B_T[away]
+            # P_3[3] = distance*U_K[Z_TT[home,away]]
+            #P_3 = P_3 ./ sum(P_3)
+            Z_R3[r, :] = rand(Multinomial(Zr, P_3 ./ sum(P_3)))
         end
 
         #calc categorical probabilities
@@ -171,6 +167,7 @@ function backward_sample(model::MaxPoissonMixture, data, state, mask=nothing)
         g_K = rand(Gumbel(0,1), model.K)
         Z_TTnew[home,away] = argmax(g_K + logprobvec_K)
 
+        lock(locker)
         #update cluster mean parameters
         post_shape_K[Z_TTnew[home,away]] += Z_R3[r,3]
         post_rate_K[Z_TTnew[home,away]] += model.D*distance*numflights
@@ -179,6 +176,7 @@ function backward_sample(model::MaxPoissonMixture, data, state, mask=nothing)
         post_rate1_T[home] += model.D*numflights
         post_shape2_T[away] += Z_R3[r,2]
         post_rate2_T[away] += model.D*numflights
+        unlock(locker)
     end
 
     U_K[:] = rand.(Gamma.(post_shape_K, 1 ./post_rate_K))

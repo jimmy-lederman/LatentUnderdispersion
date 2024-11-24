@@ -2,7 +2,6 @@ include("../helper/MatrixMF.jl")
 include("../helper/PoissonMaxFunctions.jl")
 using Distributions
 using LinearAlgebra
-using Base.Threads
 
 struct MaxPoissonMF <: MatrixMF
     N::Int64
@@ -59,33 +58,35 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
     Z_NM = zeros(Int, model.N, model.M)
     Z_NMK = zeros(Int, model.N, model.M, model.K)
     #Z_NMK = copy(state["Z_NMK"])
+    P_K = zeros(model.K)
     Mu_NM = U_NK * V_KM
     #Loop over the non-zeros in Y_DV and allocate
-    @views @threads for idx in 1:(model.N * model.M)
-        n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1    
-        if !isnothing(mask)
-            if mask[n,m] == 1
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Mu_NM[n,m]), model.D, model.D))
+    for n in 1:model.N
+        for m in 1:model.M
+            if !isnothing(mask)
+                if mask[n,m] == 1
+                    Y_NM[n,m] = rand(OrderStatistic(Poisson(Mu_NM[n,m]), model.D, model.D))
+                end
             end
-        end
-        if Y_NM[n, m] > 0
-            Z_NM[n, m] = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Mu_NM[n, m]))
-            P_K = U_NK[n, :] .* V_KM[:, m]
-            Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K / sum(P_K)))
+            if Y_NM[n, m] > 0
+                Z_NM[n, m] = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Mu_NM[n, m]))
+                P_K[:] = U_NK[n, :] .* V_KM[:, m]
+                P_K[:] = P_K / sum(P_K)
+                Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K))
+            end
         end
     end
 
-    @views for n in 1:model.N
-        @views for k in 1:model.K
+    for n in 1:model.N
+        for k in 1:model.K
             post_shape = model.a + sum(Z_NMK[n, :, k])
             post_rate = model.b + model.D*sum(V_KM[k, :])
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
 
-    @views for m in 1:model.M
-        @views for k in 1:model.K
+    for m in 1:model.M
+        for k in 1:model.K
             post_shape = model.c + sum(Z_NMK[:, m, k])
             post_rate = model.d + model.D*sum(U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]

@@ -1,5 +1,5 @@
 using ProgressMeter
-using Random
+using Random 
 
 function logsumexp(arr::AbstractVector{T}) where T <: Real
     m = maximum(arr)
@@ -16,7 +16,7 @@ end
 
 abstract type MatrixMF end
 
-function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing)
+function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing)
     #some checks
     Y_NM = data["Y_NM"]
     @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
@@ -25,14 +25,29 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     samplelist = []
     if initialize
         Random.seed!(initseed)
-        state = sample_prior(model, info)
+        if !isnothing(constantinit) && !isnothing(info)
+            state = sample_prior(model, info, constantinit)
+        elseif !isnothing(info)
+            state = sample_prior(model, info)
+        else
+            state = sample_prior(model)
+        end
+        if !isnothing(constantinit)
+            for (var, value) in constantinit
+                state[var] = value
+            end
+        end
     end
     S = nburnin + nthin*nsamples
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
     for s in 1:S
-        ~, state = backward_sample(model, data, state, mask)
+        if s < nburnin/2 && !isnothing(skipupdate)
+            ~, state = backward_sample(model, data, state, mask, skipupdate)
+        else
+            ~, state = backward_sample(model, data, state, mask)
+        end
         if s > nburnin && mod(s,nthin) == 0
             push!(samplelist, state)
         end
@@ -71,6 +86,7 @@ function gewekeTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nbu
         ~, state = backward_sample(model, data, state)
         # generate data from the new state
         data, ~ = forward_sample(model, state=state, info=info)
+
         # condition on the new data by redefining the transition operator
         # collect every n_thin sample
         if mod(i, nthin) == 0
@@ -124,7 +140,7 @@ function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nth
     return f_samples, b_samples
 end
 
-function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true)
+function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing)
     S = size(samples)[1]
     I = 0 #total number of masked points
     inforatetotal = 0
@@ -133,6 +149,9 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     end
     for row in 1:model.N
         for col in 1:model.M
+            if !isnothing(cols) && !(col in cols)
+                continue
+            end
             if !isnothing(mask) && mask[row,col]
                 llikvector = Vector{Float64}(undef, S)
                 for s in 1:S

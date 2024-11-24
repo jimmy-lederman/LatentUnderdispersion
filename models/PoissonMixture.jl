@@ -1,5 +1,6 @@
-include("MatrixMF.jl")
+include("../helper/MatrixMF.jl")
 using Distributions
+using Base.Threads
 
 struct PoissonMixture <: MatrixMF
     N::Int64
@@ -102,7 +103,7 @@ function backward_sample(model::PoissonMixture, data, state, mask=nothing)
     R = size(routes_R4)[1]
 
     if !isnothing(mask) 
-        for n in 1:model.N
+        @views for n in 1:model.N
             if mask[n,1] == 1
                 Y_NM[n,1] = rand(Poisson(A_T[home]+B_T[away]+dist_NM[n,1]*U_K[Z_TT[home,away]]))
             end
@@ -122,8 +123,7 @@ function backward_sample(model::PoissonMixture, data, state, mask=nothing)
     Z_TTnew = zeros(Int, model.T, model.T)
 
     Y_R3 = zeros(R,3)
-    P_3 = zeros(3)
-    for r in 1:R
+    @views @threads for r in 1:R
         #access pre-calculated route info
         home = routes_R4[r,1]
         away = routes_R4[r,2]
@@ -133,11 +133,11 @@ function backward_sample(model::PoissonMixture, data, state, mask=nothing)
         numflights = length(indices)
         #thin
         if Yr > 0
-            P_3[1] = A_T[home]
-            P_3[2] = B_T[away]
-            P_3[3] = distance*U_K[Z_TT[home,away]]
-            P_3 = P_3 ./ sum(P_3)
-            Y_R3[r, :] = rand(Multinomial(Yr, P_3))
+            # P_3[1] = A_T[home]
+            # P_3[2] = B_T[away]
+            # P_3[3] = distance*U_K[Z_TT[home,away]]
+            P_3 = vcat(A_T[home], B_T[away],  distance*U_K[Z_TT[home,away]])
+            Y_R3[r, :] = rand(Multinomial(Yr, P_3 ./ sum(P_3)))
         end
 
         #calc categorical probabilities
@@ -149,6 +149,7 @@ function backward_sample(model::PoissonMixture, data, state, mask=nothing)
         g_K = rand(Gumbel(0,1), model.K)
         Z_TTnew[home,away] = argmax(g_K + logprobvec_K)
 
+        lock(locker)
         #update cluster mean parameters
         post_shape_K[Z_TTnew[home,away]] += Y_R3[r,3]
         post_rate_K[Z_TTnew[home,away]] += distance*numflights
@@ -157,6 +158,7 @@ function backward_sample(model::PoissonMixture, data, state, mask=nothing)
         post_rate1_T[home] += numflights
         post_shape2_T[away] += Y_R3[r,2]
         post_rate2_T[away] += numflights
+        unlock(locker)
     end
 
     U_K[:] = rand.(Gamma.(post_shape_K, 1 ./post_rate_K))

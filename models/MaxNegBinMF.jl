@@ -1,17 +1,17 @@
-include("matrixMF.jl")
-include("poissonMaxFunctions.jl")
+include("../helper/MatrixMF.jl")
+include("../helper/PoissonMaxFunctions.jl")
 using Distributions
 using LinearAlgebra
 
-struct NegBinMax <: MatrixMF
+struct MaxNegBinMF <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
-    D::Int64
     a::Float64
     b::Float64
     c::Float64
     d::Float64
+    D::Int64
     p::Float64
 end
 
@@ -26,22 +26,28 @@ function sampleCRT(Y,R)
     return sum(rand.(Bernoulli.(probs)))
 end
 
-function evaluateLogLikelihod(model::NegBinMax, state, data, row, col)
+# function evalulateLogLikelihood(model::MaxPoissonMF, state, data, info, row, col)
+#     Y = data["Y_NM"][row,col]
+#     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
+#     return logpmfMaxPoisson(Y,mu,model.D)
+# end
+
+function evalulateLogLikelihood(model::MaxNegBinMF, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-    return logpdf(OrderStatistic(NegativeBinomial(mu, model.p), Y), model.D, model.D)
+    return logpdf(OrderStatistic(NegativeBinomial(mu, 1-model.p), model.D, model.D), Y)
 end
 
-function sample_prior(model::NegBinMax)
+function sample_prior(model::MaxNegBinMF, info=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM)
     return state
 end
 
-function forward_sample(model::NegBinMax; state=nothing, info=nothing)
+function forward_sample(model::MaxNegBinMF; state=nothing, info=nothing)
     if isnothing(state)
-        state = sample_prior(model)
+        state = sample_prior(model, info)
     end
     Mu_NM = state["U_NK"] * state["V_KM"]
     Y_NM = rand.(OrderStatistic.(NegativeBinomial.(Mu_NM, 1-model.p),model.D,model.D))
@@ -51,7 +57,7 @@ function forward_sample(model::NegBinMax; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::NegBinMax, data, state, mask=nothing)
+function backward_sample(model::MaxNegBinMF, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -102,12 +108,3 @@ function backward_sample(model::NegBinMax, data, state, mask=nothing)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Z_NMK"=>Z_NMK, "Z1_NM"=>Z1_NM)
     return data, state
 end
-
-# N = 100
-# M = 100
-# K = 10
-# a = b = c = d = 1
-# model = poissonMF(N,M,K,a,b,c,d)
-# # data, state = forward_sample(model)
-# # posteriorsamples = fit(model, data)
-# fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)
