@@ -1,5 +1,7 @@
 include("PoissonMaxFunctions.jl")
 include("PoissonMinFunctions.jl")
+rewriting = pyimport("sympy.codegen.rewriting")
+cfunctions = pyimport("sympy.codegen.cfunctions")
 
 using Distributions
 
@@ -94,23 +96,57 @@ end
 #     end
 # end
 
+function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    D = D - numY - numUnder - numOver
+    j = j - numUnder
+    if numY == 0
+        if Y > mean(dist)
+            probUnder = (j-1)/D
+            return [probUnder, (1-probUnder),0]
+        else
+            probOver = (D-j+numY)/D
+            return [0, (1-probOver),probOver]
+        end
+    else
+        if Y > mean(dist) 
+            truncProb = pdf(Truncated(dist, Y, Inf), Y)
+            if isnan(truncProb)
+                truncProb = 1
+            end
+            probUnder = (j-1)/D
+            return [probUnder, (1-probUnder)*truncProb,(1-probUnder)*(1-truncProb)]
+        end
+        if Y < mean(dist)
+            truncProb = pdf(Truncated(dist, 0, Y), Y)
+            if isnan(truncProb)
+                truncProb = 1
+            end
+            probOver = (D-j+numY)/D
+            return [(1-probOver)*(1-truncProb), (1-probOver)*truncProb,probOver]
+        end
+    end
+end
+
 function jointY(Y,j,D,dist,numY)
     #println("D: ", D, " j: ", j, " numY: ", numY)
     #@assert D > 1
+    @assert D >= 1
+    @assert j >= 1
+    @assert numY <= D
     if numY == 0
         return pdf(OrderStatistic(dist, D, j), Y)
     end
     if numY == D
         return pdf(dist,Y)^D
     end
-    if j == 1
+    if j == 1 #min case
         #println("min: ", pdf(dist, Y)^(numY)*ccdf(dist,Y-1)^(D-1))
         return pdf(dist, Y)^(numY)*ccdf(dist,Y-1)^(D-numY)
-    elseif D == j
+    elseif D == j #max case
         #println("max: ", pdf(dist, Y)^(numY)*cdf(dist,Y)^(D-1))
         return pdf(dist, Y)^(numY)*cdf(dist,Y)^(D-numY)
         
-    elseif numY == max(j,D-j+1)
+    elseif numY == max(j,D-j+1) #remaining can be any case
         #println("Ytie: ", pdf(dist,Y)^(numY))
         return pdf(dist,Y)^(numY) #not sure of the exponent here, but think numY
     end
@@ -118,6 +154,10 @@ function jointY(Y,j,D,dist,numY)
 end
 
 function probVec(Y,j,D,dist,numUnder,numY,numOver)
+    if pdf(dist,Y) < 10e-10
+        #println("numerical: ", Y, " ", dist)
+        return numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    end
     conditionD = D - numUnder - numOver
     conditionj = j - numUnder
     if conditionD == 1
@@ -143,6 +183,7 @@ function probVec(Y,j,D,dist,numUnder,numY,numOver)
 end
 
 function sampleSumGivenOrderStatistic(Y,D,j,dist)
+    @assert D >= j
     #special edge cases for efficiency
     if D == 1
         return Y
@@ -159,6 +200,7 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     total = 0
     for i in 1:D 
         probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
+        #println(probs)
         c = rand(Categorical(probs))
         if c == 1
             numUnder += 1
@@ -174,3 +216,53 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     return total
 end
 
+function logpmfOrderStatPoisson(Y,mu,D,j)
+    try
+        llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
+        # if isinf(llik) || isnan(llik)
+        #     llik = logprob(Y,mu,D)
+        # end
+        if isinf(llik) || isnan(llik)
+            @assert D == 3 && j == 2
+            #println("first")
+            #println("Y: ", Y, " mu: ", mu)
+            #llik = logprobsymbolicMedian(Y,mu)
+            llik = 0
+        end
+        return llik
+    catch ex
+        @assert D == 3 && j == 2
+        #println("second")
+        #println("Y: ", Y, " mu: ", mu)
+        #llik = logprobsymbolicMedian(Y,mu)
+        llik = 0
+        return llik
+    end
+end
+
+function logprobsymbolicMedian(s,z)
+    s1, z1 = sympy.symbols("s1 z1")
+    s2, z2 = sympy.symbols("s2 z2") 
+    expm1_opt = rewriting.FuncMinusOneOptim(sympy.exp, cfunctions.expm1)
+    part1 = 2*sympy.log(sympy.uppergamma(s1, z1) / sympy.gamma(s1)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s1, z1) / sympy.gamma(s1)), rewriting.optims_c99)
+    part2 = 2*sympy.log(sympy.uppergamma(s2, z2) / sympy.gamma(s2)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s2, z2) / sympy.gamma(s2)), rewriting.optims_c99)
+    
+    if s != 0
+        combine = part1 + sympy.log(-1*expm1_opt(sympy.exp(part2 - part1)-1))
+        combine_result = combine.subs(s1, s+1)
+        combine_result = combine_result.subs(s2, s)
+        combine_result = combine_result.subs(z1, Int(round(z)))
+        combine_result = combine_result.subs(z2, Int(round(z)))
+        combine_result = sympy.N(combine_result, 100000)
+        combine_result = convert(Float64, combine_result)
+        return combine_result
+
+    else #if data point is 0
+        combine = part1
+        combine_result = combine.subs(s1, s+1)
+        combine_result = combine_result.subs(z1, z)
+        combine_result = sympy.N(combine_result, 100000)
+        combine_result = convert(Float64, combine_result)
+    end
+    return combine_result
+end

@@ -1,0 +1,210 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-02-07"
+---
+
+```{r}
+library(tidyverse)
+library(COMPoissonReg)
+```
+
+```{r}
+rcmp(n=5,lambda=130,nu=4)
+rpois(n=5,lambda=3)
+rnbinom(n=5,size=3,p=.5)
+```
+
+
+
+```{r}
+hist(rcmp(n=10000000,lambda=130,nu=4),yaxt="n",ylab="",col="black",
+     main="",xaxt="n",xlab="",binwidth)
+mean(rcmp(n=10000000,lambda=130,nu=4))
+var(rcmp(n=10000000,lambda=130,nu=4))
+axis(1, at = seq(0, 7, by = 1))
+hist(rpois(n=10000000,lambda=3),yaxt="n",ylab="",col="black",
+     main="",xaxt="n",xlab="")
+axis(1, at = seq(0, 10, by = 1))
+mean(rpois(n=10000000,lambda=3))
+var(rpois(n=10000000,lambda=3))
+x = rnbinom(n=10000000,size=3,p=.5)
+hist(x,yaxt="n",ylab="",col="black",
+     main="",xaxt="n",xlab="")
+axis(1, at = seq(0, 15, by = 1))
+mean(x)
+var(x)
+```
+
+
+
+```{r}
+pmax_pmf <- function(k, mu, D){
+  return((expint::gammainc(k+1, mu)/gamma(k+1))^D - (expint::gammainc(k, mu)/gamma(k))^D)
+}
+
+x <- 1:40
+
+```
+
+```{r}
+data <- data.frame(x = 1:40, Poisson=dpois(x, 20), Overdispersed=dnbinom(x,size=20,prob = .5), Underdispersed = dcmp(x,400,2), Overdispersed2 = dcmp(x,4.5,.5))
+library(patchwork)
+p1 <- ggplot(x = x, y = Poisson, data = data, aes(x,Poisson)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p2 <- ggplot(x = x, y = Overdispersed, data = data, aes(x,Overdispersed)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p3 <- ggplot(x = x, y = Underdispersed, data = data, aes(x,Underdispersed)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p4 <- ggplot(x = x, y = Overdispersed2, data = data, aes(x,Overdispersed2)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p1 + p2 + p3 + p4 +
+  plot_annotation(
+                  caption = "Topleft: Poisson(20), Topright = NegBin(20,.5), Bottomleft: Bessel(0, 40), Bottomright: CMP(4.5,5)")
+
+```
+
+```{r}
+p1 + theme_gray()
+```
+
+
+```{r}
+pmax_pmf <- function(k, mu, D){
+  return((expint::gammainc(k+1, mu)/gamma(k+1))^D - (expint::gammainc(k, mu)/gamma(k))^D)
+}
+ggplot(transform(data.frame(x=c(1:50)), y=pmax_pmf(x,mu=18,D=10)), aes(x, y)) + 
+    geom_bar(stat="identity")
+```
+
+```{r}
+library(COMPoissonReg)
+
+```
+
+```{r}
+x <- 0:50
+par(mfrow = c(2,2))
+hist(rpois(100000, 25), breaks = 30, main = NULL)
+hist(rcmp(100000, 2, .2), breaks = 30, main = NULL)
+hist(rpois(100000, 25), breaks = 30)
+hist(rpois(100000, 25), breaks = 30)
+```
+
+```{r}
+#fano factor plot
+muvec <- seq(.1,10,by=.1)
+dvec <- c(2,5,10)
+
+B <- 10000
+mean_mat <- matrix(0,nrow = length(muvec),ncol=length(dvec)*2)
+variances_mat <- matrix(0,nrow = length(muvec),ncol=length(dvec)*2)
+
+for(i in 1:length(muvec)){
+  mu <- muvec[i]
+  for(j in 1:length(dvec)){
+    d <- dvec[j]
+    Z_B <- c()
+    Y_B <- c()
+    for(k in 1:B){
+      m_D <- rpois(d, mu)
+      Z <- max(m_D)
+      Z_B <- c(Z_B, Z)
+      Y <- min(m_D)
+      Y_B <- c(Y_B, Y)
+    }
+    mean_mat[i,j] <- mean(Z_B)
+    variances_mat[i,j] <- var(Z_B)
+    mean_mat[i,j+1] <- mean(Y_B)
+    variances_mat[i,j+1] <- var(Y_B)
+  }
+}
+```
+
+```{r}
+library(tidyverse)
+fano_mat <- variances_mat/mean_mat
+df <- data.frame(fano_mat)
+#colnames(df) <- as.character(dvec)
+colnames(df) <- c('2max','2min', "5max", '5min','10max','10min')
+df <- df %>% pivot_longer(cols = colnames(df), names_to = "D")
+df$D <- factor(df$D, levels = c('2max','2min', "5max", '5min','10max','10min'))#,"5", "10","20","50","100","1000"
+```
+
+```{r}
+muvec_other <- c()
+for(mu in muvec){
+  muvec_other <- c(muvec_other, rep(mu,length(dvec)*2))
+}
+
+```
+
+
+
+```{r}
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df, aes(x = muvec_other, y = value, color = D)) +
+  labs(y = "Fano Factor", x = "mu") +geom_abline(intercept = (pi-1)/pi, slope = 0)
+```
+```{r}
+plot(y = df$value[df$D ==2], muvec)
+```
+
+```{r}
+#max poisson density plot
+dvec <- c(1,10,100,1000)
+mu <- 10
+B <- 10000
+all_mat <- matrix(0,nrow=B,ncol=length(dvec))
+for(j in 1:length(dvec)){
+  d <- dvec[j]
+  for(k in 1:B){
+    m_D <- rpois(d, mu)
+    Z <- max(m_D)
+    all_mat[k,j] <- Z
+  }
+}
+df <- data.frame(all_mat) 
+colnames(df) <- as.character(dvec)
+```
+
+```{r}
+library(tidyverse)
+library(patchwork)
+p1 <- ggplot(data=df, aes(x=`1`)) + geom_histogram(binwidth = 1) + labs(x = "D = 1",y=NULL)
+p2 <- ggplot(data=df, aes(x=`10`)) + geom_histogram(binwidth = 1) + labs(x = "D = 10",y=NULL)
+p3 <- ggplot(data=df, aes(x=`100`)) + geom_histogram(binwidth = 1) + labs(x = "D = 100",y=NULL)
+p4 <- ggplot(data=df, aes(x=`1000`)) + geom_histogram(binwidth = 1) + labs(x = "D = 1000",y=NULL)
+p1 + p2 + p3 + p4 
+```
+
+
+```{r}
+p2 <- ggplot(x = x, y = Overdispersed, data = data, aes(x,Overdispersed)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p3 <- ggplot(x = x, y = Underdispersed, data = data, aes(x,Underdispersed)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p4 <- ggplot(x = x, y = Overdispersed2, data = data, aes(x,Overdispersed2)) + geom_bar(stat="identity") + labs(y = NULL, x = NULL)
+p1 + p2 + p3 + p4 +
+  plot_annotation(
+                  caption = "Topleft: Poisson(20), Topright = NegBin(20,.5), Bottomleft: Bessel(0, 40), Bottomright: CMP(4.5,5)")
+
+```
+
+```{r}
+B <- 1000000
+mu_B <- runif(B, min = 620, max = 2620)
+X_B <- rcmp(B, lambda=mu_B,nu=2)
+pois_B <- rcmp(n=B,lambda=1620,nu=2)
+df <- data.frame(setting = X_B, poisson = pois_B)
+```
+
+```{r}
+p1 <- ggplot(data=df, aes(x=setting)) + geom_histogram(binwidth = 1) + geom_vline(xintercept = 40) + labs(y = NULL, x =NULL) + xlim(0,85)
+p2 <- ggplot(data=df, aes(x=poisson)) + geom_histogram(binwidth = 1)+ geom_vline(xintercept = 40) + labs(y = NULL, x =NULL)+ xlim(0,85)
+p1+ theme_minimal() + theme(axis.text.y=element_blank())
+p2 + theme_minimal() + theme(axis.text.y=element_blank())
+```
+
+
+```{r}
+mean(X_B)
+var(X_B)
+mean(pois_B)
+var(pois_B)
+```

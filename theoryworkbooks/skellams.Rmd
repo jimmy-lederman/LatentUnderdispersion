@@ -1,0 +1,46 @@
+---
+title: "skellam"
+output: html_document
+date: "2024-09-11"
+---
+
+```{r}
+library(skellam)
+mu1 <- 10
+mu2 <- 5
+x <- rskellam(100000, mu1, mu2)
+var(x)/mean(x)
+```
+
+```{r}
+rmaxPois <- function(n,mu,D){
+  x <- rep(0,n)
+  for(i in 1:n){
+    x[i] <- max(rpois(D, mu))
+  }
+  return(x)
+}
+n <- 100000
+mu1 <- 10
+mu2 <- 5
+D <- 100
+x <- rmaxPois(n,mu1,D) - rmaxPois(n,mu2,D)
+var(x)/mean(x)
+```
+
+```{r}
+n <- 100000
+mu1 <- 10
+mu2 <- 5
+D <- 3
+rmaxSkellam <- function(n,mu1,mu2,D){
+  x <- rep(0,n)
+  for(i in 1:n){
+    x[i] <- max(rskellam(D, mu1, mu2))
+  }
+  return(x)  
+}
+x <- rmaxSkellam(n,mu1,mu2,D)
+var(x)/mean(x)
+```
+

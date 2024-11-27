@@ -42,7 +42,11 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
+    println("start")
     for s in 1:S
+        # if s > 2500
+        #     println(s)
+        # end
         if s < nburnin/2 && !isnothing(skipupdate)
             ~, state = backward_sample(model, data, state, mask, skipupdate)
         else
@@ -51,6 +55,9 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if s > nburnin && mod(s,nthin) == 0
             push!(samplelist, state)
         end
+        # if mod(s,100) == 0
+        #     println(s)
+        # end
         if verbose next!(prog) end
     end
     if verbose finish!(prog) end
@@ -143,6 +150,7 @@ end
 function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing)
     S = size(samples)[1]
     I = 0 #total number of masked points
+    llik0count = 0
     inforatetotal = 0
     if verbose
         prog = Progress(S, desc="calculating inforate")
@@ -159,6 +167,9 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                     #if isinf(llik) println(row, " ", col, " ", s) end
                     llikvector[s] = llik
+                    if llik == 0
+                        llik0count += 1
+                    end
                 end
                 inforatetotal += logsumexp(llikvector) - log(S)
                 I += 1
@@ -166,6 +177,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
             end
         end
     end
+    println("0 count: ", llik0count)
     if verbose finish!(prog) end
     return inforatetotal/I
 end

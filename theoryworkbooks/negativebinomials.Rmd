@@ -1,0 +1,208 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-04-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+prob <- .7
+#fano factor plot
+pvec <- seq(1, 100, by=1)
+dvec <- c(1,2,3,4,5,10,20,50,101)
+
+B <- 1000
+mean_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+variances_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+
+for(i in 1:length(pvec)){
+  p <- pvec[i]
+  for(j in 1:length(dvec)){
+    d <- dvec[j]
+    Z_B <- c()
+    for(k in 1:B){
+      m_D <- rnbinom(n = d, size = p, prob = prob)
+      Z <- max(m_D)
+      Z_B <- c(Z_B, Z)
+    }
+    mean_mat[i,j] <- mean(Z_B)
+    variances_mat[i,j] <- var(Z_B)
+  }
+}
+
+fano_mat <- variances_mat/mean_mat
+df <- data.frame(fano_mat)
+#colnames(df) <- as.character(dvec)
+colnames(df) <- as.character(dvec)
+df <- df %>% pivot_longer(cols = colnames(df), names_to = "D")
+df$D <- factor(df$D, levels =  as.character(dvec))#,"5", "10","20","50","100","1000"
+
+pvec_other <- c()
+for(p in pvec){
+  pvec_other <- c(pvec_other, rep(p,length(dvec)))
+}
+```
+
+```{r}
+prob <- .7
+#fano factor plot
+pvec <- seq(.01,2,by=.02)
+dvec <- c(1,2,3,4,5,10,20,50,101)
+
+B <- 1000
+mean_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+variances_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+
+for(i in 1:length(pvec)){
+  p <- pvec[i]
+  for(j in 1:length(dvec)){
+    d <- dvec[j]
+    Z_B <- c()
+    for(k in 1:B){
+      m_D <- rnbinom(n = d, size = p, prob = prob)
+      Z <- max(m_D)
+      Z_B <- c(Z_B, Z)
+    }
+    mean_mat[i,j] <- mean(Z_B)
+    variances_mat[i,j] <- var(Z_B)
+  }
+}
+
+fano_mat <- variances_mat/mean_mat
+df2 <- data.frame(fano_mat)
+#colnames(df) <- as.character(dvec)
+colnames(df2) <- as.character(dvec)
+df2 <- df2 %>% pivot_longer(cols = colnames(df2), names_to = "D")
+df2$D <- factor(df2$D, levels =  as.character(dvec))#,"5", "10","20","50","100","1000"
+
+pvec_other <- c()
+for(p in pvec){
+  pvec_other <- c(pvec_other, rep(p,length(dvec)))
+}
+```
+
+
+```{r}
+muvec <- seq(1,100,by=1)
+muvec_other <- c()
+for(mu in muvec){
+  muvec_other <- c(muvec_other, rep(mu,length(dvec)))
+}
+df$mu <- muvec_other
+
+muvec <- seq(.01,2,by=.02)
+muvec_other <- c()
+for(mu in muvec){
+  muvec_other <- c(muvec_other, rep(mu,length(dvec)))
+}
+df2$mu <- muvec_other
+df2$plot <- 1
+df$plot <- 2
+df_all <- rbind(df[which(df$mu >=2),],df2)
+```
+
+
+```{r}
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df_all, aes(x = df_all$mu, y = value, color = D)) +
+  labs(y = "Fano Factor", x = expression(mu)) +
+  facet_grid(~plot,scales="free_x")  + theme_bw() + theme(strip.text = element_blank()) 
+```
+
+
+
+
+
+```{r}
+library(tidyverse)
+
+
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df, aes(x = pvec_other, y = value, color = D)) +
+  labs(y = "Fano Factor", x = "r")
+```
+
+```{r}
+rmaxnorm <- function(N,sd,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rnorm(n=D,mean=0,sd=sd)))
+  }
+ return(x)
+}
+# var(rmaxnorm(100000,1,5))
+# rmaxnbinom <- function(N,D,size,prob){
+#   x <- c()
+#   for(i in 1:N){
+#     x <- c(x, max(rnbinom(D,size=size,prob=prob)))
+#   }
+#  return(x)
+# }
+# prob <- .1
+# r <- 10000000
+# var(((prob)*rmaxnbinom(100000,5,r,prob) - (1-prob)*r)/sqrt(r*(1-prob)))
+# var(rmaxnbinom(10000,5,r,prob))
+# var(rmaxnorm(10000,1,5))*r*(1-prob)/prob^2
+
+```
+
+```{r}
+prob <- .01
+#fano factor plot
+pvec <- seq(1, 100, by=1)
+dvec <- c(3,5,7,9,11,21,51,101)
+
+B <- 1000
+mean_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+variances_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+
+for(i in 1:length(pvec)){
+  p <- pvec[i]
+  for(j in 1:length(dvec)){
+    d <- dvec[j]
+    Z_B <- c()
+    for(k in 1:B){
+      m_D <- rnbinom(n = d, size = p, prob = prob)
+      Z <- median(m_D)
+      Z_B <- c(Z_B, Z)
+    }
+    mean_mat[i,j] <- mean(Z_B)
+    variances_mat[i,j] <- var(Z_B)
+  }
+}
+```
+
+```{r}
+library(tidyverse)
+fano_mat <- mean_mat
+df <- data.frame(fano_mat)
+#colnames(df) <- as.character(dvec)
+colnames(df) <- as.character(dvec)
+df <- df %>% pivot_longer(cols = colnames(df), names_to = "D")
+df$D <- factor(df$D, levels =  as.character(dvec))#,"5", "10","20","50","100","1000"
+
+pvec_other <- c()
+for(p in pvec){
+  pvec_other <- c(pvec_other, rep(p,length(dvec)))
+}
+
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df, aes(x = pvec_other, y = value, color = D)) +
+  labs(y = "Fano Factor", x = "r")
+```
+
+```{r}
+
+```
+

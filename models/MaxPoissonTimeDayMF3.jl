@@ -254,6 +254,20 @@ function backward_sample(model::MaxPoissonTimeDayMF, data, state, mask=nothing, 
     post_rate = model.scalerate + model.D*sum(alphacontribution_NM)
     alpha = rand(Gamma(post_shape, 1/post_rate))
 
+    #update county factors
+    Y_NK = dropdims(sum(Y_NMKplus1,dims=2),dims=2)[:,1:model.K]
+    R_KMN = R_KTS[:,days_M[2:end],state_N]
+    C_KN = model.D * alpha * dropdims(sum(V_KM[:,2:end] .* R_KMN, dims=2), dims=2)
+    @views for n in 1:model.N
+        pop =  pop_N[n]
+        s = state_N[n]
+        @views for k in 1:model.K
+            post_shape = model.a + Y_NK[n,k]
+            post_rate = model.b + pop * C_KN[k,n]
+            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
+        end
+    end
+
     #update time factors
     Y_MK = dropdims(sum(Y_NMKplus1,dims=1),dims=1)[:,1:model.K]
     R_NKM = permutedims(R_KTS[:,days_M,state_N], (3,1,2))
@@ -299,20 +313,6 @@ function backward_sample(model::MaxPoissonTimeDayMF, data, state, mask=nothing, 
                     R_KTS[k,t,s] = rand(Gamma(post_shape, 1/post_rate))
                 end
             end
-        end
-    end
-
-    #update county factors
-    Y_NK = dropdims(sum(Y_NMKplus1,dims=2),dims=2)[:,1:model.K]
-    R_KMN = R_KTS[:,days_M[2:end],state_N]
-    C_KN = model.D * alpha * dropdims(sum(V_KM[:,2:end] .* R_KMN, dims=2), dims=2)
-    @views for n in 1:model.N
-        pop =  pop_N[n]
-        s = state_N[n]
-        @views for k in 1:model.K
-            post_shape = model.a + Y_NK[n,k]
-            post_rate = model.b + pop * C_KN[k,n]
-            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
 

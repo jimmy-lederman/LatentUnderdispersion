@@ -1,0 +1,57 @@
+---
+title: "BernPois"
+output: html_document
+date: "2024-05-26"
+---
+
+```{r}
+N <- 10000
+lambda <- 1
+alpha <- .5
+Y1 <- rpois(N,lambda)
+Y2 <- rbinom(N,1,p)
+Y <- Y1 + Y2
+```
+
+
+```{r}
+#fano factor plot
+lambdavec <- seq(1,100,by=1)
+alphavec <- seq(.1,.9,by=.1)
+
+
+B <- 100000
+mean_mat <- matrix(0,nrow = length(lambdavec),ncol=length(alphavec))
+variances_mat <- matrix(0,nrow = length(lambdavec),ncol=length(alphavec))
+
+for(i in 1:length(lambdavec)){
+  lambda <- lambdavec[i]
+  for(j in 1:length(alphavec)){
+    alpha <- alphavec[j]
+    Y1 <- rpois(B,lambda)
+    Y2 <- rbinom(B,1,alpha)
+    Y <- Y1 + Y2
+    mean_mat[i,j] <- mean(Y)
+    variances_mat[i,j] <- var(Y)
+  }
+}
+
+library(tidyverse)
+fano_mat <- variances_mat/mean_mat
+df <- data.frame(fano_mat)
+colnames(df) <- as.character(alphavec)
+df <- df %>% pivot_longer(cols = colnames(df), names_to = "alpha")
+df$alpha <- factor(df$alpha, levels = as.character(alphavec))
+
+muvec_other <- c()
+for(mu in lambdavec){
+  muvec_other <- c(muvec_other, rep(mu,length(alphavec)))
+}
+
+library(tidyverse)
+ggplot() +
+  geom_point(data = df, aes(x = muvec_other, y = value, color = alpha)) +
+  labs(y = "Fano Factor", x = "lambda")
+```
+
+

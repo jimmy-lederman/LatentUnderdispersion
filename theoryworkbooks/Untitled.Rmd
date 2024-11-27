@@ -1,0 +1,48 @@
+---
+title: "seoulbikehsare"
+output: html_document
+date: "2024-07-03"
+---
+
+```{r}
+df <- read.csv("/Users/jimmylederman/Downloads/SeoulBikeData.csv")
+dfsub <- df[df$hour == 8,]
+var(dfsub$bikecount)/mean(dfsub$bikecount)
+```
+
+```{r}
+# df <- df[df$season %in% c("Winter","Summer"),]
+# df$seasonD <- as.numeric(as.factor(df$season)) - 1
+#df <- df[df$season %in% c("Winter","Summer", "Spring"),]
+
+```
+
+```{r}
+plot(df$bikecount, df$temperature, pch = 20, col = as.factor((df$rainfall > 0)))
+```
+
+```{r}
+electric = c(34.53,29.6,31.32,32.24)
+gas = c(17.67,17.59,19.17,16.01)
+sum((electric+ gas - 50)/2)
+```
+
+```{r}
+(16.55 + 25.62 - 50)/2
+(24.92 + 28.12 - 50)/2
+```
+
+
+
+```{r}
+#plot(df$temp, df$bikecount, pch = 20)
+summary(lm(data = df, bikecount ~ temperature))
+543.5/(sd(df$temperature)*sqrt(8760))
+sd(df$temperature)
+29.081/0.486
+```
+
+```{r}
+hist(rgamma(1000, 1, 5s))
+```
+

@@ -1,0 +1,39 @@
+---
+title: "cmp_mediannegbin_compare"
+output: html_document
+date: "2024-11-19"
+---
+
+```{r}
+library(COMPoissonReg)
+```
+
+
+```{r}
+nu <- 1.7
+#compute PMF for those CMP
+begin = 50
+end = 150
+inflationpower <- (nu - 1)*10
+x <- dcmp(begin:end,lambda=100*1.586^inflationpower, nu=nu)
+```
+```{r}
+
+
+```
+
+```{r}
+rMedianNegBin <- function(n,r,p,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- median(rnbinom(D,r,1-p))
+  }
+  return(result)
+}
+#samples <- rMedianNegBin(100000,131.645,0.4329,3)
+samples <- rMedianNegBin(100000,303,.25,3)
+hist(samples,probability = TRUE, ylim=c(0,max(x)),breaks = 50)
+points(begin:end,x)
+```
+
+

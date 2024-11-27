@@ -1,0 +1,270 @@
+---
+title: "decreasing fano factor investigation"
+output: html_document
+date: "2024-05-28"
+---
+
+```{r}
+rmaxpois <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rpois(n=D,lambda=p)))
+  }
+ return(x)
+}
+
+rmaxgeom <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rgeom(n=D,p=p)))
+  }
+ return(x)
+}
+
+rmaxnorm <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rnorm(n=D,mean=0,sd=p)))
+  }
+ return(x)
+}
+#this one doesn't work: for one, no finite moments is bad
+rmaxcauchy <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rcauchy(n=D,location=0,scale=p)))
+  }
+ return(x)
+}
+
+rmaxunif <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(sample.int(n=p,size=D,replace=TRUE)))
+  }
+ return(x)
+}
+
+#non-negative counterexample but continuous
+rmaxgamma <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rgamma(n=D,shape=p)))
+  }
+ return(x)
+}
+
+rmaxbinom <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rbinom(n=D,size=10,prob=p)))
+  }
+ return(x)
+}
+
+rmaxbern <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rbinom(n=D,size=1,prob=p)))
+  }
+ return(x)
+}
+```
+
+```{r}
+Ds <- 1:10
+B <- 10000
+mus <- seq(.1,1,by = .1)
+fano <- matrix(0,nrow=length(Ds),ncol=length(mus))
+for(i in 1:length(Ds)){
+  for(j in 1:length(mus)){
+    x <- rmaxpois(B, mus[j], Ds[i])
+    fano[i,j] <- var(x)/mean(x)
+  }
+}
+```
+
+```{r}
+fano
+```
+
+
+```{r}
+mu <- .99
+N <- 100
+M <- 100
+Z <- 100
+D <- 20
+result <- 0
+for(n in 0:N){
+  for(m in 0:M){
+    result <- result + (m-n)*((1-ppois(n,lambda=mu)^D))*((1-ppois(m,lambda=mu)^(D+1)))
+  }
+}
+result1 <- 0
+for(n in 0:N){
+  for(m in 0:M){
+    for(z in 0:Z){
+      result1 <- result1 + ((1-ppois(n,lambda=mu)))*((1-ppois(m,lambda=mu)^(1)))*((1-ppois(z,lambda=mu)^(1))-(1-ppois(z,lambda=mu)^2))
+    }
+    
+  }
+}
+
+result3 <- 0
+for(z in 0:Z){
+  result3 <- result3 + ppois(z,lambda=mu)^D -ppois(z,lambda=mu)^(D+1)
+}
+result4 <- 0
+for(n in 0:N){
+  for(m in 0:M){
+    result4 <- result4 + ((1-ppois(n,lambda=mu)^D))*((1-ppois(m,lambda=mu)^(D+1)))
+  }
+}
+
+2*result
+result1
+result1 - 2*result
+result3
+result4
+result3*result4
+# result2
+```
+
+```{r}
+#2-point simulation
+a <- 1
+b <- 100
+pi <- .9
+cdf <- function(k,pi){
+  if(k < a){
+    return(0)
+  }
+  if(k < b){
+    return(pi)
+  }else{
+    return(1)
+  }
+}
+rmax2point <- function(N,a,b,pi,D){
+  choices <- c(a,b)
+  x <- c()
+  for(i in 1:N){
+    x <- c(x,max(sample.int(2,size=D,replace=TRUE, prob=c(pi,1-pi))))
+  }
+  return(x)
+}
+```
+
+```{r}
+a <- 1
+b <- 100
+pi <- .9
+Ds <- 1:20
+B <- 10000
+pis <- seq(.9,.9,by = .1)
+fano <- matrix(0,nrow=length(Ds),ncol=length(pis))
+for(i in 1:length(Ds)){
+  for(j in 1:length(pis)){
+    x <- rmax2point(B, a=a,b=b, pis[j], Ds[i])
+    fano[i,j] <- var(x)
+  }
+}
+```
+
+```{r}
+fano
+```
+
+```{r}
+mu <- 1
+D <- 100
+B <- 1000
+lower <- 0
+for(t in 0:(B)){
+  lower <- lower + t*(1-ppois(t,lambda=mu)^D)
+}
+lower
+lower <- 0
+for(t in 0:(B)){
+  lower <- lower + t*(1-ppois(t,lambda=mu)^(D+1))
+}
+lower
+
+upper
+upper <- 0
+for(t in 0:B){
+  upper <- upper + (1-ppois(t,lambda=mu)^(D+1))
+}
+upper
+```
+
+```{r}
+mu <- 1
+D <- 100
+B <- 1000
+expect <- 0
+for(t in 0:B){
+  expect <- expect + (1-ppois(t,lambda=mu)^(D))
+}
+
+lower1 <- 0
+for(t in 0:(floor(expect))){
+  lower1 <- lower1 + t*ppois(t,lambda=mu)^D *log(1/ppois(t,lambda=mu))
+}
+
+upper1 <- 0
+for(t in 0:(floor(expect))){
+  upper1 <- upper1 + ppois(t,lambda=mu)^D *log(1/ppois(t,lambda=mu))
+}
+
+lower2 <- 0
+for(t in ceiling(expect):B){
+  lower2 <- lower2 + t*ppois(t,lambda=mu)^D *log(1/ppois(t,lambda=mu))
+}
+
+upper2 <- 0
+for(t in ceiling(expect):B){
+  upper2 <- upper2 + ppois(t,lambda=mu)^D *log(1/ppois(t,lambda=mu))
+}
+
+# expect
+# lower1
+# upper1*expect
+lower1
+upper1*expect
+lower2
+upper2*expect
+ppois(0,lambda=mu)^D *log(1/ppois(0,lambda=mu))
+```
+
+```{r}
+mu <- .001
+lower <- 0
+for(t in 0:(B)){
+  lower <- lower + t*(1-ppois(t,lambda=mu)^(D))
+}
+lower
+lower <- 0
+for(t in 0:(B)){
+  lower <- lower + t*(1-ppois(t,lambda=mu)^(D+1))
+}
+lower
+```
+
+
+```{r}
+Z <- 100
+mu <- 1
+D <- 1
+result3 <- 0
+for(z in 0:Z){
+  result3 <- result3 + ppois(z,lambda=mu)^D -ppois(z,lambda=mu)^(D+1)
+}
+result3
+```
+
+```{r}
+(ppois(z,lambda=mu)^D*(exp(mu*(ppois(z,lambda=mu)^D - 1))) - 1)
+```
+

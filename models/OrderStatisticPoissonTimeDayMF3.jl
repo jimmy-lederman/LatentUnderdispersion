@@ -258,8 +258,7 @@ function backward_sample(model::OrderStatisticPoissonTimeDayMF, data, state, mas
                 Usubset_AK = U_NK[indices2, :]
                 Ysubset_ABK = Y_NMKplus1[indices2, indices, :]
                 @views for k in 1:model.K
-                    post_shape = model.e + sum(Ysubset_ABK[:,:,k])
-                    
+                    post_shape = model.e + sum(Ysubset_ABK[:,:,k])   
                     post_rate = model.f + model.D * alpha * dot(popsubset_A, Usubset_AK[:,k]) * sum(Vsubset_KB[k,:])
                     R_KTS[k,t,s] = rand(Gamma(post_shape, 1/post_rate))
                 end

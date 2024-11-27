@@ -1,9 +1,8 @@
 *ipynb
+*jld
+*jld2
 output/
-data/
-synthetic/
 experiments/
 debug/
-theoryworkbooks/
 oldresults/
-realdata/
+oldpythonstuff/

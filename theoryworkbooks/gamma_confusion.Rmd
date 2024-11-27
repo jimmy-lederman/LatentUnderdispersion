@@ -1,0 +1,24 @@
+---
+title: "gammapriors"
+output: html_document
+date: "2024-11-14"
+---
+
+```{r}
+shape <- 10
+rate <- .1
+x <- seq(.01,100,.01)
+y <- dgamma(x, shape = shape, rate = rate)
+plot(x,y)
+```
+
+```{r}
+a <- 1
+b <- 1
+x <- seq(.01,1,.01)
+y <- dbeta(x, a,b)
+plot(x,y)
+```
+
+
+

@@ -140,9 +140,9 @@ end
 function logpmfMaxPoisson(Y,mu,D)
     try
         llik = logpdf(OrderStatistic(Poisson(mu), D, D), Y)
-        if isinf(llik) || isnan(llik)
-            llik = logprob(Y,mu,D)
-        end
+        # if isinf(llik) || isnan(llik)
+        #     llik = logprob(Y,mu,D)
+        # end
         if isinf(llik) || isnan(llik)
             llik = logprobsymbolic(Y,mu,D)
         end
@@ -152,6 +152,10 @@ function logpmfMaxPoisson(Y,mu,D)
         return llik
     end
 end
+
+
+
+
 
 
 function prob(Y,D,j,dist)

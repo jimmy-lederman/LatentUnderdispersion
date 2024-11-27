@@ -1,0 +1,81 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-05-25"
+---
+
+```{r}
+rmaxgeom <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rgeom(n=D,p=p)+1))
+  }
+ return(x)
+}
+```
+
+```{r}
+p <- .5
+var(rmaxgeom(10000, p, 2))
+var(rmaxgeom(10000, p, 3))
+var(rmaxgeom(10000, p, 4))
+```
+
+
+```{r}
+p <- .3
+mean(rmaxgeom(10000, p, 2))
+mean <- 2/(p) - 1/(1-(1-p)^2)
+```
+
+```{r}
+p <- .9
+q <- 1 - p
+var(rmaxgeom(10000, p, 2))
+mean <- 2/(1-q) - 1/(1-q^2)
+(4*q)/(1-q)^2 + 2/(1-q) -2*q^2/(1-q^2)^2 - 1/(1-q^2) - mean^2
+```
+
+
+```{r}
+rmingeom <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, min(rgeom(n=D,p=p)+1))
+  }
+ return(x)
+}
+```
+
+```{r}
+p <- .2
+q <- 1 - p
+x <- rmingeom(100000, p, 2)
+#var(x)
+mean(x)
+(mean <- 1/(1-q^2))
+var(x)
+#(2*q^2)/(1-q^2)^2 + 1/(1-q^2)
+(var <- (2*q^2 - 1)/(1-q^2)^2 + 1/(1-q^2))
+```
+
+```{r}
+rmaxpois <- function(N,p,D){
+  x <- c()
+  for(i in 1:N){
+    x <- c(x, max(rpois(n=D,lambda=p)+1))
+  }
+ return(x)
+}
+```
+
+```{r}
+var(rmaxpois(10000, p, 2))
+var(rmaxpois(10000, p, 3))
+var(rmaxpois(10000, p, 4))
+```
+
+
+
+
+

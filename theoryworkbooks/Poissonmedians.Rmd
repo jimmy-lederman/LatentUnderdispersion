@@ -1,0 +1,20 @@
+---
+title: "medians"
+output: html_document
+date: "2024-11-14"
+---
+
+```{r}
+rmedianPois <- function(n, mu, D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    sample <- rpois(D, mu)
+    result[i] <- median(sample)
+  }
+  return(result)
+}
+mu <- 1000
+mean(rmedianPois(10000,mu,7))
+mu + 1/3 - 1/(50*mu)
+```
+
