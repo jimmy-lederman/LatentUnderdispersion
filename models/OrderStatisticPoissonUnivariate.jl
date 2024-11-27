@@ -36,7 +36,7 @@ function forward_sample(model::OrderStatisticPoissonUnivariate; state=nothing, i
 
     #Y_NM = rand(OrderStatistic(Poisson(mu), model.D, div(model.D,2) + 1), model.N, model.M)
     data = Dict("Y_NM" => copy(Y_NM))
-    state = Dict("mu"=>mu,"Z_N"=>copy(Z_N))
+    state = Dict("mu"=>mu)
     return data, state 
 end
 
@@ -44,8 +44,8 @@ function backward_sample(model::OrderStatisticPoissonUnivariate, data, state, ma
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     mu = copy(state["mu"])
-    #Z_N = zeros(model.N)
-    Z_N = copy(state["Z_N"])
+    Z_N = zeros(model.N)
+    #Z_N = copy(state["Z_N"])
     # println(Z_N)
     for n in 1:model.N
         Z_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j, Poisson(mu))
@@ -54,6 +54,6 @@ function backward_sample(model::OrderStatisticPoissonUnivariate, data, state, ma
     post_shape = model.a + sum(Z_N)
     post_rate = model.b + model.D*model.N
     mu = rand(Gamma(post_shape, 1/post_rate))
-    state = Dict("mu" => mu,"Z_N"=>Z_N)
+    state = Dict("mu" => mu)
     return data, state
 end

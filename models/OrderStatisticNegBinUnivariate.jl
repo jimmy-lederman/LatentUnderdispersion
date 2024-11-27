@@ -50,7 +50,7 @@ function forward_sample(model::OrderStatisticNegBinUnivariate; state=nothing, in
 
     #Y_NM = rand(OrderStatistic(NegativeBinomial(mu, 1-p), model.D, div(model.D,2)+1), model.N, model.M)
     data = Dict("Y_NM" => Y_NM)
-    state = Dict("mu"=>mu,"p"=>p,"Z1_N"=>Z1_N)
+    state = Dict("mu"=>mu,"p"=>p)
     return data, state 
 end
 
