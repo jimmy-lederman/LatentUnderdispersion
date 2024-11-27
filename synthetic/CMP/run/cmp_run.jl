@@ -1,20 +1,22 @@
 #import packages
 using JLD
+using CSV
+using DataFrames
 
 #set arguments
-dist = parse(Int, ARGS[1])
-type = parse(Int, ARGS[2])
-D = parse(Int, ARGS[3])
-dataset = parse(Int, ARGS[4]) #datset to do experiment on
+datasetnum = parse(Int, ARGS[1]) #datset to do experiment on
+dist = parse(Int, ARGS[2])
+type = parse(Int, ARGS[3])
+D = parse(Int, ARGS[4])
 
 #get data
-data_all = CSV.read("/Users/jimmylederman/Desktop/synthetic/CMP/data/CMP.csv", DataFrame)
+data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/synthetic/CMP/data/CMP.csv", DataFrame)
 data_all = select(data_all, Not(1))
 data_all = Matrix(data_all)
-Y_NM = Int.(reshape(data_all[3:1002,dataset], :,1))
+Y_NM = Int.(reshape(data_all[3:1002,datasetnum], :,1))
 data = Dict("Y_NM"=>Y_NM)
-nu = data_all[1,dataset]
-seed = Int(data_all[2,dataset])
+nu = data_all[1,datasetnum]
+seed = Int(data_all[2,datasetnum])
 
 #set folder
 folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/CMP/samples/"
