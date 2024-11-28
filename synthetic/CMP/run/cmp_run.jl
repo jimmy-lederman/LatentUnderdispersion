@@ -2,6 +2,8 @@
 using JLD
 using CSV
 using DataFrames
+using Base.Threads
+println(Threads.nthreads())
 
 #set arguments
 datasetnum = parse(Int, ARGS[1]) #datset to do experiment on
