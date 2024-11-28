@@ -63,7 +63,7 @@ function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mas
     #Z1_N = copy(state["Z1_N"])
     Z2_N = zeros(model.N)
 
-    for n in 1:model.N
+    @views @threads for n in 1:model.N
         Z1_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j,  NegativeBinomial(mu, 1-p))
         Z2_N[n] = sampleCRT(Z1_N[n], model.D*mu)
     end
