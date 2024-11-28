@@ -47,6 +47,7 @@ if dist == 1 #Poisson case
             model = OrderStatisticPoissonUnivariate(N, M, a, b, D, D)
         end
     end
+    samples = fit(model, data, nsamples = 1000, nburnin=10000, nthin=10, constantinit=Dict("mu"=>100))
 elseif dist == 2
     #hyperparameters
     a = .0001
@@ -67,8 +68,9 @@ elseif dist == 2
             model = OrderStatisticNegBinUnivariate(N, M, a, b, alpha, beta, D, D)
         end
     end
+    samples = fit(model, data, nsamples = 1000, nburnin=10000, nthin=10, constantinit=Dict("mu"=>100,"p"=>.5))
 end
 
 outfile = folder * "samples_Dist$(dist)Type$(type)D$(D)NU$(nu)Seed$(seed).jld"
-samples = fit(model, data, nsamples = 1000, nburnin=10000, nthin=10)
+
 save(outfile, "samples", samples)
