@@ -3,7 +3,8 @@ using JLD
 using CSV
 using DataFrames
 using Base.Threads
-println(Threads.nthreads())
+Threads.nthreads()
+println("AHHHHHHH")
 
 #set arguments
 datasetnum = parse(Int, ARGS[1]) #datset to do experiment on
