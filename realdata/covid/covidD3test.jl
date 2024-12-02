@@ -2,8 +2,6 @@ using Dates
 using CSV
 using DataFrames
 using Random
-using Plots
-using Debugger
 println(Threads.nthreads())
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
