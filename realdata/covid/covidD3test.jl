@@ -27,7 +27,8 @@ Random.seed!(seed)
 mask_NMminus1 = rand(N,M-1) .< .2
 mask_NM = hcat(fill(false,N), mask_NMminus1);
 
-include("../models/OrderStatisticPoissonTimeDayMF3.jl")
+include("/home/jlederman/DiscreteOrderStatistics/models/OrderStatisticPoissonTimeDayMF3.jl")
+# cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
 T = 7
 S = 2
 K = 2
