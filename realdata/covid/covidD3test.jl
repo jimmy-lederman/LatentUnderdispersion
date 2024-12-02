@@ -27,7 +27,7 @@ Random.seed!(seed)
 mask_NMminus1 = rand(N,M-1) .< .2
 mask_NM = hcat(fill(false,N), mask_NMminus1);
 
-include("/home/jlederman/DiscreteOrderStatistics/models/OrderStatisticPoissonTimeDayMF3.jl")
+
 # cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
 T = 7
 S = 2
@@ -48,8 +48,10 @@ scale_rate = 1
 # j = 2
 
 if D == 1 && j == 1
+    include("/home/jlederman/DiscreteOrderStatistics/models/PoissonTimeDayMF3.jl")
     model = PoissonTimeDayMF(N,M,T,S,K,a,b,c,d,starta,startb,e,f,g,h,scale_shape,scale_rate)
 else
+    include("/home/jlederman/DiscreteOrderStatistics/models/OrderStatisticPoissonTimeDayMF3.jl")
     model = OrderStatisticPoissonTimeDayMF(N,M,T,S,K,a,b,c,d,starta,startb,e,f,g,h,scale_shape,scale_rate,D,j)
 end
 
