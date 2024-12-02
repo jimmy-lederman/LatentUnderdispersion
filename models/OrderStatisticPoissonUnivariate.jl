@@ -1,6 +1,7 @@
 include("../helper/MatrixMF.jl")
 include("../helper/PoissonMedianFunctions.jl")
 using Distributions
+using Base.Threads
 
 struct OrderStatisticPoissonUnivariate <: MatrixMF
     N::Int64

@@ -1,6 +1,7 @@
 include("../helper/MatrixMF.jl")
 include("../helper/PoissonMedianFunctions.jl")
 using Distributions
+using Base.Threads
 
 function sampleCRT(Y,R)
     if Y == 0
@@ -64,8 +65,9 @@ function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mas
     Z2_N = zeros(model.N)
 
     @views @threads for n in 1:model.N
-        Z1_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j,  NegativeBinomial(mu, 1-p))
-        Z2_N[n] = sampleCRT(Z1_N[n], model.D*mu)
+        z1 = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j,  NegativeBinomial(mu, 1-p))
+        Z1_N[n] = z1
+        Z2_N[n] = sampleCRT(z1, model.D*mu)
     end
 
     post_alpha = model.alpha + sum(Z1_N)

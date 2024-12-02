@@ -1,55 +1,56 @@
 include("PoissonMaxFunctions.jl")
 include("PoissonMinFunctions.jl")
-rewriting = pyimport("sympy.codegen.rewriting")
-cfunctions = pyimport("sympy.codegen.cfunctions")
+# rewriting = pyimport("sympy.codegen.rewriting")
+# cfunctions = pyimport("sympy.codegen.cfunctions")
 
 using Distributions
 
-# function sampleSumGivenMedian(Y,D,dist)
-#     if D == 1
-#         return Y 
-#     end
-#     #@assert D % 2 == 1 #D must be odd
-#     D2 = div(D,2) + 1
-#     D3 = div(D,2)
-#     minsum = sampleSumGivenMin(Y,D2,dist) - Y
-#     maxsum = sampleSumGivenMax(Y,D2,dist)
-#     rest2 = sum(rand(Truncated(dist, 0, Y), D3))
-#     rest = sum(rand(Truncated(dist, Y, Inf), D3))
-#     return minsum + maxsum
-# end
-
 function categorical1(y,dist)
-    #denom = pdf(OrderStatistic(dist, 3, 2), y)
-    prob1 = cdf(dist, y-1)*pdf(OrderStatistic(dist, 2, 1), y)
-    prob2 = ccdf(dist, y)*pdf(OrderStatistic(dist, 2, 2), y)
-    prob3 = (2*cdf(dist,y-1)*ccdf(dist,y)+pdf(dist,y)*(2-pdf(dist,y)))*pdf(dist,y)
-    probs = [prob1,prob2,prob3]
+    if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
+        probs = numericalProbs(y,2,3,dist,0,0,0)
+    else
+        #denom = pdf(OrderStatistic(dist, 3, 2), y)
+        prob1 = cdf(dist, y-1)*pdf(OrderStatistic(dist, 2, 1), y)
+        prob2 = (2*cdf(dist,y-1)*ccdf(dist,y)+pdf(dist,y)*(2-pdf(dist,y)))*pdf(dist,y)
+        prob3 = ccdf(dist, y)*pdf(OrderStatistic(dist, 2, 2), y)
+        
+        probs = [prob1,prob2,prob3]
+    end
+    #println(probs/sum(probs))
+    return rand(Categorical(probs/sum(probs)))
+    #return probs/sum(probs)
+end
+
+function categorical2(y,dist)
+    if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
+        probs = numericalProbs(y,2,3,dist,0,1,0)
+    else
+        prob1 = cdf(dist, y-1)*ccdf(dist, y-1)
+        prob2 = pdf(dist,y)
+        prob3 = ccdf(dist, y)*cdf(dist,y)  
+        probs = [prob1,prob2,prob3]
+    end
     #println(probs/sum(probs))
     return rand(Categorical(probs/sum(probs)))
 end
 
-function categorical2(y,dist)
-    prob1 = cdf(dist, y-1)*ccdf(dist, y-1)
-    prob2 = ccdf(dist, y)*cdf(dist,y)
-    prob3 = pdf(dist,y)
-    probs = [prob1,prob2,prob3]
-    return rand(Categorical(probs/sum(probs)))
-end
-
+#I should break down probability of each event
+#to try to see a pattern
 function sampleSumGivenMedian3(Y,dist)
     #draw c
+    #do a numeric test
     c = categorical1(Y,dist)
-    if c == 1
+    if c == 1 #Z1 < Y
         result = rand(Truncated(dist, 0, Y - 1)) + sampleSumGivenMin(Y,2,dist)
-    elseif c == 2
+    elseif c == 3 #Z1 > Y 
         result = rand(Truncated(dist, Y+1, Inf)) + sampleSumGivenMax(Y,2,dist)
-    else #Z1 = Y
+    else #Z1 == Y
         #draw new c 
+        #do a numeric test
         c = categorical2(Y,dist)
         if c == 1
             result = Y + rand(Truncated(dist, 0, Y - 1)) + rand(Truncated(dist, Y, Inf))
-        elseif c == 2
+        elseif c == 3
             result = Y + rand(Truncated(dist, Y+1, Inf)) + rand(Truncated(dist, 0, Y))
         else #Z1 and Z2 = Y
             result = 2*Y + rand(dist)
@@ -99,7 +100,9 @@ end
 function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     D = D - numY - numUnder - numOver
     j = j - numUnder
+    #println("ahh")
     if numY == 0
+        #println("nope")
         if Y > mean(dist)
             probUnder = (j-1)/D
             return [probUnder, (1-probUnder),0]
@@ -108,6 +111,7 @@ function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
             return [0, (1-probOver),probOver]
         end
     else
+        #println("yep")
         if Y > mean(dist) 
             truncProb = pdf(Truncated(dist, Y, Inf), Y)
             if isnan(truncProb)
@@ -115,8 +119,7 @@ function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
             end
             probUnder = (j-1)/D
             return [probUnder, (1-probUnder)*truncProb,(1-probUnder)*(1-truncProb)]
-        end
-        if Y < mean(dist)
+        else #Y <= mean(dist)
             truncProb = pdf(Truncated(dist, 0, Y), Y)
             if isnan(truncProb)
                 truncProb = 1
@@ -194,26 +197,26 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     elseif D == 3 && j == 2
         return sampleSumGivenMedian3(Y,dist)
     end
-    numY = 0
-    numUnder = 0
-    numOver = 0
-    total = 0
-    for i in 1:D 
-        probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
-        #println(probs)
-        c = rand(Categorical(probs))
-        if c == 1
-            numUnder += 1
-            total += rand(Truncated(dist, 0, Y-1))
-        elseif c == 2
-            numY += 1
-            total += Y
-        else #c == 3
-            numOver += 1
-            total += rand(Truncated(dist, Y + 1, Inf))
-        end
-    end
-    return total
+    # numY = 0
+    # numUnder = 0
+    # numOver = 0
+    # total = 0
+    # for i in 1:D 
+    #     probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
+    #     #println(probs)
+    #     c = rand(Categorical(probs))
+    #     if c == 1
+    #         numUnder += 1
+    #         total += rand(Truncated(dist, 0, Y-1))
+    #     elseif c == 2
+    #         numY += 1
+    #         total += Y
+    #     else #c == 3
+    #         numOver += 1
+    #         total += rand(Truncated(dist, Y + 1, Inf))
+    #     end
+    # end
+    # return total
 end
 
 function logpmfOrderStatPoisson(Y,mu,D,j)

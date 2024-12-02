@@ -178,6 +178,8 @@ function backward_sample(model::OrderStatisticPoissonTimeDayMF, data, state, mas
     days_M = copy(state["days_M"])
     state_N = copy(state["state_N"])
 
+    #mylock = ReentrantLock()
+
     alphacontribution_NM = zeros(model.N, model.M)
     Y_NMKplus1 = zeros(model.N, model.M, model.K + 2)
     # Loop over the non-zeros in Y_NM and allocate
@@ -201,17 +203,12 @@ function backward_sample(model::OrderStatisticPoissonTimeDayMF, data, state, mas
                 #Y_NM[n,m] = rand(OrderStatistic(Poisson(Ylast + alpha*mu), model.D, model.D))
             end
         end
+
+         Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, Poisson(Ylast + alpha*mu + pop*eps))
         
-        if Y_NM[n, m] > 0
-            #Z = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Ylast + alpha*mu))
-            #Z = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Ylast + alpha*mu + pop*eps))
-            Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, Poisson(Ylast + alpha*mu + pop*eps))
+        probvec = vcat(alpha*probvec, Ylast, pop*eps)
 
-            probvec = vcat(alpha*probvec, Ylast, pop*eps)
-            #probvec = vcat(alpha*probvec, Ylast)
-
-            Y_NMKplus1[n, m, :] = rand(Multinomial(Z, probvec / sum(probvec)))
-        end
+        Y_NMKplus1[n, m, :] = rand(Multinomial(Z, probvec / sum(probvec)))
     end
 
     #update alpha (scale)
