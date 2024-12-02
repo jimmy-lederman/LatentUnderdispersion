@@ -5,7 +5,8 @@ using Random
 println(Threads.nthreads())
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
-cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
+#cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
+cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
 days = cumdf[1,4:end]
 state = cumdf[2:end,1]
 fips = cumdf[2:end,2]
