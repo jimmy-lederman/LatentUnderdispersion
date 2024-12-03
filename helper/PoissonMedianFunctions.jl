@@ -81,12 +81,6 @@ function safeTrunc(dist,lower,upper;n=1)
     end
 end   
 
-
-
-
-
-
-
 function categorical1(y,dist)
     if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
         probs = numericalProbs(y,2,3,dist,0,0,0)

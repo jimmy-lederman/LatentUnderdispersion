@@ -131,18 +131,6 @@ function sampleIndex(Y,D,dist)
     return index
 end
 
-function backupTruncation(D, Y, dist)
-    Fmax = cdf(dist, Y)
-    if Fmax == 1
-        return rand(dist, D)
-    elseif Fmax == 0
-        return fill(Y, D) #vector of all Y
-    else
-        u_n = rand(Uniform(0,Fmax), D)
-        return quantile(dist, u_n)
-    end
-end
-
 function sampleSumGivenMax(Y,D,dist)
     if Y == 0
         return 0
@@ -203,49 +191,5 @@ function logpmfMaxPoisson(Y,mu,D)
     catch ex
         llik = logprobsymbolic(Y,mu,D)
         return llik
-    end
-end
-
-
-
-
-
-
-function prob(Y,D,j,dist)
-    c = pdf(OrderStatistic(dist, D, j), Y)
-    if D == j == 1
-        return [0,1,0]
-    end
-    if j == 1
-        B = 0
-    else
-        B = cdf(dist,Y-1)*pdf(OrderStatistic(dist, D-1, j-1), Y)/c #probability of z1 < y
-    end
-    if D == j
-        A = 0
-    else 
-        A = ccdf(dist,Y)*pdf(OrderStatistic(dist, D-1, j), Y)/c #probability of z1 > y
-    end
-    if isnan(A) || isnan(B)
-        println(c)
-        println(cdf(dist,Y-1)*pdf(OrderStatistic(dist, D-1, j-1), Y))
-        println(ccdf(dist,Y)*pdf(OrderStatistic(dist, D-1, j), Y))
-        println("Y: ", Y, " ", dist)
-        println([B,1-A-B,A])
-        @assert 1 == 2
-    end
-    return [B,1-A-B,A]
-end
-
-function sampleFirstMax(Y,D,dist)
-    if pdf(dist, Y) < 10e-5 && Y > mean(dist)
-        probY = 1/D
-    end 
-    probY = probYatIteration(Y, D, dist)
-    c = rand(Bernoulli(probY))
-    if c == 1 #Z1 = Y
-        return Y 
-    else #Z1 < Y
-        return rand(Truncated(dist, 0, Y-1))
     end
 end
