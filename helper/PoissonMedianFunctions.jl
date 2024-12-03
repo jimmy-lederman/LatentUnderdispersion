@@ -1,7 +1,7 @@
 include("PoissonMaxFunctions.jl")
 include("PoissonMinFunctions.jl")
-rewriting = pyimport("sympy.codegen.rewriting")
-cfunctions = pyimport("sympy.codegen.cfunctions")
+# rewriting = pyimport("sympy.codegen.rewriting")
+# cfunctions = pyimport("sympy.codegen.cfunctions")
 
 using Distributions
 
