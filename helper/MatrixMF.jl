@@ -1,7 +1,7 @@
 using ProgressMeter
 using Random 
 
-function logsumexp(arr::AbstractVector{T}) where T <: Real
+function logsumexpvec(arr::AbstractVector{T}) where T <: Real
     m = maximum(arr)
     m + log(sum(exp.(arr .- m)))
 end
@@ -162,22 +162,22 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
             end
             if !isnothing(mask) && mask[row,col]
                 llikvector = Vector{Float64}(undef, S)
+                haveusedbackup = false
                 for s in 1:S
                     sample = samples[s]
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
-                    #if isinf(llik) println(row, " ", col, " ", s) end
                     llikvector[s] = llik
-                    if llik == 0
-                        llik0count += 1
-                    end
+                    # if llik == 0
+                    #     llik0count += 1
+                    # end
                 end
-                inforatetotal += logsumexp(llikvector) - log(S)
+                inforatetotal += logsumexpvec(llikvector) - log(S)
                 I += 1
                 if verbose next!(prog) end
             end
         end
     end
-    println("0 count: ", llik0count)
+    #println("0 count: ", llik0count)
     if verbose finish!(prog) end
     return inforatetotal/I
 end
@@ -199,7 +199,7 @@ function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, ma
                     #if isinf(llik) println(row, " ", col, " ", s) end
                     llikvector[s] = llik
                 end
-                push!(heldoutprobs, logsumexp(llikvector) - log(S))
+                push!(heldoutprobs, logsumexpvec(llikvector) - log(S))
                 if verbose next!(prog) end
             end
         end
