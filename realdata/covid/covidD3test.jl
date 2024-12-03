@@ -2,6 +2,7 @@ using Dates
 using CSV
 using DataFrames
 using Random
+using JLD
 println(Threads.nthreads())
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
@@ -55,7 +56,7 @@ else
     model = OrderStatisticPoissonTimeDayMF(N,M,T,S,K,a,b,c,d,starta,startb,e,f,g,h,scale_shape,scale_rate,D,j)
 end
 
-samples2 = fit(model, data, nsamples=1000, nthin=10, nburnin=10000, info=info,mask=mask_NM,verbose=true,initseed=2)#,constantinit=Dict("V_KM"=>fill(1.0, K, M), "R_KTS"=>fill(1.0,K,T,S)), skipupdate=["R_KTS"])
+samples = fit(model, data, nsamples=1000, nthin=10, nburnin=10000, info=info,mask=mask_NM,verbose=true,initseed=2)#,constantinit=Dict("V_KM"=>fill(1.0, K, M), "R_KTS"=>fill(1.0,K,T,S)), skipupdate=["R_KTS"])
 
-
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medianD3/CTFL/samples/"
 save(folder*"samples_seed$(seed)D$(D)j$j.jld", "samples", samples)

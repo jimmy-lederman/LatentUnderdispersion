@@ -183,7 +183,7 @@ function backward_sample(model::PoissonTimeDayMF, data, state, mask=nothing,skip
     R_KTS = copy(state["R_KTS"])
     eps = copy(state["eps"])
     alpha = copy(state["alpha"])
-    Y_NMKplus1 = copy(state["Y_NMKplus1"])
+    #Y_NMKplus1 = copy(state["Y_NMKplus1"])
 
     Y_N1 = copy(state["Y_N1"]) #unused because redundant in backwards step
     pop_N = copy(state["pop_N"])
@@ -191,7 +191,7 @@ function backward_sample(model::PoissonTimeDayMF, data, state, mask=nothing,skip
     state_N = copy(state["state_N"])
     # println(V_KM)
 
-    #Y_NMKplus1 = zeros(model.N, model.M, model.K + 2)
+    Y_NMKplus1 = zeros(model.N, model.M, model.K + 2)
     alphacontribution_NM = zeros(model.N, model.M)
     # Loop over the non-zeros in Y_NM and allocate
     @views @threads for idx in 1:(N * (M))
