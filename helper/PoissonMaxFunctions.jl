@@ -3,6 +3,69 @@
 # using PyCall
 # sympy = pyimport("sympy")
 
+function safeTrunc(dist,lower,upper;n=1)
+    try
+        return rand(Truncated(dist, lower, upper), n)
+    catch e
+        if dist isa Poisson
+            if lower == 0
+                try 
+                    Fmax = poisson_cdf_precise(upper,mean(dist))
+                    result = quantile(dist, rand(Uniform(0,Fmax), n))
+                    if isinf(result)
+                        return fill(upper,n)
+                    else
+                        return result
+                    end
+                catch e 
+                    return fill(upper,n) 
+                end
+            elseif isinf(upper)
+                try
+                    Fmin = poisson_cdf_precise(lower,mean(dist))
+                    result = quantile(dist, rand(Uniform(Fmin,1), n))
+                    if isinf(result)
+                        return fill(lower,n)
+                    else
+                        return result
+                    end 
+                catch e 
+                    return fill(lower,n)
+                end
+            end
+        else
+            if lower == 0
+                try 
+                    Fmax = cdf(dist,upper)
+                    result = quantile(dist, rand(Uniform(0,Fmax), n))
+                    if isinf(result) || Fmax == 0
+                        return fill(upper,n) 
+                    elseif Fmax == 1
+                        return rand(dist,n)
+                    else 
+                        return result
+                    end
+                catch e 
+                    return fill(upper,n) 
+                end
+            elseif isinf(upper)
+                try
+                    Fmin = cdf(dist,lower)
+                    result = quantile(dist, rand(Uniform(Fmin,1), n))
+                    if isinf(result) || Fmin == 1
+                        return fill(lower,n)
+                    elseif Fmax == 0
+                        return rand(dist,n)
+                    else
+                        return result
+                    end 
+                catch e 
+                    return fill(lower,n)
+                end
+            end
+        end
+    end
+end   
 
 function probYatIteration(Y,i,dist)
     num = pdf(dist,Y)*cdf(dist, Y)^(i-1)
@@ -85,21 +148,11 @@ function sampleSumGivenMax(Y,D,dist)
         return 0
     end
     index = sampleIndex(Y,D,dist)
-    # try
-    sample1 = rand(Truncated(dist, 0, Y - 1), index - 1)
-    sample2 = rand(Truncated(dist, 0, Y), D - index)
+    sample1 = safeTrunc(dist, 0, Y - 1, n=index - 1)
+    sample2 = safeTrunc(dist, 0, Y, n=D - index)
     beep = sum(sample1) + Y + sum(sample2)
-    # println("used good trunc")
-    # println("Y: ", Y, " dist: ", dist, " D: ", D)
     return beep
-    # catch ex
-    #     println("warning: using backup truncation")
-    #     println("Y: ", Y, " dist: ", dist, " D: ", D)
-    #     #the built in truncation does not work if mu is too different than Y
-    #     sample1 = backupTruncation(index-1, Y-1, dist)
-    #     sample2 = backupTruncation(D-index, Y, dist)
-    #     return sum(sample1) + Y + sum(sample2)
-    # end
+
 end
 
 

@@ -17,64 +17,64 @@ function poisson_cdf_precise(Y,mu;precision=64)
     end
 end
 
-function safeTrunc(dist,lower,upper)
+function safeTrunc(dist,lower,upper;n=1)
     try
-        return rand(Truncated(dist, lower, upper))
+        return rand(Truncated(dist, lower, upper), n)
     catch e
         if dist isa Poisson
             if lower == 0
                 try 
                     Fmax = poisson_cdf_precise(upper,mean(dist))
-                    result = quantile(dist, rand(Uniform(0,Fmax)))
+                    result = quantile(dist, rand(Uniform(0,Fmax), n))
                     if isinf(result)
-                        return upper
+                        return fill(upper,n)
                     else
                         return result
                     end
                 catch e 
-                    return upper 
+                    return fill(upper,n) 
                 end
             elseif isinf(upper)
                 try
                     Fmin = poisson_cdf_precise(lower,mean(dist))
-                    result = quantile(dist, rand(Uniform(Fmin,1)))
+                    result = quantile(dist, rand(Uniform(Fmin,1), n))
                     if isinf(result)
-                        return lower
+                        return fill(lower,n)
                     else
                         return result
                     end 
                 catch e 
-                    return lower
+                    return fill(lower,n)
                 end
             end
         else
             if lower == 0
                 try 
                     Fmax = cdf(dist,upper)
-                    result = quantile(dist, rand(Uniform(0,Fmax)))
+                    result = quantile(dist, rand(Uniform(0,Fmax), n))
                     if isinf(result) || Fmax == 0
-                        return upper 
+                        return fill(upper,n) 
                     elseif Fmax == 1
-                        return rand(dist)
+                        return rand(dist,n)
                     else 
                         return result
                     end
                 catch e 
-                    return upper 
+                    return fill(upper,n) 
                 end
             elseif isinf(upper)
                 try
                     Fmin = cdf(dist,lower)
-                    result = quantile(dist, rand(Uniform(Fmin,1)))
+                    result = quantile(dist, rand(Uniform(Fmin,1), n))
                     if isinf(result) || Fmin == 1
-                        return lower
+                        return fill(lower,n)
                     elseif Fmax == 0
-                        return rand(dist)
+                        return rand(dist,n)
                     else
                         return result
                     end 
                 catch e 
-                    return lower
+                    return fill(lower,n)
                 end
             end
         end
@@ -116,45 +116,24 @@ function categorical2(y,dist)
     return rand(Categorical(probs/sum(probs)))
 end
 
-function safeTrunc(dist,lower,upper)
-    try
-        return rand(Truncated(dist, lower, upper))
-    catch e
-        Fmax = cdf(dist, Y)
-        if lower == 0
-            
-            if Fmax == 1
-                return rand(dist, D)
-            elseif Fmax == 0
-                return fill(Y, D) #vector of all Y
-            else
-                u_n = rand(Uniform(0,Fmax), D)
-                return quantile(dist, u_n)
-            end
-        else
-            
-    end
-
-
 #I should break down probability of each event
 #to try to see a pattern
 function sampleSumGivenMedian3(Y,dist)
-    println(Y, " ", dist)
     #draw c
     #do a numeric test
     c = categorical1(Y,dist)
     if c == 1 #Z1 < Y
-        result = safeTrunc(dist, 0, Y - 1) + sampleSumGivenMin(Y,2,dist)
+        result = safeTrunc(dist, 0, Y - 1)[1] + sampleSumGivenMin(Y,2,dist)
     elseif c == 3 #Z1 > Y 
-        result = safeTrunc(dist, Y+1, Inf) + sampleSumGivenMax(Y,2,dist)
+        result = safeTrunc(dist, Y+1, Inf)[1] + sampleSumGivenMax(Y,2,dist)
     else #Z1 == Y
         #draw new c 
         #do a numeric test
         c = categorical2(Y,dist)
         if c == 1
-            result = Y + safeTrunc(dist, 0, Y - 1) + safeTrunc(dist, Y, Inf)
+            result = Y + safeTrunc(dist, 0, Y - 1)[1] + safeTrunc(dist, Y, Inf)[1]
         elseif c == 3
-            result = Y + safeTrunc(dist, Y+1, Inf) + safeTrunc(dist, 0, Y)
+            result = Y + safeTrunc(dist, Y+1, Inf)[1] + safeTrunc(dist, 0, Y)[1]
         else #Z1 and Z2 = Y
             result = 2*Y + rand(dist)
         end
@@ -310,13 +289,13 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
         c = rand(Categorical(probs))
         if c == 1
             numUnder += 1
-            total += safeTrunc(dist, 0, Y-1)
+            total += safeTrunc(dist, 0, Y-1)[1]
         elseif c == 2
             numY += 1
             total += Y
         else #c == 3
             numOver += 1
-            total += safeTrunc(dist, Y + 1, Inf)
+            total += safeTrunc(dist, Y + 1, Inf)[1]
         end
     end
     return total
