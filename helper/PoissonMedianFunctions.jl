@@ -197,26 +197,26 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     elseif D == 3 && j == 2
         return sampleSumGivenMedian3(Y,dist)
     end
-    # numY = 0
-    # numUnder = 0
-    # numOver = 0
-    # total = 0
-    # for i in 1:D 
-    #     probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
-    #     #println(probs)
-    #     c = rand(Categorical(probs))
-    #     if c == 1
-    #         numUnder += 1
-    #         total += rand(Truncated(dist, 0, Y-1))
-    #     elseif c == 2
-    #         numY += 1
-    #         total += Y
-    #     else #c == 3
-    #         numOver += 1
-    #         total += rand(Truncated(dist, Y + 1, Inf))
-    #     end
-    # end
-    # return total
+    numY = 0
+    numUnder = 0
+    numOver = 0
+    total = 0
+    for i in 1:D 
+        probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
+        #println(probs)
+        c = rand(Categorical(probs))
+        if c == 1
+            numUnder += 1
+            total += rand(Truncated(dist, 0, Y-1))
+        elseif c == 2
+            numY += 1
+            total += Y
+        else #c == 3
+            numOver += 1
+            total += rand(Truncated(dist, Y + 1, Inf))
+        end
+    end
+    return total
 end
 
 function logprobMedian(Y,mu;precision=64)
