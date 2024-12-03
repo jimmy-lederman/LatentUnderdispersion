@@ -5,6 +5,88 @@ include("PoissonMinFunctions.jl")
 
 using Distributions
 
+function poisson_cdf_precise(Y,mu;precision=64)
+    setprecision(BigFloat,precision)
+    mu = big(mu)
+    Y = big(Y)
+    result = gamma_inc(Y+1,mu)[2]
+    if result == 0 || result == 1
+        return poisson_cdf_precise(Y,mu,precision=5*precision)
+    else
+        return result
+    end
+end
+
+function safeTrunc(dist,lower,upper)
+    try
+        return rand(Truncated(dist, lower, upper))
+    catch e
+        if dist isa Poisson
+            if lower == 0
+                try 
+                    Fmax = poisson_cdf_precise(upper,mean(dist))
+                    result = quantile(dist, rand(Uniform(0,Fmax)))
+                    if isinf(result)
+                        return upper
+                    else
+                        return result
+                    end
+                catch e 
+                    return upper 
+                end
+            elseif isinf(upper)
+                try
+                    Fmin = poisson_cdf_precise(lower,mean(dist))
+                    result = quantile(dist, rand(Uniform(Fmin,1)))
+                    if isinf(result)
+                        return lower
+                    else
+                        return result
+                    end 
+                catch e 
+                    return lower
+                end
+            end
+        else
+            if lower == 0
+                try 
+                    Fmax = cdf(dist,upper)
+                    result = quantile(dist, rand(Uniform(0,Fmax)))
+                    if isinf(result) || Fmax == 0
+                        return upper 
+                    elseif Fmax == 1
+                        return rand(dist)
+                    else 
+                        return result
+                    end
+                catch e 
+                    return upper 
+                end
+            elseif isinf(upper)
+                try
+                    Fmin = cdf(dist,lower)
+                    result = quantile(dist, rand(Uniform(Fmin,1)))
+                    if isinf(result) || Fmin == 1
+                        return lower
+                    elseif Fmax == 0
+                        return rand(dist)
+                    else
+                        return result
+                    end 
+                catch e 
+                    return lower
+                end
+            end
+        end
+    end
+end   
+
+
+
+
+
+
+
 function categorical1(y,dist)
     if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
         probs = numericalProbs(y,2,3,dist,0,0,0)
@@ -62,17 +144,17 @@ function sampleSumGivenMedian3(Y,dist)
     #do a numeric test
     c = categorical1(Y,dist)
     if c == 1 #Z1 < Y
-        result = rand(Truncated(dist, 0, Y - 1)) + sampleSumGivenMin(Y,2,dist)
+        result = safeTrunc(dist, 0, Y - 1) + sampleSumGivenMin(Y,2,dist)
     elseif c == 3 #Z1 > Y 
-        result = rand(Truncated(dist, Y+1, Inf)) + sampleSumGivenMax(Y,2,dist)
+        result = safeTrunc(dist, Y+1, Inf) + sampleSumGivenMax(Y,2,dist)
     else #Z1 == Y
         #draw new c 
         #do a numeric test
         c = categorical2(Y,dist)
         if c == 1
-            result = Y + rand(Truncated(dist, 0, Y - 1)) + rand(Truncated(dist, Y, Inf))
+            result = Y + safeTrunc(dist, 0, Y - 1) + safeTrunc(dist, Y, Inf)
         elseif c == 3
-            result = Y + rand(Truncated(dist, Y+1, Inf)) + rand(Truncated(dist, 0, Y))
+            result = Y + safeTrunc(dist, Y+1, Inf) + safeTrunc(dist, 0, Y)
         else #Z1 and Z2 = Y
             result = 2*Y + rand(dist)
         end
@@ -228,13 +310,13 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
         c = rand(Categorical(probs))
         if c == 1
             numUnder += 1
-            total += rand(Truncated(dist, 0, Y-1))
+            total += safeTrunc(dist, 0, Y-1)
         elseif c == 2
             numY += 1
             total += Y
         else #c == 3
             numOver += 1
-            total += rand(Truncated(dist, Y + 1, Inf))
+            total += safeTrunc(dist, Y + 1, Inf)
         end
     end
     return total
@@ -254,8 +336,6 @@ function logprobMedian(Y,mu;precision=64)
         return Float64(result)
     end
 end
-
-
 
 function logpmfOrderStatPoisson(Y,mu,D,j)
     try
@@ -278,29 +358,29 @@ function logpmfOrderStatPoisson(Y,mu,D,j)
     end
 end
 
-function logprobsymbolicMedian(s,z)
-    s1, z1 = sympy.symbols("s1 z1")
-    s2, z2 = sympy.symbols("s2 z2") 
-    expm1_opt = rewriting.FuncMinusOneOptim(sympy.exp, cfunctions.expm1)
-    part1 = 2*sympy.log(sympy.uppergamma(s1, z1) / sympy.gamma(s1)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s1, z1) / sympy.gamma(s1)), rewriting.optims_c99)
-    part2 = 2*sympy.log(sympy.uppergamma(s2, z2) / sympy.gamma(s2)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s2, z2) / sympy.gamma(s2)), rewriting.optims_c99)
+# function logprobsymbolicMedian(s,z)
+#     s1, z1 = sympy.symbols("s1 z1")
+#     s2, z2 = sympy.symbols("s2 z2") 
+#     expm1_opt = rewriting.FuncMinusOneOptim(sympy.exp, cfunctions.expm1)
+#     part1 = 2*sympy.log(sympy.uppergamma(s1, z1) / sympy.gamma(s1)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s1, z1) / sympy.gamma(s1)), rewriting.optims_c99)
+#     part2 = 2*sympy.log(sympy.uppergamma(s2, z2) / sympy.gamma(s2)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s2, z2) / sympy.gamma(s2)), rewriting.optims_c99)
     
-    if s != 0
-        combine = part1 + sympy.log(-1*expm1_opt(sympy.exp(part2 - part1)-1))
-        combine_result = combine.subs(s1, s+1)
-        combine_result = combine_result.subs(s2, s)
-        combine_result = combine_result.subs(z1, Int(round(z)))
-        combine_result = combine_result.subs(z2, Int(round(z)))
-        combine_result = sympy.N(combine_result, 100000)
-        combine_result = convert(Float64, combine_result)
-        return combine_result
+#     if s != 0
+#         combine = part1 + sympy.log(-1*expm1_opt(sympy.exp(part2 - part1)-1))
+#         combine_result = combine.subs(s1, s+1)
+#         combine_result = combine_result.subs(s2, s)
+#         combine_result = combine_result.subs(z1, Int(round(z)))
+#         combine_result = combine_result.subs(z2, Int(round(z)))
+#         combine_result = sympy.N(combine_result, 100000)
+#         combine_result = convert(Float64, combine_result)
+#         return combine_result
 
-    else #if data point is 0
-        combine = part1
-        combine_result = combine.subs(s1, s+1)
-        combine_result = combine_result.subs(z1, z)
-        combine_result = sympy.N(combine_result, 100000)
-        combine_result = convert(Float64, combine_result)
-    end
-    return combine_result
-end
+#     else #if data point is 0
+#         combine = part1
+#         combine_result = combine.subs(s1, s+1)
+#         combine_result = combine_result.subs(z1, z)
+#         combine_result = sympy.N(combine_result, 100000)
+#         combine_result = convert(Float64, combine_result)
+#     end
+#     return combine_result
+# end
