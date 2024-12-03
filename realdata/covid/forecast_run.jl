@@ -76,5 +76,5 @@ end
 results = [K,D,j,seed]
 
 samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"], "R_KTS"=>sample["R_KTS"]) for sample in samples]
-
-save("forecast_samples_basic/sampleK$(K)D$(D)seed$(maskSeed).jld", "results", results, "samples", samples)
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medianD3/usa/forecast_samples/"
+save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples)
