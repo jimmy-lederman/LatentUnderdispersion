@@ -4,12 +4,13 @@ function probYatIterationMin(Y,i,dist)
     num = pdf(dist,Y)*ccdf(dist, Y-1)^(i-1)
     denom = ccdf(dist, Y-1)^i - ccdf(dist, Y)^i
     if isnan(num/denom)
-        @assert 1 == 2
         println(dist)
         println(Y)
         println(i)
         println(num)
         println(denom)
+        @assert 1 == 2
+        
     end
     return num/denom
 end
@@ -23,6 +24,9 @@ function sampleIndexMin(Y,D,dist)
     # end
     if pdf(dist, Y) < 10e-10 && Y < mean(dist)
         return rand(DiscreteUniform(1,D))
+    end
+    if pdf(dist, Y) < 10e-20 && Y > mean(dist)
+        return 1
     end
     index = 1
     b  = []
