@@ -34,9 +34,30 @@ function categorical2(y,dist)
     return rand(Categorical(probs/sum(probs)))
 end
 
+function safeTrunc(dist,lower,upper)
+    try
+        return rand(Truncated(dist, lower, upper))
+    catch e
+        Fmax = cdf(dist, Y)
+        if lower == 0
+            
+            if Fmax == 1
+                return rand(dist, D)
+            elseif Fmax == 0
+                return fill(Y, D) #vector of all Y
+            else
+                u_n = rand(Uniform(0,Fmax), D)
+                return quantile(dist, u_n)
+            end
+        else
+            
+    end
+
+
 #I should break down probability of each event
 #to try to see a pattern
 function sampleSumGivenMedian3(Y,dist)
+    println(Y, " ", dist)
     #draw c
     #do a numeric test
     c = categorical1(Y,dist)
