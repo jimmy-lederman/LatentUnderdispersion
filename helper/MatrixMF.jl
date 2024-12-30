@@ -35,7 +35,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if !isnothing(constantinit)
             for (var, value) in constantinit
                 state[var] = value
-                println(state[var])
+                # println(state[var])
             end
             
         end

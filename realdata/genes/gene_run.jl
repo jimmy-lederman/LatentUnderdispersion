@@ -55,4 +55,4 @@ println(inforate)
 
 # samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"], "R_KTS"=>sample["R_KTS"]) for sample in samples]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes/heldoutsamples/"
-save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin).jld", "results", results, "samples", samples)
+save(folder*"/sample_seed1$(seed1)seed2$(seed2)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin).jld", "results", results, "samples", samples)
