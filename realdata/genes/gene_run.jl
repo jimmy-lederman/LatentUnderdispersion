@@ -8,7 +8,7 @@ include("/home/jlederman/DiscreteOrderStatistics/models/genes/genes.jl")
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
 #cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
-cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/hammer.csv",DataFrame))
+file_path = "/home/jlederman/DiscreteOrderStatistics/data/hammer.csv"
 df = CSV.read(file_path, DataFrame)
 df = select(df, Not(1))
 Y_NM = Matrix(df);
