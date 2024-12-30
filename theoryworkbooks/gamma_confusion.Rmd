@@ -4,12 +4,15 @@ output: html_document
 date: "2024-11-14"
 ---
 
+
+
 ```{r}
-shape <- 10
+shape <- 5
 rate <- .1
 x <- seq(.01,100,.01)
 y <- dgamma(x, shape = shape, rate = rate)
 plot(x,y)
+shape/rate
 ```
 
 ```{r}

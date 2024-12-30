@@ -35,9 +35,12 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if !isnothing(constantinit)
             for (var, value) in constantinit
                 state[var] = value
+                println(state[var])
             end
+            
         end
     end
+    
     S = nburnin + nthin*nsamples
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
@@ -148,6 +151,7 @@ function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nth
 end
 
 function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing)
+    
     S = size(samples)[1]
     I = 0 #total number of masked points
     llik0count = 0
@@ -165,6 +169,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                 haveusedbackup = false
                 for s in 1:S
                     sample = samples[s]
+                    # @assert 1 == 2
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                     llikvector[s] = llik
                     # if llik == 0
@@ -199,7 +204,7 @@ function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, ma
                     #if isinf(llik) println(row, " ", col, " ", s) end
                     llikvector[s] = llik
                 end
-                push!(heldoutprobs, logsumexpvec(llikvector) - log(S))
+                push!(heldoutprobs, [logsumexpvec(llikvector) - log(S),row,col])
                 if verbose next!(prog) end
             end
         end

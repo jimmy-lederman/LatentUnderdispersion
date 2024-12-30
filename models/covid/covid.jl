@@ -1,9 +1,9 @@
-include("../helper/MatrixMF.jl")
-include("../helper/PoissonMedianFunctions.jl")
+include("../../helper/MatrixMF.jl")
+include("../../helper/PoissonMedianFunctions.jl")
 using Distributions
 using LogExpFunctions
 using LinearAlgebra
-using Base.Threads
+# using Base.Threads
 using SpecialFunctions
 
 function sampleCRT(Y,R)
@@ -18,7 +18,7 @@ function sampleCRT(Y,R)
 end
 
 
-struct OrderStatisticPoissonTimeDayMF <: MatrixMF
+struct covid <: MatrixMF
     N::Int64
     M::Int64
     T::Int64
@@ -40,20 +40,20 @@ struct OrderStatisticPoissonTimeDayMF <: MatrixMF
     j::Int64
 end
 
-function evalulateLogLikelihood(model::OrderStatisticPoissonTimeDayMF, state, data, info, row, col)
-    @assert col != 1
-    Ylast = data["Y_NM"][row,col-1]
-    Y = data["Y_NM"][row,col]
-    pop = info["pop_N"][row]
-    day = info["days_M"][col]
-    s = info["state_N"][row]
-    eps = state["eps"]
-    alpha = state["alpha"]
-    mu = sum(state["U_NK"][row,:] .* state["V_KM"][:,col] .* state["R_KTS"][:,day,s])
-    return logpmfOrderStatPoisson(Y,Ylast+alpha*pop*mu+pop*eps,model.D,model.j)
-end
+# function evalulateLogLikelihood(model::OrderStatisticPoissonTimeDayMF, state, data, info, row, col)
+#     @assert col != 1
+#     Ylast = data["Y_NM"][row,col-1]
+#     Y = data["Y_NM"][row,col]
+#     pop = info["pop_N"][row]
+#     day = info["days_M"][col]
+#     s = info["state_N"][row]
+#     eps = state["eps"]
+#     alpha = state["alpha"]
+#     mu = sum(state["U_NK"][row,:] .* state["V_KM"][:,col] .* state["R_KTS"][:,day,s])
+#     return logpmfOrderStatPoisson(Y,Ylast+alpha*pop*mu+pop*eps,model.D,model.j)
+# end
 
-function forecast(model::OrderStatisticPoissonTimeDayMF, state, data, info, Ti)
+function forecast(model::covid, state, data, info, Ti)
     lastgamma = state["V_KM"][:,end]
     forecastGamma_KTi = zeros(model.K, Ti)
     for i in 1:Ti
@@ -80,7 +80,7 @@ function forecast(model::OrderStatisticPoissonTimeDayMF, state, data, info, Ti)
 end
 
 
-function sample_prior(model::OrderStatisticPoissonTimeDayMF,info=nothing,constantinit=nothing)
+function sample_prior(model::covid,info=nothing,constantinit=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     pass = false
     if !isnothing(constantinit)
@@ -106,7 +106,7 @@ function sample_prior(model::OrderStatisticPoissonTimeDayMF,info=nothing,constan
     return state
 end
 
-function forward_sample(model::OrderStatisticPoissonTimeDayMF; state=nothing, info=nothing)
+function forward_sample(model::covid; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model, info)
     end
@@ -138,7 +138,7 @@ function forward_sample(model::OrderStatisticPoissonTimeDayMF; state=nothing, in
     return data, state 
 end
 
-function predict(model::OrderStatisticPoissonTimeDayMF, state, info, n, m, Ylast)
+function predict(model::covid, state, info, n, m, Ylast)
     pop_N = info["pop_N"]
     days_M = info["days_M"]
     state_N = info["state_N"]
@@ -150,7 +150,7 @@ function predict(model::OrderStatisticPoissonTimeDayMF, state, info, n, m, Ylast
     return rand(OrderStatistic(Poisson(Ylast + pop*eps + alpha * pop * sum(state["R_KTS"][:,day,s] .* state["U_NK"][n,:] .* state["V_KM"][:,m])), model.D, model.j))
 end
 
-function predict_x(model::OrderStatisticPoissonTimeDayMF, state, info, n, mstart, Ystart, x)
+function predict_x(model::covid, state, info, n, mstart, Ystart, x)
     result = zeros(x)
     Ylast = Ystart
     m = mstart + 1
@@ -165,7 +165,7 @@ end
 
 
 
-function backward_sample(model::OrderStatisticPoissonTimeDayMF, data, state, mask=nothing, skipupdate=nothing)
+function backward_sample(model::covid, data, state, mask=nothing, skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -184,7 +184,7 @@ function backward_sample(model::OrderStatisticPoissonTimeDayMF, data, state, mas
     alphacontribution_NM = zeros(model.N, model.M)
     Y_NMKplus1 = zeros(model.N, model.M, model.K + 2)
     # Loop over the non-zeros in Y_NM and allocate
-    @views @threads for idx in 1:(N * (M))
+    @views for idx in 1:(N * (M))
         m = M - div(idx - 1, N)
         n = mod(idx - 1, N) + 1 
         if m == 1

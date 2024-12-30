@@ -4,6 +4,7 @@ function safeTrunc(dist,lower,upper;n=1)
     try
         return rand(Truncated(dist, lower, upper), n)
     catch e
+        println("beep")
         if dist isa Poisson
             if lower == 0
                 try 
@@ -133,18 +134,10 @@ end
 
 function sampleSumGivenMin(Y,D,dist)
     index = sampleIndexMin(Y,D,dist)
-    #try
+    # println("i: ", index)
     sample1 = safeTrunc(dist, Y + 1, Inf, n=index - 1)
     sample2 = safeTrunc(dist, Y, Inf, n=D - index)
     beep = sum(sample1) + Y + sum(sample2)
+    # println("sum: ", beep)
     return beep
-    # catch ex
-    #     # println("warning: using backup truncation")
-    #     # println("Y: ", Y, " dist: ", dist, " D: ", D)
-    #     # #the built in truncation does not work if mu is too different than Y
-    #     # sample1 = backupTruncation(index-1, Y-1, dist)
-    #     # sample2 = backupTruncation(D-index, Y, dist)
-    #     # return sum(sample1) + Y + sum(sample2)
-    #     @assert 1 == 2
-    # end
 end

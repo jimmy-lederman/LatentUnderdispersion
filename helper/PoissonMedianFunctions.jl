@@ -21,6 +21,7 @@ function safeTrunc(dist,lower,upper;n=1)
     try
         return rand(Truncated(dist, lower, upper), n)
     catch e
+        println("using safetrunc")
         if dist isa Poisson
             if lower == 0
                 try 
@@ -84,6 +85,7 @@ end
 function categorical1(y,dist)
     if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
         probs = numericalProbs(y,2,3,dist,0,0,0)
+        # println("using numprobs1")
     else
         #denom = pdf(OrderStatistic(dist, 3, 2), y)
         prob1 = cdf(dist, y-1)*pdf(OrderStatistic(dist, 2, 1), y)
@@ -100,6 +102,7 @@ end
 function categorical2(y,dist)
     if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
         probs = numericalProbs(y,2,3,dist,0,1,0)
+        # println("using numprobs2")
     else
         prob1 = cdf(dist, y-1)*ccdf(dist, y-1)
         prob2 = pdf(dist,y)
@@ -134,44 +137,6 @@ function sampleSumGivenMedian3(Y,dist)
     end
     return result
 end
-
-# function probVec(Y,D,j,dist)
-#     c = pdf(OrderStatistic(dist, D, j), Y)
-#     if D == j == 1
-#         return [0,1,0]
-#     end
-#     if j == 1
-#         B = 0
-#     else
-#         B = cdf(dist,Y-1)*pdf(OrderStatistic(dist, D-1, j-1), Y)/c #probability of z1 < y
-#     end
-#     if D == j
-#         A = 0
-#     else 
-#         A = ccdf(dist,Y)*pdf(OrderStatistic(dist, D-1, j), Y)/c #probability of z1 > y
-#     end
-#     if isnan(A) || isnan(B)
-#         println(c)
-#         println(cdf(dist,Y-1)*pdf(OrderStatistic(dist, D-1, j-1), Y))
-#         println(ccdf(dist,Y)*pdf(OrderStatistic(dist, D-1, j), Y))
-#         println("Y: ", Y, " ", dist)
-#         println([B,1-A-B,A])
-#         @assert 1 == 2
-#     end
-#     return [B,1-A-B,A]
-# end
-
-# function sampleFirst(Y,D,j,dist)
-#     probs = probVec(Y,D,j,dist)
-#     c = rand(Categorical(probs))
-#     if c == 1 #Z1 < Y
-#         return rand(Truncated(dist, 0, Y-1))
-#     elseif c == 3 #Z1 > Y
-#         return rand(Truncated(dist, Y+1, Inf))
-#     else #Z1 = Y
-#         return Y
-#     end
-# end
 
 function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     D = D - numY - numUnder - numOver
@@ -273,6 +238,7 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     elseif D == 3 && j == 2
         return sampleSumGivenMedian3(Y,dist)
     end
+    @assert 1 == 2
     numY = 0
     numUnder = 0
     numOver = 0
@@ -330,30 +296,3 @@ function logpmfOrderStatPoisson(Y,mu,D,j)
         return llik
     end
 end
-
-# function logprobsymbolicMedian(s,z)
-#     s1, z1 = sympy.symbols("s1 z1")
-#     s2, z2 = sympy.symbols("s2 z2") 
-#     expm1_opt = rewriting.FuncMinusOneOptim(sympy.exp, cfunctions.expm1)
-#     part1 = 2*sympy.log(sympy.uppergamma(s1, z1) / sympy.gamma(s1)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s1, z1) / sympy.gamma(s1)), rewriting.optims_c99)
-#     part2 = 2*sympy.log(sympy.uppergamma(s2, z2) / sympy.gamma(s2)) + rewriting.optimize(sympy.log(1 + 2*sympy.lowergamma(s2, z2) / sympy.gamma(s2)), rewriting.optims_c99)
-    
-#     if s != 0
-#         combine = part1 + sympy.log(-1*expm1_opt(sympy.exp(part2 - part1)-1))
-#         combine_result = combine.subs(s1, s+1)
-#         combine_result = combine_result.subs(s2, s)
-#         combine_result = combine_result.subs(z1, Int(round(z)))
-#         combine_result = combine_result.subs(z2, Int(round(z)))
-#         combine_result = sympy.N(combine_result, 100000)
-#         combine_result = convert(Float64, combine_result)
-#         return combine_result
-
-#     else #if data point is 0
-#         combine = part1
-#         combine_result = combine.subs(s1, s+1)
-#         combine_result = combine_result.subs(z1, z)
-#         combine_result = sympy.N(combine_result, 100000)
-#         combine_result = convert(Float64, combine_result)
-#     end
-#     return combine_result
-# end
