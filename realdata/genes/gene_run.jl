@@ -48,7 +48,7 @@ end
 model = genes(N,M,K,a,b,c,d,alpha,beta,D,j,dist)
 
 
-@time samples = fit(model, data, initseed=seed2, nsamples = 100, nburnin=nburnin, nthin=1, mask=mask_NM)
+@time samples = fit(model, data, initseed=seed2, nsamples = 100, nburnin=nburnin, nthin=1, mask=mask_NM,constantinit=constantinit)
 inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false)
 results = [seed1,seed2,D,j,K,type,nburnin,inforate]
 println(inforate)
