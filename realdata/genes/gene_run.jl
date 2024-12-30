@@ -19,7 +19,6 @@ random_indices = randperm(N)[1:nlil]  # Generate random indices
 Y_NM = Y_NM[random_indices,:]
 data = Dict("Y_NM"=>Y_NM)
 N = nlil;
-data = Dict("Y_NM"=>cumdf)
 
 seed1 = parse(Int, ARGS[1])
 seed2 = parse(Int, ARGS[2])
