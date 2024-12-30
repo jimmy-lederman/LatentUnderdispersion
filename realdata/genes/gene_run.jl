@@ -4,7 +4,7 @@ using DataFrames
 using Random
 using JLD
 println(Threads.nthreads())
-include("/home/jlederman/DiscreteOrderStatistics/models/genes/gene.jl")
+include("/home/jlederman/DiscreteOrderStatistics/models/genes/genes.jl")
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
 #cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
