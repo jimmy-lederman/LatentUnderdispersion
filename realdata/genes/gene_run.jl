@@ -49,11 +49,11 @@ end
 model = genes(N,M,K,a,b,c,d,alpha,beta,D,j,dist)
 
 
-@time samples = fit(model, data, initseed=seed2, nsamples = 100, nburnin=nburnin, nthin=10, mask=mask_NM)
+@time samples = fit(model, data, initseed=seed2, nsamples = 100, nburnin=nburnin, nthin=1, mask=mask_NM)
 inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false)
-results = [K,D,j,seed,inforate]
+results = [seed1,seed2,D,j,K,type,nburnin,inforate]
 println(inforate)
 
 # samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"], "R_KTS"=>sample["R_KTS"]) for sample in samples]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes/heldoutsamples/"
-save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K)Type$(type).jld", "results", results, "samples", samples)
+save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin).jld", "results", results, "samples", samples)
