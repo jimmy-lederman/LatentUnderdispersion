@@ -119,7 +119,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     #Z_NMK = copy(state["Z_NMK"])
     Mu_NM = U_NK * V_KM
     #Loop over the non-zeros in Y_DV and allocate
-    @views for idx in 1:(model.N * model.M)
+    @views @threads for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1  
         mu = Mu_NM[n,m]
