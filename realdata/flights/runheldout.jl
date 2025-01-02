@@ -43,8 +43,8 @@ model = flights(N, M, T, K, a, b, c, d, alpha, beta, D, j, dist)
 Random.seed!(maskSeed)
 mask_NM = rand(N, M) .< .2
 
-@time samples = fit(model, data, nsamples = 500, nburnin=5000, nthin=20, mask=mask_NM, info=info)
-inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, info=info, verbose=false,init=chainSeed)
+@time samples = fit(model, data, nsamples = 500, nburnin=5000, nthin=20, mask=mask_NM, info=info,initseed=chainSeed)
+inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, info=info, verbose=false)
 results = [K,D,maskSeed,chainSeed,inforate]
 
 save("heldoutsamples/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "results", results)
