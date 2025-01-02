@@ -48,5 +48,5 @@ model = flights(N, M, T, K, a, b, c, d, alpha, beta, D, j, dist)
 @time samples = fit(model, data, nsamples = 100, nburnin=10000, nthin=20, info=info,initseed=chainSeed)
 # inforate = evaluateInfoRate(model,data,samples, info=info, verbose=false)
 # results = [K,D,maskSeed,inforate]
-
-save("fullsamples/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "samples", samples)
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
+save(folder*"fullsamples/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "samples", samples)
