@@ -1,4 +1,4 @@
-include("/home/jlederman/DiscreteOrderStatistics/models/flights.jl")
+include("/home/jlederman/DiscreteOrderStatistics/models/flights/flights.jl")
 println(Threads.nthreads())
 
 using CSV
