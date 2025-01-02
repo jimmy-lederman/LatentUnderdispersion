@@ -1,7 +1,7 @@
-#using Distributions
-# using LogExpFunctions
-# using PyCall
-# sympy = pyimport("sympy")
+using Distributions
+using LogExpFunctions
+using PyCall
+sympy = pyimport("sympy")
 
 function safeTrunc(dist,lower,upper;n=1)
     try

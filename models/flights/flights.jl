@@ -33,20 +33,58 @@ function sampleCRT(Y,R)
     return sum(rand.(Bernoulli.(probs)))
 end
 
-# function evalulateLogLikelihood(model::MaxPoissonMixture, state, data, info, row, col)
-#     Y = data["Y_NM"][row,col]
-#     @assert size(data["Y_NM"])[2] == 1
-#     home = info["I_NM"][row,1]
-#     away = info["I_NM"][row,2]
-#     dist = info["dist_NM"]
+function evalulateLogLikelihood(model::genes, state, data, info, row, col)
+    Y = data["Y_NM"][row,col]
+    @assert size(data["Y_NM"])[2] == 1
+    home = info["I_NM"][row,1]
+    away = info["I_NM"][row,2]
+    dist = info["dist_NM"]
 
-#     A_T = state["A_T"]
-#     B_T = state["B_T"]
+    A_T = state["A_T"]
+    B_T = state["B_T"]
 
-#     mu = A_T[home] + B_T[away] + dist[row,1]*state["U_K"][state["Z_TT"][home,away]]
+    mu = A_T[home] + B_T[away] + dist[row,1]*state["U_K"][state["Z_TT"][home,away]]
+    if isnothing(state["p"])
+        if model.D == 1
+            return logpdf(model.dist(mu), Y)
+        else
+            try
+                return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
+            catch ex #this needs to be updated with the non symbolic version
+                return logpmfMaxPoisson(Y,mu,model.D)
+            end
+        end
+    else
+        p = state["p"]
+        if model.D == 1
+            return logpdf(model.dist(mu,1-p), Y)
+        else
+            return logpdf(OrderStatistic(model.dist(mu,1-p), model.D, model.j), Y)
+        end
+    end
 
-#     return logpmfMaxPoisson(Y,mu,model.D)
-# end
+    
+end
+
+function evalulateLogLikelihood(model::genes, state, data, info, row, col)
+    Y = data["Y_NM"][row,col]
+    mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
+    if isnothing(state["p_N"])
+        if model.D == 1
+            return logpdf(model.dist(mu), Y)
+        else
+            return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
+        end
+    else
+        p = state["p_N"][row]
+        if model.D == 1
+            return logpdf(model.dist(mu,1-p), Y)
+        else
+            return logpdf(OrderStatistic(model.dist(mu,1-p), model.D, model.j), Y)
+        end
+    end
+    return logpmfMaxPoisson(Y,mu,model.D)
+end
 
 function sample_likelihood(model::flights, mu,p=nothing)
     if isnothing(p)
