@@ -174,7 +174,7 @@ function backward_sample(model::flights, data, state, mask=nothing)
     #unfortunately, to impute the held out data points and
     #sample poissons from maximum, we must loop over N
     # @views @threads for n in 1:model.N
-    @views for n in 1:model.N   
+    @views @threads for n in 1:model.N   
         home = home_N[n]
         away = away_N[n]
         if !isnothing(mask) && mask[n,1] == 1
