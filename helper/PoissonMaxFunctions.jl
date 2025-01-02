@@ -87,9 +87,9 @@ function sampleIndex(Y,D,dist)
     if pdf(dist, Y) < 10e-5 && Y > mean(dist)
         return rand(DiscreteUniform(1,D))
     end
-    # if pdf(dist, Y) < 10e-5 && Y < mean(dist)
-        
-    # end
+    if pdf(dist, Y) < 10e-5 && Y < mean(dist)
+        return 1
+    end
     index = 1
     b  = []
     totalmasstried = 0
@@ -122,6 +122,8 @@ function sampleIndex(Y,D,dist)
             println(stopprobtemp)
             println(totalmasstried)
             println(stopprob)
+            println(pdf(dist, Y))
+            println(mean(dist))
             println("Y: ", Y, " dist: ", dist, " D: ", D)
             @assert 1 == 2
         end
