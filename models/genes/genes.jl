@@ -73,7 +73,7 @@ function sample_likelihood(model::genes, mu,p=nothing)
     else
         dist = model.dist(mu,1-p)
     end
-    if D == 1
+    if model.D == 1
         return rand(dist)
     else
         return rand(OrderStatistic(dist, model.D, model.j))

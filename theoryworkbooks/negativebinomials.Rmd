@@ -52,9 +52,9 @@ for(p in pvec){
 ```
 
 ```{r}
-prob <- .7
+prob <- .95
 #fano factor plot
-pvec <- seq(.01,2,by=.02)
+pvec <- seq(.01,4,by=.01)
 dvec <- c(1,2,3,4,5,10,20,50,101)
 
 B <- 1000
@@ -87,7 +87,21 @@ pvec_other <- c()
 for(p in pvec){
   pvec_other <- c(pvec_other, rep(p,length(dvec)))
 }
+muvec <- pvec
+muvec_other <- c()
+for(mu in muvec){
+  muvec_other <- c(muvec_other, rep(mu,length(dvec)))
+}
+df2$mu <- muvec_other
 ```
+
+```{r}
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df2, aes(x = df2$mu, y = value, color = D)) +
+  labs(y = "Fano Factor", x = expression(mu)) + theme_bw() + theme(strip.text = element_blank()) 
+```
+
 
 
 ```{r}
@@ -203,6 +217,81 @@ ggplot() +
 ```
 
 ```{r}
+mu <- .1
+#fano factor plot
+pvec <- seq(0.001,1,by=.001)
+#dvec <- c(1,2,3,4,5,10,20,50,101)
+dvec <- c(2,5,20,50)
 
+B <- 1000
+mean_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+variances_mat <- matrix(0,nrow = length(pvec),ncol=length(dvec))
+
+for(i in 1:length(pvec)){
+  p <- pvec[i]
+  for(j in 1:length(dvec)){
+    d <- dvec[j]
+    Z_B <- c()
+    for(k in 1:B){
+      m_D <- rnbinom(n = d, size = mu, prob = p)
+      Z <- max(m_D)
+      Z_B <- c(Z_B, Z)
+    }
+    mean_mat[i,j] <- mean(Z_B)
+    variances_mat[i,j] <- var(Z_B)
+  }
+}
+
+fano_mat <- variances_mat/mean_mat
+df2 <- data.frame(fano_mat)
+#colnames(df) <- as.character(dvec)
+colnames(df2) <- as.character(dvec)
+df2 <- df2 %>% pivot_longer(cols = colnames(df2), names_to = "D")
+df2$D <- factor(df2$D, levels =  as.character(dvec))#,"5", "10","20","50","100","1000"
+
+pvec_other <- c()
+for(p in pvec){
+  pvec_other <- c(pvec_other, rep(p,length(dvec)))
+}
+df2$p <- pvec_other
 ```
+
+```{r}
+library(tidyverse)
+ggplot() + 
+  geom_point(data = df2, aes(x = df2$p, y = value, color = D)) +
+  labs(y = "Fano Factor", x = expression(p)) + theme_bw() + theme(strip.text = element_blank()) + ylim(0,2)
+```
+
+```{r}
+rmaxgamma <- function(n,shape,rate,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- max(rgamma(D,shape,rate = rate))
+  }
+  return(result)
+}
+x <- rmaxgamma(1000000,mu,1,10)/p
+var(x)/mean(x)
+```
+
+```{r}
+rmaxnegbin <- function(n,r,p,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- max(rnbinom(D,r,p))
+  }
+  return(result)
+}
+mu <- .2
+p <- .99
+y <- rmaxnegbin(1000000,mu,p,10)
+var(y)/mean(y)
+```
+
+```{r}
+hist(rmaxnegbin(10000,1000,.99999,10))
+```
+
+
 

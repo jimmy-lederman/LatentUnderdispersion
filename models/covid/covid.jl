@@ -205,7 +205,7 @@ function backward_sample(model::covid, data, state, mask=nothing, skipupdate=not
             end
         end
 
-         Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, Poisson(Ylast + alpha*mu + pop*eps))
+        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, Poisson(Ylast + alpha*mu + pop*eps))
         
         probvec = vcat(alpha*probvec, Ylast, pop*eps)
 

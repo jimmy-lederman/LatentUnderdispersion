@@ -1,0 +1,22 @@
+---
+title: "NegBinDispersion"
+output: html_document
+date: "2024-12-30"
+---
+
+```{r}
+rmaxnegbin <- function(n,r,p,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- max(rnbinom(D,r,1-p))
+  }
+  return(result)
+}
+x <- rmaxnegbin(10000,.1,.04,2)
+var(x)/mean(x)
+```
+
+```{r}
+hist(rnbinom(10000, 5, .8))
+```
+
