@@ -14,7 +14,7 @@ K = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
 maskSeed = parse(Int, ARGS[3])
 chainSeed = parse(Int, ARGS[4])
-T = 99 #because running on sub
+T = 99 #because running on full
 #thread = Bool(parse(Int, ARGS[1]))
 
 df = CSV.read(datafile, DataFrame)
@@ -44,7 +44,8 @@ Random.seed!(maskSeed)
 mask_NM = rand(N, M) .< .2
 
 @time samples = fit(model, data, nsamples = 500, nburnin=5000, nthin=20, mask=mask_NM, info=info,initseed=chainSeed)
+samplesnew = [Dict("Z_TT"=> s["Z_TT"], "U_K"=>s["U_K"], "A_T"=>s["A_T"], "B_T"=>s["B_T"]) for s in samples]
 inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, info=info, verbose=false)
 results = [K,D,maskSeed,chainSeed,inforate]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
-save(folder*"heldoutsamples/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "results", results)
+save(folder*"heldoutsamples/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "results", results, "samples", samplesnew, "I_NM",  samples[1]["I_NM"], "dist_NM", samples[1]["dist_NM"], "routes_R4", samples[1]["routes_R4"])
