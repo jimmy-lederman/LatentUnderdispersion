@@ -1,5 +1,6 @@
 include("../../helper/MatrixMF.jl")
 include("../../helper/PoissonMedianFunctions.jl")
+include("../../helper/NegBinPMF.jl") 
 using Distributions
 using LinearAlgebra
 using Base.Threads
@@ -41,14 +42,23 @@ function evalulateLogLikelihood(model::genes, state, data, info, row, col)
         if model.D == 1
             return logpdf(model.dist(mu), Y)
         else
-            return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
+            #return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
+            if model.D == model.j
+                return logpmfMaxPoisson(Y, mu, model.D)
+            else
+                return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
+            end
         end
     else
         p = state["p_N"][row]
         if model.D == 1
             return logpdf(model.dist(mu,1-p), Y)
         else
-            return logpdf(OrderStatistic(model.dist(mu,1-p), model.D, model.j), Y)
+            if model.D == model.j
+                return logpmfMaxNegBin(Y, mu, p, model.D)
+            else
+                return logpdf(OrderStatistic(model.dist(mu,1-p), model.D, model.j), Y)
+            end
         end
     end
     return logpmfMaxPoisson(Y,mu,model.D)

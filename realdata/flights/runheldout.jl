@@ -8,7 +8,7 @@ using JLD2
 using Base.Filesystem
 
 #datafile = "/net/projects/schein-lab/jimmy/PoissonMax/flights/airtimesub.csv"
-datafile = "/home/jlederman/DiscreteOrderStatistics/data/airtime.csv"
+#datafile = "/home/jlederman/DiscreteOrderStatistics/data/airtime.csv"
 
 K = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
@@ -17,6 +17,7 @@ chainSeed = parse(Int, ARGS[4])
 T = 99 #because running on full
 #thread = Bool(parse(Int, ARGS[1]))
 
+datafile = "/home/jlederman/DiscreteOrderStatistics/data/airtime.csv"
 df = CSV.read(datafile, DataFrame)
 df = select(df, Not(1))
 Y_NM = convert(Matrix{Int}, Matrix(select(df, 1)))
