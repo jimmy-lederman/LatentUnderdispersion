@@ -74,4 +74,4 @@ inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false)
 results = [K,D,maskSeed,chainSeed,j,type,nburnin,inforate]
 println(inforate)
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes/heldoutsamples_lil/"
-save(folder*"/sample_seed1_$(seed1)seed2_$(seed2)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin)pstart$(pstart).jld", "results", results, "samples", samples)
+save(folder*"/sample_seed1_$(maskSeed)seed2_$(chainSeed)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin)pstart$(pstart).jld", "results", results, "samples", samples)
