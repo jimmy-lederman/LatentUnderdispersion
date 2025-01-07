@@ -6,3 +6,5 @@ experiments/
 debug/
 oldresults/
 oldpythonstuff/
+data/cancer.csv
+data/RNASeq-dataset.zip

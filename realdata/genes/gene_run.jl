@@ -28,7 +28,7 @@ j = parse(Int, ARGS[4])
 K = parse(Int, ARGS[5])
 type = parse(Int, ARGS[6])
 nburnin = parse(Int, ARGS[7])
-pstart = parse(Int, ARGS[8])
+pstart = parse(Float64, ARGS[8])
 
 Random.seed!(maskSeed)
 mask_NM = rand(N, M) .< .2
