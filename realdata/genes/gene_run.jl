@@ -56,7 +56,7 @@ beta = 1
 if type == 1
     #constantinit = nothing
     dist = x -> Poisson(x)
-    @assert
+    @assert 1 == 2
 else
     if isnothing(constantinit)
         constantinit = Dict("p_N"=>fill(pstart,N))
