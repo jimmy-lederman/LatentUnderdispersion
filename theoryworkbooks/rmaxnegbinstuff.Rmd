@@ -20,3 +20,27 @@ var(x)/mean(x)
 hist(rnbinom(10000, 5, .8))
 ```
 
+```{r}
+rmaxpois <- function(n,mu,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- max(rpois(D,mu))
+  }
+  return(result)
+}
+rmaxpois_sum <- function(n,mu,D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    result[i] <- max(rpois(D,mu)) + max(rpois(D,mu))
+  }
+  return(result)
+}
+```
+
+```{r}
+x <- rmaxpois(1000,10,2)
+var(x)/mean(x)
+
+```
+
+

@@ -63,20 +63,38 @@ struct genes <: MatrixMF
     dist::Function
 end
 
+# function sampleCRT(Y,R)
+#     if Y == 0
+#         return 0
+#     elseif Y == 1
+#         probs = [1]
+#     else
+#         probs = vcat([1],[R/(R+i-1) for i in 2:Y])
+#     end
+#     return sum(rand.(Bernoulli.(probs)))
+# end
+
 function sampleCRT(Y,R)
-    # if Y > 10000
-    #     println(Y)
-    # end
     if Y == 0
         return 0
     elseif Y == 1
         probs = [1]
     else
-        probs = vcat([1],[R/(R+i-1) for i in 2:Y])
+        probs = [R/(R+i-1) for i in 2:Y]
     end
-    return sum(rand.(Bernoulli.(probs)))
+    return 1 + sum(rand.(Bernoulli.(probs)))
 end
 
+function sampleCRTlecam(Y,R,tol=.4)
+    Y_max = R * (1/tol - 1)
+    if Y <= Y_max || Y <= 100
+        return sampleCRT(Y, R)
+    else
+        out = sampleCRT(Y_max, R)
+        mu = R * (polygamma(0, R + Y) - polygamma(0, R + Y_max))
+        return out + rand(Poisson(mu))
+    end
+end
 
 function evalulateLogLikelihood(model::genes, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
@@ -198,7 +216,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
             Z1_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, lik(mu))
             if !isnothing(p_N)
                 Z2_NM[n,m] = copy(Z1_NM[n,m])
-                Z1_NM[n,m] = sampleCRT(Z1_NM[n,m], model.D*mu)
+                Z1_NM[n,m] = sampleCRTlecam(Z1_NM[n,m], model.D*mu)
             end
             P_K = U_NK[n, :] .* V_KM[:, m]
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
