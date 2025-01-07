@@ -1,9 +1,52 @@
 include("../../helper/MatrixMF.jl")
 include("../../helper/PoissonMedianFunctions.jl")
-include("../../helper/NegBinPMF.jl") 
+#include("../../helper/NegBinPMF.jl") 
 using Distributions
 using LinearAlgebra
 using Base.Threads
+
+using SpecialFunctions
+using LogExpFunctions
+using HypergeometricFunctions
+
+function log_incomplete_beta3(a, b, x; precision=64)
+    
+    setprecision(BigFloat,precision)
+    a = BigFloat(a)
+    b = BigFloat(b)
+    x = BigFloat(x)
+    #@assert 1 == 2
+    hyp = pFq((a, 1-b,), (a+1,), x)
+    
+    if hyp < 0
+        return log_incomplete_beta3(a,b,x;precision=2*precision)
+    else
+        return a*log(x) + log(hyp) - log(a) - log(SpecialFunctions.beta(a,b))
+    end
+end
+
+function logprobmaxnb(Y,r,p,D;precision=1000)
+    first =D*log_incomplete_beta3(r,Y+1,1-p,precision=precision)
+    second =D*log_incomplete_beta3(r,Y,1-p,precision=precision)
+    result = logsubexp(first, second)
+    if isinf(result) || isnan(result) || first >= 0 || second >= 0
+        return logprobmaxnb(Y,r,p,D;precision=precision*5)
+    else
+        return Float64(result)
+    end
+    #return 0
+end
+
+function logpmfMaxNegBin(Y,r,p,D)
+    llik = logpdf(OrderStatistic(NegativeBinomial(r,1-p), D, D), Y)
+    if isinf(llik) || isnan(llik)
+        llik = logprobmaxnb(Y,r,p,D)
+                # println(Y, " ", r, " ", p)
+                # flush(stdout)
+                #llik = 0
+    end
+    return llik
+end
 
 struct genes <: MatrixMF
     N::Int64
@@ -142,11 +185,16 @@ function backward_sample(model::genes, data, state, mask=nothing)
         end
         if !isnothing(mask)
             if mask[n,m] == 1
+                # P_K = U_NK[n,:] .* V_KM[:,m]
+                # mu = sum(P_K)
                 Y_NM[n,m] = sample_likelihood(model, mu, p)
             end
         end
         if Y_NM[n, m] > 0 || model.j != model.D
-
+            # if mask[n,m] != 1
+            #     P_K = U_NK[n,:] .* V_KM[:,m]
+            #     mu = sum(P_K)
+            # end
             Z1_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, lik(mu))
             if !isnothing(p_N)
                 Z2_NM[n,m] = copy(Z1_NM[n,m])

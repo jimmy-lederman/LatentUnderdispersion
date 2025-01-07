@@ -7,18 +7,19 @@ using NMF
 println(Threads.nthreads())
 include("/home/jlederman/DiscreteOrderStatistics/models/genes/genes.jl")
 
-file_path = "/home/jlederman/DiscreteOrderStatistics/data/hammer.csv"
+file_path = "/home/jlederman/DiscreteOrderStatistics/data/cancer.csv"
 df = CSV.read(file_path, DataFrame)
 df = select(df, Not(1))
-Y_NM = Matrix(df);
+Y_NM = transpose(Matrix(df));
 N = size(Y_NM, 1)
 M = size(Y_NM, 2)
-#full experiment
-# nlil = 2000
-# random_indices = randperm(N)[1:nlil]  # Generate random indices
-# Y_NM = Y_NM[random_indices,:]
-data = Dict("Y_NM"=>Y_NM)
-# N = nlil;
+
+seed = 102
+Random.seed!(seed)
+nlil = 100
+random_indices = randperm(N)[1:nlil]  # Generate random indices
+Y_NMsmall = Y_NM[random_indices,:]
+data = Dict("Y_NM"=>Y_NMsmall)
 
 maskSeed = parse(Int, ARGS[1])
 chainSeed = parse(Int, ARGS[2])
@@ -27,6 +28,7 @@ j = parse(Int, ARGS[4])
 K = parse(Int, ARGS[5])
 type = parse(Int, ARGS[6])
 nburnin = parse(Int, ARGS[7])
+pstart = parse(Int, ARGS[8])
 
 Random.seed!(maskSeed)
 mask_NM = rand(N, M) .< .2
@@ -57,9 +59,9 @@ if type == 1
     @assert
 else
     if isnothing(constantinit)
-        constantinit = Dict("p_N"=>fill(.5,N))
+        constantinit = Dict("p_N"=>fill(pstart,N))
     else
-        constantinit["p_N"] = fill(.5,N)
+        constantinit["p_N"] = fill(pstart,N)
     end
     dist = (x,y) -> NegativeBinomial(x,y)
 end
@@ -70,5 +72,5 @@ model = genes(N,M,K,a,b,c,d,alpha,beta,D,j,dist)
 inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false)
 results = [K,D,maskSeed,chainSeed,j,type,nburnin,inforate]
 println(inforate)
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes/heldoutsamples/"
-save(folder*"/sample_seed1_$(seed1)seed2_$(seed2)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin).jld", "results", results, "samples", samples)
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes/heldoutsamples_lil/"
+save(folder*"/sample_seed1_$(seed1)seed2_$(seed2)D$(D)j$(j)K$(K)Type$(type)Burnin$(nburnin)pstart$(pstart).jld", "results", results, "samples", samples)

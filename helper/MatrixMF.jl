@@ -156,9 +156,11 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     I = 0 #total number of masked points
     llik0count = 0
     inforatetotal = 0
+    #badmat = zeros(39,3)
     if verbose
         prog = Progress(S, desc="calculating inforate")
     end
+    # println(S)
     for row in 1:model.N
         for col in 1:model.M
             if !isnothing(cols) && !(col in cols)
@@ -174,6 +176,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                     llikvector[s] = llik
                     # if llik == 0
                     #     llik0count += 1
+                    #     badmat[llik0count,:] = [data["Y_NM"][row,col],dot(sample["U_NK"][row,:], sample["V_KM"][:,col]),sample["p_N"][row]]
                     # end
                 end
                 inforatetotal += logsumexpvec(llikvector) - log(S)
@@ -182,14 +185,18 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
             end
         end
     end
-    #println("0 count: ", llik0count)
+    # println(total)
+    # flush(stdout)
+    # @assert 1 == 2
+    println("0 count: ", llik0count)
     if verbose finish!(prog) end
-    return inforatetotal/I
+    return inforatetotal/I#, badmat
 end
 
 function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true)
     S = size(samples)[1]
     heldoutprobs = []
+    total = 0
     @assert !isnothing(mask)
     if verbose
         prog = Progress(S, desc="calculating logprobs")
@@ -202,6 +209,9 @@ function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, ma
                     sample = samples[s]
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                     #if isinf(llik) println(row, " ", col, " ", s) end
+                    if llik == 0
+                        total += 1
+                    end
                     llikvector[s] = llik
                 end
                 push!(heldoutprobs, [logsumexpvec(llikvector) - log(S),row,col])
@@ -209,6 +219,7 @@ function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, ma
             end
         end
     end
+
     if verbose finish!(prog) end
     return heldoutprobs
 end
