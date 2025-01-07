@@ -19,6 +19,7 @@ Random.seed!(seed)
 nlil = 100
 random_indices = randperm(N)[1:nlil]  # Generate random indices
 Y_NMsmall = Y_NM[random_indices,:]
+N = nlil
 data = Dict("Y_NM"=>Y_NMsmall)
 
 maskSeed = parse(Int, ARGS[1])
