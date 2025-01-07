@@ -204,7 +204,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
         end
     end
-    
+
     if !isnothing(p_N)
         post_alpha = model.alpha .+ sum(Z2_NM, dims=2)
         post_beta = model.beta .+ model.D .* sum(Mu_NM, dims=2)

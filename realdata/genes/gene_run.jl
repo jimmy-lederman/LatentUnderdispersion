@@ -19,7 +19,7 @@ Random.seed!(seed)
 nlil = 100
 random_indices = randperm(N)[1:nlil]  # Generate random indices
 Y_NMsmall = Y_NM[random_indices,:]
-N = nlil
+N = lil
 data = Dict("Y_NM"=>Y_NMsmall)
 
 maskSeed = parse(Int, ARGS[1])
@@ -37,7 +37,7 @@ mask_NM = rand(N, M) .< .2
 initasNMF = true
 if initasNMF
     Random.seed!(chainSeed)
-    r = nnmf(Float64.(Y_NM), K)
+    r = nnmf(Float64.(Y_NMsmall), K)
     eps = 0.01
     W = r.W  # Assuming W is a matrix
     W .= ifelse.(W .<= eps, eps, W)
