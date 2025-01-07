@@ -61,7 +61,7 @@ else
     if isnothing(constantinit)
         constantinit = Dict("p_N"=>fill(pstart,N))
     else
-        constantinit["p_N"] = fill(pstart,N)
+        constantinit= Dict("U_NK"=>W,"V_KM"=>H, "p_N"=>fill(pstart,N))
     end
     dist = (x,y) -> NegativeBinomial(x,y)
 end
