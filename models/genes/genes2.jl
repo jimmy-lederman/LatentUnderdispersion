@@ -48,7 +48,7 @@ function logpmfMaxNegBin(Y,r,p,D)
     return llik
 end
 
-struct genes <: MatrixMF
+struct genes2 <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
@@ -63,40 +63,19 @@ struct genes <: MatrixMF
     dist::Function
 end
 
-# function sampleCRT(Y,R)
-#     if Y == 0
-#         return 0
-#     elseif Y == 1
-#         probs = [1]
-#     else
-#         probs = vcat([1],[R/(R+i-1) for i in 2:Y])
-#     end
-#     return sum(rand.(Bernoulli.(probs)))
-# end
-
 function sampleCRT(Y,R)
     if Y == 0
         return 0
     elseif Y == 1
-        return 1
+        probs = [1]
     else
         probs = [R/(R+i-1) for i in 2:Y]
     end
     return 1 + sum(rand.(Bernoulli.(probs)))
 end
 
-function sampleCRTlecam(Y,R,tol=.4)
-    Y_max = R * (1/tol - 1)
-    if Y <= Y_max || Y <= 100
-        return sampleCRT(Y, R)
-    else
-        out = sampleCRT(Y_max, R)
-        mu = R * (polygamma(0, R + Y) - polygamma(0, R + Y_max))
-        return out + rand(Poisson(mu))
-    end
-end
 
-function evalulateLogLikelihood(model::genes, state, data, info, row, col)
+function evalulateLogLikelihood(model::genes2, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
     if isnothing(state["p_N"])
@@ -125,7 +104,7 @@ function evalulateLogLikelihood(model::genes, state, data, info, row, col)
     return logpmfMaxPoisson(Y,mu,model.D)
 end
 
-function sample_prior(model::genes,info=nothing)
+function sample_prior(model::genes2,info=nothing)
     p_N = nothing
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
@@ -138,7 +117,7 @@ function sample_prior(model::genes,info=nothing)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p_N" => p_N)
 end
 
-function sample_likelihood(model::genes, mu,p=nothing)
+function sample_likelihood(model::genes2, mu,p=nothing)
     if isnothing(p)
         dist = model.dist(mu)
     else
@@ -151,7 +130,7 @@ function sample_likelihood(model::genes, mu,p=nothing)
     end
 end
 
-function forward_sample(model::genes; state=nothing, info=nothing)
+function forward_sample(model::genes2; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model)
     end
@@ -175,7 +154,7 @@ function forward_sample(model::genes; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::genes, data, state, mask=nothing)
+function backward_sample(model::genes2, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -188,12 +167,12 @@ function backward_sample(model::genes, data, state, mask=nothing)
     Z2_NM = zeros(Int, model.N, model.M)
     Z_NMK = zeros(Int, model.N, model.M, model.K)
     #Z_NMK = copy(state["Z_NMK"])
-    Mu_NM = U_NK * V_KM
+    #Mu_NM = U_NK * V_KM
     #Loop over the non-zeros in Y_DV and allocate
-    @views for idx in 1:(model.N * model.M)
+    @views @threads for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1  
-        mu = Mu_NM[n,m]
+        #mu = Mu_NM[n,m]
         if isnothing(p_N)
             p = nothing
             lik = model.dist
@@ -203,16 +182,16 @@ function backward_sample(model::genes, data, state, mask=nothing)
         end
         if !isnothing(mask)
             if mask[n,m] == 1
-                # P_K = U_NK[n,:] .* V_KM[:,m]
-                # mu = sum(P_K)
+                P_K = U_NK[n,:] .* V_KM[:,m]
+                mu = sum(P_K)
                 Y_NM[n,m] = sample_likelihood(model, mu, p)
             end
         end
         if Y_NM[n, m] > 0 || model.j != model.D
-            # if mask[n,m] != 1
-            #     P_K = U_NK[n,:] .* V_KM[:,m]
-            #     mu = sum(P_K)
-            # end
+            if mask[n,m] != 1
+                P_K = U_NK[n,:] .* V_KM[:,m]
+                mu = sum(P_K)
+            end
             Z1_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.j, lik(mu))
             if !isnothing(p_N)
                 Z2_NM[n,m] = copy(Z1_NM[n,m])
@@ -222,17 +201,26 @@ function backward_sample(model::genes, data, state, mask=nothing)
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
         end
     end
+    
+    # if !isnothing(p_N)
+    #     post_alpha = model.alpha .+ sum(Z2_NM, dims=2)
+    #     post_beta = model.beta .+ model.D .* sum(Mu_NM, dims=2)
+    #     p_N = rand.(Beta.(post_alpha,post_beta))
+    #     rate_factor_N = model.D*log.(1 ./(1 .- p_N))
+    # else
+    #     p2 = nothing
+    #     rate_factor_N = fill(model.D, model.N)
+    # end
 
     if !isnothing(p_N)
-        post_alpha = model.alpha .+ sum(Z2_NM, dims=2)
-        post_beta = model.beta .+ model.D .* sum(Mu_NM, dims=2)
-        p_N = rand.(Beta.(post_alpha,post_beta))
+    #     post_alpha = model.alpha .+ sum(Z2_NM, dims=2)
+    #     post_beta = model.beta .+ model.D .* sum(Mu_NM, dims=2)
+    #     p_N = rand.(Beta.(post_alpha,post_beta))
         rate_factor_N = model.D*log.(1 ./(1 .- p_N))
     else
-        p2 = nothing
+    #     p2 = nothing
         rate_factor_N = fill(model.D, model.N)
     end
-
 
 
     @views for n in 1:model.N
@@ -254,14 +242,3 @@ function backward_sample(model::genes, data, state, mask=nothing)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p_N"=>p_N)
     return data, state
 end
-
-# N = 100
-# M = 100
-# K = 2
-# a = b = c = d = 1
-# D = 10
-# model = maxPoissonMF(N,M,K,a,b,c,d,D)
-# data, state = forward_sample(model)
-# posteriorsamples = fit(model, data, nsamples=100,nburnin=100,nthin=1)
-# print(evaluateInfoRate(model, data, posteriorsamples))
-#fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)

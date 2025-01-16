@@ -18,9 +18,9 @@ abstract type MatrixMF end
 
 function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing)
     #some checks
-    Y_NM = data["Y_NM"]
-    @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
-    @assert all(x -> x >= 0, Y_NM[:]) "Not all values in data are greater than or equal to 0"
+    # Y_NM = data["Y_NM"]
+    # @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
+    #@assert all(x -> x >= 0, Y_NM[:]) "Not all values in data are greater than or equal to 0"
     #housekeeping
     samplelist = []
     if initialize
@@ -35,7 +35,6 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if !isnothing(constantinit)
             for (var, value) in constantinit
                 state[var] = value
-                # println(state[var])
             end
             
         end
@@ -150,7 +149,43 @@ function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nth
     return f_samples, b_samples
 end
 
-function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing)
+function sequential_test(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nthin=5, iterations=10, alpha=0.05, delta = 10, funcs = [Statistics.var, geometric_mean], info=nothing,test="schein")
+    beta = alpha/iterations
+    nu = beta^(1/iterations)
+    
+    for i in 1:iterations
+        println(nu + beta)
+        if test == "schein"
+            fsamples, bsamples = scheinTest(model,varlist,nsamples=nsamples,nthin=nthin,info=info)
+        elseif test == "geweke"
+            fsamples, bsamples = gewekeTest(model,varlist,nsamples=nsamples,nthin=nthin,info=info)
+        else
+            throw("no test called that dummy")
+        end
+        pvals = Float64[]
+        for key in keys(fsamples)
+            if fsamples[key][1] isa Number
+                push!(pvals, gewekepvalue(fsamples[key], bsamples[key]))
+            else
+                for func in funcs
+                    push!(pvals, gewekepvalue([func(s) for s in fsamples[key]], [func(s) for s in bsamples[key]]))
+                end
+            end
+        end
+        q = minimum(pvals)*length(pvals)
+        if q <= beta
+            return "fail", fsamples, bsamples
+        elseif q > nu + beta 
+            return "OK", fsamples, bsamples
+        else 
+            beta = beta/nu
+            nsamples = nsamples*delta
+        end
+    end
+    return "ended", fsamples, bsamples
+end
+
+function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing,sparse=false)
     
     S = size(samples)[1]
     I = 0 #total number of masked points
@@ -161,12 +196,40 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
         prog = Progress(S, desc="calculating inforate")
     end
     # println(S)
-    for row in 1:model.N
-        for col in 1:model.M
+    if !sparse
+        for row in 1:model.N
+            for col in 1:model.M
+                if !isnothing(cols) && !(col in cols)
+                    continue
+                end
+                if !isnothing(mask) && mask[row,col]
+                    llikvector = Vector{Float64}(undef, S)
+                    haveusedbackup = false
+                    for s in 1:S
+                        sample = samples[s]
+                        # @assert 1 == 2
+                        llik = evalulateLogLikelihood(model, sample, data, info, row, col)
+                        llikvector[s] = llik
+                        # if llik == 0
+                        #     llik0count += 1
+                        #     badmat[llik0count,:] = [data["Y_NM"][row,col],dot(sample["U_NK"][row,:], sample["V_KM"][:,col]),sample["p_N"][row]]
+                        # end
+                    end
+                    inforatetotal += logsumexpvec(llikvector) - log(S)
+                    I += 1
+                    if verbose next!(prog) end
+                end
+            end
+        end
+    else #sparse
+        @views for ind in axes(Ysparse, 1)
+            count = Ysparse[ind, :]
+            col = count[1]
+            row = count[2]  
             if !isnothing(cols) && !(col in cols)
                 continue
             end
-            if !isnothing(mask) && mask[row,col]
+            if !isnothing(mask) && mask[ind]
                 llikvector = Vector{Float64}(undef, S)
                 haveusedbackup = false
                 for s in 1:S

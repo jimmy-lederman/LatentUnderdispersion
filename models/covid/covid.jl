@@ -184,9 +184,9 @@ function backward_sample(model::covid, data, state, mask=nothing, skipupdate=not
     alphacontribution_NM = zeros(model.N, model.M)
     Y_NMKplus1 = zeros(model.N, model.M, model.K + 2)
     # Loop over the non-zeros in Y_NM and allocate
-    @views for idx in 1:(N * (M))
-        m = M - div(idx - 1, N)
-        n = mod(idx - 1, N) + 1 
+    @views for idx in 1:(model.N * model.M)
+        m = model.M - div(idx - 1, model.N)
+        n = mod(idx - 1, model.N) + 1 
         if m == 1
             continue
         end
