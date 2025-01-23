@@ -3,7 +3,6 @@ include("../../helper/PoissonMedianFunctions.jl")
 using Distributions
 using LogExpFunctions
 using LinearAlgebra
-# using Base.Threads
 using SpecialFunctions
 using Base.Threads
 
