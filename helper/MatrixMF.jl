@@ -256,7 +256,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     return inforatetotal/I#, badmat
 end
 
-function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true)
+function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true,sparse=true)
     S = size(samples)[1]
     heldoutprobs = []
     total = 0
@@ -264,18 +264,42 @@ function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, ma
     if verbose
         prog = Progress(S, desc="calculating logprobs")
     end
-    for row in 1:model.N
-        for col in 1:model.M
-            if !isnothing(mask) && mask[row,col]
+    if !sparse
+        for row in 1:model.N
+            for col in 1:model.M
+                if !isnothing(mask) && mask[row,col]
+                    llikvector = Vector{Float64}(undef, S)
+                    for s in 1:S
+                        sample = samples[s]
+                        llik = evalulateLogLikelihood(model, sample, data, info, row, col)
+                        #if isinf(llik) println(row, " ", col, " ", s) end
+                        if llik == 0
+                            total += 1
+                        end
+                        llikvector[s] = llik
+                    end
+                    push!(heldoutprobs, [logsumexpvec(llikvector) - log(S),row,col])
+                    if verbose next!(prog) end
+                end
+            end
+        end
+    else #sparse
+        @views for ind in axes(Ysparse, 1)
+            count = Ysparse[ind, :]
+            col = count[1]
+            row = count[2]  
+            if !isnothing(mask) && mask[ind]
                 llikvector = Vector{Float64}(undef, S)
+                haveusedbackup = false
                 for s in 1:S
                     sample = samples[s]
+                    # @assert 1 == 2
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
-                    #if isinf(llik) println(row, " ", col, " ", s) end
-                    if llik == 0
-                        total += 1
-                    end
                     llikvector[s] = llik
+                    # if llik == 0
+                    #     llik0count += 1
+                    #     badmat[llik0count,:] = [data["Y_NM"][row,col],dot(sample["U_NK"][row,:], sample["V_KM"][:,col]),sample["p_N"][row]]
+                    # end
                 end
                 push!(heldoutprobs, [logsumexpvec(llikvector) - log(S),row,col])
                 if verbose next!(prog) end

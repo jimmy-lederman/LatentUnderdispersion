@@ -1,3 +1,4 @@
+include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
 using Dates
 using CSV
 using DataFrames
@@ -17,7 +18,7 @@ data = Dict("Y_NM"=>cumdf)
 N = size(cumdf)[1]
 M = size(cumdf)[2]
 Y_N1 = Int.(reshape(cumdf[:,1], :, 1))
-info = Dict("Y_N1"=>Y_N1,"pop_N"=>pops,"days_M"=>Vector(days), "state_N"=>state)
+info = Dict("Y_N1"=>Y_N1,"pop_N"=>pops)
 
 seed = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
@@ -46,35 +47,34 @@ mask_NM = make_forecasting_mask(middlestart,middlelength,endlength,county_pct,se
 
 
 # cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
-T = 7
-S = 49
-a = .1
+# a = .1
+# b = 1
+# c = 100
+# d = .01
+# starta = .01
+# startb = 1
+# e = 1000
+# f = 1000
+# g = .1
+# h = 1
+# scale_shape = .5
+# scale_rate = 1
+a = 1
 b = 1
 c = 100
-d = .01
+d = .1
 starta = .01
 startb = 1
-e = 1000
-f = 1000
-g = .1
+g = .5
 h = 1
-scale_shape = .5
+scale_shape = 2
 scale_rate = 1
-# D = 3
-# j = 2
+model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
 
-if D == 1 && j == 1
-    include("/home/jlederman/DiscreteOrderStatistics/models/PoissonTimeDayMF3.jl")
-    model = PoissonTimeDayMF(N,M,T,S,K,a,b,c,d,starta,startb,e,f,g,h,scale_shape,scale_rate)
-else
-    include("/home/jlederman/DiscreteOrderStatistics/models/OrderStatisticPoissonTimeDayMF3.jl")
-    model = OrderStatisticPoissonTimeDayMF(N,M,T,S,K,a,b,c,d,starta,startb,e,f,g,h,scale_shape,scale_rate,D,j)
-end
-
-@time samples = fit(model, data, initseed=seed, nsamples = 500, nburnin=4000, nthin=20, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M), "R_KTS"=>fill(1.0, K,T,S)),skipupdate=["R_KTS"])
+@time samples = fit(model, data, initseed=seed, nsamples = 500, nburnin=4000, nthin=20, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
 results = [K,D,j,seed]
 
-samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"], "R_KTS"=>sample["R_KTS"]) for sample in samples]
+samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medianD3/usa/forecast_samples/"
-save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples)
+save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples, "mask", mask_NM)

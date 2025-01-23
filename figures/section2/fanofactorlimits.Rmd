@@ -45,12 +45,13 @@ save(df,file="/Users/jimmylederman/Desktop/PoissonMax/theoryworkbooks/fano1.Rda"
 
 ```{r}
 #load data
-load(file="/Users/jimmylederman/Desktop/PoissonMax/theoryworkbooks/fano1.Rda")
-load(file="/Users/jimmylederman/Desktop/PoissonMax/theoryworkbooks/fano2.Rda")
+load(file="/Users/jimmy/Desktop/OrderStats/figures/section2/fano1.Rda")
+load(file="/Users/jimmy/Desktop/OrderStats/figures/section2/fano2.Rda")
 #combine df
 
 muvec <- seq(1,100,by=1)
 muvec_other <- c()
+dvec <- c(1,2,3,4,5,10,20,50,100)
 for(mu in muvec){
   muvec_other <- c(muvec_other, rep(mu,length(dvec)))
 }
