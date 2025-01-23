@@ -27,93 +27,18 @@ function safeTrunc(dist,lower,upper;n=1)
             return fill(lower,n)
         end
     end
-
-
-    #     println("using safetrunc:", dist, " ", lower, " ", upper)
-    #     if dist isa Poisson
-    #         if lower == 0
-    #             try 
-    #                 Fmax = poisson_cdf_precise(upper,mean(dist))
-    #                 result = quantile(dist, rand(Uniform(0,Fmax), n))
-    #                 if isinf(result)
-    #                     return fill(upper,n)
-    #                 else
-    #                     return result
-    #                 end
-    #             catch e 
-    #                 return fill(upper,n) 
-    #             end
-    #         elseif isinf(upper)
-    #             #try
-    #                 @time Fmin = poisson_cdf_precise(lower,mean(dist))
-    #                 println(Fmin)
-    #                 result = quantile(dist, rand(Uniform(Fmin,1), n))
-    #                 println(result)
-    #                 if isinf(result)
-    #                     return fill(lower,n)
-    #                 else
-    #                     return result
-    #                 end 
-    #             #catch e
-    #                 println(lower)
-    #                 return fill(lower,n)
-    #             #end
-    #         end
-    #     else
-    #         if lower == 0
-    #             try 
-    #                 Fmax = cdf(dist,upper)
-    #                 result = quantile(dist, rand(Uniform(0,Fmax), n))
-    #                 if isinf(result) || Fmax == 0
-    #                     return fill(upper,n) 
-    #                 elseif Fmax == 1
-    #                     return rand(dist,n)
-    #                 else 
-    #                     return result
-    #                 end
-    #             catch e 
-    #                 return fill(upper,n) 
-    #             end
-    #         elseif isinf(upper)
-    #             try
-    #                 Fmin = cdf(dist,lower)
-    #                 result = quantile(dist, rand(Uniform(Fmin,1), n))
-    #                 if isinf(result) || Fmin == 1
-    #                     return fill(lower,n)
-    #                 elseif Fmax == 0
-    #                     return rand(dist,n)
-    #                 else
-    #                     return result
-    #                 end 
-    #             catch e 
-    #                 return fill(lower,n)
-    #             end
-    #         end
-    #     end
-    # end
 end   
 
-function categorical1(y,dist)
-    if (y > mean(dist) && pdf(dist,y) < 1e-10) || (y < mean(dist) && pdf(dist,y) < 1e-50)
+function logcategorical1(y,dist)
+    if pdf(dist,y) < 1e-150
         probs = numericalProbs(y,2,3,dist,0,0,0)
-        # println("using numprobs1")
     else
-        #denom = pdf(OrderStatistic(dist, 3, 2), y)
-        prob1 = cdf(dist, y-1)*pdf(OrderStatistic(dist, 2, 1), y)
-        prob2 = (2*cdf(dist,y-1)*ccdf(dist,y)+pdf(dist,y)*(2-pdf(dist,y)))*pdf(dist,y)
-        prob3 = ccdf(dist, y)*pdf(OrderStatistic(dist, 2, 2), y)
-        
+        prob1 = logcdf(dist, y-1) + logpdf(OrderStatistic(dist, 2, 1), y)
+        prob2 = logsumexp(log(2) + logcdf(dist,y-1) + logccdf(dist,y), logpdf(dist,y) + logsubexp(log(2),logpdf(dist,y))) + logpdf(dist,y)
+        prob3 = logccdf(dist, y) + logpdf(OrderStatistic(dist, 2, 2), y)
         probs = [prob1,prob2,prob3]
     end
-    probs = probs/sum(probs)
-    for i in 1:3
-        if probs[i] < 1e-10
-            probs[i] = 0
-        end
-    end
-    #println(probs/sum(probs))
-    return rand(Categorical(probs/sum(probs)))
-    #return probs/sum(probs)
+    return argmax(probs .+ rand(Gumbel(0,1),3))
 end
 
 function categorical2(y,dist)
@@ -138,6 +63,7 @@ end
 
 #I should break down probability of each event
 #to try to see a pattern
+
 function sampleSumGivenMedian3(Y,dist)
     #draw c
     #do a numeric test

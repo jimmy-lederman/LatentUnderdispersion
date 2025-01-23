@@ -1,5 +1,5 @@
 include("../../helper/MatrixMF.jl")
-include("../../helper/PoissonMedianFunctions.jl")
+include("../../helper/OrderStatsSampling.jl")
 using Distributions
 using LogExpFunctions
 using LinearAlgebra
@@ -63,7 +63,7 @@ end
 function sample_prior(model::covidsimple,info=nothing,constantinit=nothing)
     pass = false
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
-
+    # V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     if !isnothing(constantinit)
         pass = ("V_KM" in keys(constantinit))
     end
@@ -98,7 +98,7 @@ function forward_sample(model::covidsimple; state=nothing, info=nothing)
     alpha = state["alpha"]
     U_NK = state["U_NK"]
     V_KM = state["V_KM"]
-    Y_NMKplus2 = zeros(Int, model.N, model.M, model.K + 2)
+    #Y_NMKplus2 = zeros(Int, model.N, model.M, model.K + 2)
     Y_NM = zeros(Int, model.N, model.M)
     
     # for m in 1:model.M
@@ -134,6 +134,7 @@ function forward_sample(model::covidsimple; state=nothing, info=nothing)
     state = Dict("U_NK" =>  state["U_NK"], "V_KM" => state["V_KM"], #"R_KTS" => state["R_KTS"],"
      "eps" => eps, "alpha" => alpha,
      "pop_N"=>info["pop_N"], "Y0_N"=>info["Y0_N"])
+     #Y_NMKplus2"=>Y_NMKplus2)
     return data, state 
 end
 
@@ -149,8 +150,6 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
     Y0_N = copy(state["Y0_N"])
     pop_N = copy(state["pop_N"])
 
-    #mylock = ReentrantLock()
-
     alphacontribution_NM = zeros(model.N, model.M)
     Y_NMKplus2 = zeros(model.N, model.M, model.K + 2)
     # Loop over the non-zeros in Y_NM and allocate
@@ -163,9 +162,8 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
             Ylast = Y_NM[n,m-1]
         end
         pop = pop_N[n]
-        probvec  =  pop*U_NK[n,:] .* V_KM[:,m]
+        probvec = pop*U_NK[n,:] .* V_KM[:,m]
         mu = sum(probvec) 
-        alphacontribution_NM[n,m] = mu
 
         if !isnothing(mask)
             if mask[n,m] == 1   
@@ -185,7 +183,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
 
     #update alpha (scale)
     post_shape = model.scaleshape + sum(Y_NMKplus2[:,:,1:model.K])
-    post_rate = model.scalerate + model.D*sum(alphacontribution_NM)
+    post_rate = model.scalerate + model.D*sum((pop_N .* U_NK) * V_KM)
     alpha = rand(Gamma(post_shape, 1/post_rate))
 
     #update time factors
@@ -219,6 +217,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
         @views for k in 1:model.K
             if m == 1
                 V_KM[k,m] = rand(Gamma(model.starta + Y_MK[m,k] + l_KM[k,m+1], 1/(model.startb + C1_K[k] + model.c*q_KM[k,m+1])))
+                #V_KM[k,m] = rand(Gamma(model.starta + l_KM[k,m+1], 1/(model.startb + model.c*q_KM[k,m+1])))
             else
                 V_KM[k,m] = rand(Gamma(model.d + model.c*V_KM[k,m-1] + Y_MK[m,k] + l_KM[k,m+1], 1/(model.c + C1_K[k] + model.c*q_KM[k,m+1])))
             end 
@@ -245,7 +244,8 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
 
 
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "eps" => eps, "alpha" => alpha,
-    "pop_N"=>info["pop_N"],"Y0_N"=>Y0_N)
+    "pop_N"=>info["pop_N"],"Y0_N"=>Y0_N,)
+    #"Y_NMKplus2"=>Y_NMKplus2)
     return data, state
 end
 
@@ -278,7 +278,7 @@ function forecast(model::covidsimple, state, data, info, Ti)
     lastgamma = state["V_KM"][:,end]
     forecastGamma_KTi = zeros(model.K, Ti)
     for i in 1:Ti
-        forecastGamma_KTi[:,i] = rand.(Gamma.(model.c*lastgamma .+ model.d,1/model.c))
+        forecastGamma_KTi[:,i] = rand.(Gamma.(model.c*lastgamma .+ model.d, 1/model.c))
         lastgamma = copy(forecastGamma_KTi[:,i])
     end 
     Ylast = data["Y_NM"][:,end]
