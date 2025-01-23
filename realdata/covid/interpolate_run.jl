@@ -35,7 +35,7 @@ j = parse(Int, ARGS[3])
 K = parse(Int, ARGS[4])
 
 Random.seed!(seed)
-mask_NM = rand(N,M) .< .2
+mask_NM = rand(N,M) .< .025
 
 
 # cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))

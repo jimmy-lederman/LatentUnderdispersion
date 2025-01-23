@@ -38,8 +38,9 @@ end
 
 
 function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
+    @assert !isnothing(info)
     if col == 1
-        Ylast = state["Y0_N"][row]
+        Ylast = info["Y0_N"][row]
     else
         Ylast = data["Y_NM"][row,col-1]
     end
@@ -51,7 +52,7 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
     V_KM = state["V_KM"]
     mu = sum(U_NK[row,:] .* V_KM[:,col])
     rate = Ylast+alpha*pop*mu+pop*eps
-    if D == 1
+    if model.D == 1
         return logpdf(Poisson(rate), Y)
     else
         return logpmfOrderStatPoisson(Y,rate,model.D,model.j)
@@ -180,8 +181,6 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
             Y_NMKplus2[n, m, :] = rand(Multinomial(Z, probvec / sum(probvec)))
         end
     end
-
-
 
     #update alpha (scale)
     post_shape = model.scaleshape + sum(Y_NMKplus2[:,:,1:model.K])
