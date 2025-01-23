@@ -1,5 +1,10 @@
+println("opended file")
+flush(stdout)
 using Pkg
-Pkg.precompile()
+Pkg.instantiate()
+Pkg.status()
+# using Pkg
+# Pkg.precompile()
 include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
 using Dates
 using CSV
@@ -7,6 +12,8 @@ using DataFrames
 using Random
 using JLD
 println(Threads.nthreads())
+println("imported packages")
+flush(stdout)
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
 #cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
@@ -20,7 +27,7 @@ data = Dict("Y_NM"=>cumdf)
 N = size(cumdf)[1]
 M = size(cumdf)[2]
 Y_N1 = Int.(reshape(cumdf[:,1], :, 1))
-info = Dict("Y_N1"=>Y_N1,"pop_N"=>pops,"days_M"=>Vector(days), "state_N"=>state)
+info = Dict("Y0_N"=>Y_N1,"pop_N"=>pops,"days_M"=>Vector(days), "state_N"=>state)
 
 seed = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
@@ -58,7 +65,7 @@ scale_rate = 1
 model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
 
 
-@time samples = fit(model, data, initseed=seed, nsamples = 500, nburnin=4000, nthin=20, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M), "R_KTS"=>fill(1.0, K,T,S)),skipupdate=["R_KTS"])
+@time samples = fit(model, data, initseed=seed, nsamples = 500, nburnin=4000, nthin=20, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M)))
 # inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
 results = [K,D,j,seed]
 

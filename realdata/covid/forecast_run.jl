@@ -1,5 +1,7 @@
-using Pkg
-Pkg.precompile()
+println("opended file")
+flush(stdout)
+# using Pkg
+# Pkg.activate(".")
 include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
 using Dates
 using CSV
@@ -7,6 +9,8 @@ using DataFrames
 using Random
 using JLD
 println(Threads.nthreads())
+println("imported packages")
+flush(stdout)
 
 #cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
 #cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
@@ -20,7 +24,7 @@ data = Dict("Y_NM"=>cumdf)
 N = size(cumdf)[1]
 M = size(cumdf)[2]
 Y_N1 = Int.(reshape(cumdf[:,1], :, 1))
-info = Dict("Y_N1"=>Y_N1,"pop_N"=>pops)
+info = Dict("Y0_N"=>Y_N1,"pop_N"=>pops)
 
 seed = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
