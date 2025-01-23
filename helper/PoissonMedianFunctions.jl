@@ -83,7 +83,7 @@ function safeTrunc(dist,lower,upper;n=1)
 end   
 
 function categorical1(y,dist)
-    if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
+    if (y > mean(dist) && pdf(dist,y) < 1e-10) || (y < mean(dist) && pdf(dist,y) < 1e-50)
         probs = numericalProbs(y,2,3,dist,0,0,0)
         # println("using numprobs1")
     else
@@ -100,7 +100,7 @@ function categorical1(y,dist)
 end
 
 function categorical2(y,dist)
-    if (y > mean(dist) && pdf(dist,y) < 1e-15) || (y < mean(dist) && pdf(dist,y) < 1e-75)
+    if (y > mean(dist) && pdf(dist,y) < 1e-10) || (y < mean(dist) && pdf(dist,y) < 1e-50)
         probs = numericalProbs(y,2,3,dist,0,1,0)
         # println("using numprobs2")
     else
@@ -110,6 +110,7 @@ function categorical2(y,dist)
         probs = [prob1,prob2,prob3]
     end
     #println(probs/sum(probs))
+
     return rand(Categorical(probs/sum(probs)))
 end
 

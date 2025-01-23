@@ -1,5 +1,5 @@
-using Pkg
-Pkg.precompile()
+# using Pkg
+# Pkg.precompile()
 include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
 using Dates
 using CSV
