@@ -105,6 +105,12 @@ function categorical1(y,dist)
         
         probs = [prob1,prob2,prob3]
     end
+    probs = probs/sum(probs)
+    for i in 1:3
+        if probs[i] < 1e-10
+            probs[i] = 0
+        end
+    end
     #println(probs/sum(probs))
     return rand(Categorical(probs/sum(probs)))
     #return probs/sum(probs)
@@ -121,7 +127,12 @@ function categorical2(y,dist)
         probs = [prob1,prob2,prob3]
     end
     #println(probs/sum(probs))
-
+    probs = probs/sum(probs)
+    for i in 1:3
+        if probs[i] < 1e-10
+            probs[i] = 0
+        end
+    end
     return rand(Categorical(probs/sum(probs)))
 end
 
