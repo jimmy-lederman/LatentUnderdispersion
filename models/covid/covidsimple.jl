@@ -13,9 +13,10 @@ function sampleCRT(Y,R)
     elseif Y == 1
         return 1
     else
-        probs = vcat([1],[R/(R+i-1) for i in 2:Y])
+        probs =[R/(R+i-1) for i in 2:Y]
+        return 1 + sum(rand.(Bernoulli.(probs)))
     end
-    return sum(rand.(Bernoulli.(probs)))
+    
 end
 
 
