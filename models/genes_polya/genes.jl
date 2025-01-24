@@ -1,10 +1,6 @@
-using Pkg
-Pkg.activate(".")
 include("../../helper/MatrixMF.jl")
 include("../../helper/OrderStatsSampling.jl")
 include("../../helper/NegBinPMF.jl")
-#include("../../helper/NegBinPMF.jl") 
-# using Distributions
 using LinearAlgebra
 using Base.Threads
 include("PolyaGammaHybridSamplers.jl/src/pghybrid.jl")

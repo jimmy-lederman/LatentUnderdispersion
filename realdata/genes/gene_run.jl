@@ -1,13 +1,8 @@
-using Dates
 using CSV
 using DataFrames
 using Random
 using JLD
-using NMF
 
-using NPZ
-using Statistics
-using SparseArrays
 println(Threads.nthreads())
 include("/home/jlederman/DiscreteOrderStatistics/models/genes_polya/genes.jl")
 
