@@ -16,7 +16,17 @@ function sampleCRT(Y,R)
         probs =[R/(R+i-1) for i in 2:Y]
         return 1 + sum(rand.(Bernoulli.(probs)))
     end
-    
+end
+
+function sampleCRTlecam(Y,R,tol=.4)
+    Y_max = R * (1/tol - 1)
+    if Y <= Y_max || Y <= 100
+        return sampleCRT(Y, R)
+    else
+        out = sampleCRT(Y_max, R)
+        mu = R * (polygamma(0, R + Y) - polygamma(0, R + Y_max))
+        return out + rand(Poisson(mu))
+    end
 end
 
 
@@ -208,7 +218,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
     @views @threads for m in model.M:-1:2
         @views for k in 1:model.K
             q_KM[k,m] = log(1 + (C1_K[k]/model.c) + q_KM[k,m+1])
-            temp = sampleCRT(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
+            temp = sampleCRTlecam(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
             l_KM[k,m] = rand(Binomial(temp, model.c*V_KM[k,m-1]/(model.c*V_KM[k,m-1] + model.d)))
         end 
     end

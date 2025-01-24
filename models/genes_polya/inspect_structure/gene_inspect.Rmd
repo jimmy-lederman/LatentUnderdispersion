@@ -1,0 +1,68 @@
+---
+title: "genes_logistic_regression"
+output: html_document
+date: "2025-01-24"
+---
+
+```{r}
+df <- read.csv("/Users/jimmy/Desktop/OrderStats/data/cancer.csv")
+```
+
+```{r}
+library(nnet)
+```
+
+```{r}
+
+df$response
+```
+```{r}
+# Original vector
+strings <- df$project_id.sample_id
+
+# Substrings to match
+substrings <- c("BRCA", "CESC", "ESCA", "UCEC", "UCS", "UVM")
+
+# Create the new vector by finding the first matching substring
+new_vector <- vapply(strings, function(x) {
+  match <- substrings[sapply(substrings, function(sub) grepl(sub, x))]
+  if (length(match) > 0) match[1] else NA_character_  # Take the first match or NA
+}, character(1))
+
+# Print the new vector
+labels <- as.vector(new_vector)
+df$project_id.sample_id <- NULL
+```
+
+```{r}
+dfnew <- df[ , which(apply(df, 2, var) != 0)]
+results <- prcomp(t(dfnew), scale = TRUE)
+```
+
+```{r}
+results$rotation <- -1*results$rotation
+```
+
+```{r}
+firstcomp <- results$rotation[,1]
+seconcomp <- results$rotation[,2]
+```
+
+```{r}
+library(ggplot2)
+data <- data.frame(firstcomp=firstcomp,seconcomp=seconcomp,labels=labels)
+ggplot(data, aes(x = firstcomp, y = seconcomp, color = labels)) +
+  geom_point(size = 3) +   # Scatter points with size
+  labs(
+    title = "Scatterplot of PC1 vs PC2",
+    x = "PC1",
+    y = "PC2",
+    color = "Cancer Types"
+  ) +
+  theme_minimal()  
+```
+
+
+
+
+

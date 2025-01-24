@@ -36,7 +36,7 @@ end
 function sampleIndex(Y,D,dist,type=1)
     #this is an approximation for stability; take out if
     #testing for correctness
-    if pdf(dist, Y) == 0 
+    if pdf(dist, Y) < 1e-100
         m = mean(dist)
         if (Y > m && type == 1) || (Y < m && type == 2)
             return rand(DiscreteUniform(1,D))
@@ -67,7 +67,9 @@ function sampleIndex(Y,D,dist,type=1)
         if abs(stopprob - 1) < 10e-5
             break
         end
+        
         stop = rand(Bernoulli(stopprob))
+
         if stop
             break
         end
@@ -104,7 +106,10 @@ function sampleSumGivenMin(Y,D,dist)
     return sum(sample1) + Y + sum(sample2)
 end
 
+
+#####
 #code for median of 3 sampler
+#########
 function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     D = D - numY - numUnder - numOver
     j = j - numUnder

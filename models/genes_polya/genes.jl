@@ -1,7 +1,8 @@
 using Pkg
 Pkg.activate(".")
 include("../../helper/MatrixMF.jl")
-include("../../helper/PoissonMedianFunctions.jl")
+include("../../helper/OrderStatsSampling.jl")
+include("../../helper/NegBinPMF.jl")
 #include("../../helper/NegBinPMF.jl") 
 # using Distributions
 using LinearAlgebra
@@ -114,7 +115,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     #     n = div(idx - 1, model.M) + 1
     #     m = mod(idx - 1, model.M) + 1  
 
-    @views for ind in axes(Ysparse, 1)
+    @views @threads for ind in axes(Ysparse, 1)
         #rng = MersenneTwister(Threads.threadid())
         count = Ysparse[ind, :]
         n = count[1]
@@ -127,7 +128,6 @@ function backward_sample(model::genes, data, state, mask=nothing)
             end
         end
         if Y_NM[n, m] > 0 
-
             Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.D, NegativeBinomial(mu,p))
             Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], model.D*mu)
             P_K = U_NK[n, :] .* V_KM[:, m]
@@ -139,7 +139,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     F_NM = Beta_NQ * Tau_QM
     W_NM = zeros(Float64, model.N, model.M)
     
-    @views for idx in 1:(model.N * model.M)
+    @views @threads for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1 
     # @views @threads for n in 1:model.N
@@ -183,19 +183,21 @@ function backward_sample(model::genes, data, state, mask=nothing)
     #     post_rate = model.b + model.D*sum(log.(1 ./p_NM[n,:]) .* V_KM[k, :])
     #     U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
     # end
-
-    @views for n in 1:model.N
+    Z_NK = dropdims(sum(Z_NMK,dims=2), dims=2)
+    C_NK = model.D * log.(1 ./p_NM) * V_KM'
+    @views  for n in 1:model.N
         @views for k in 1:model.K
-            post_shape = model.a + sum(Z_NMK[n, :, k])
-            post_rate = model.b + model.D*sum(log.(1 ./p_NM[n,:]) .* V_KM[k, :])
+            post_shape = model.a + Z_NK[n,k]#sum(Z_NMK[n, :, k])
+            post_rate = model.b + C_NK[n,k]#model.D*sum(log.(1 ./p_NM[n,:]) .* V_KM[k, :])
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
-
-    @views  for m in 1:model.M
+    Z_MK = dropdims(sum(Z_NMK,dims=1), dims=1)
+    C_MK = model.D * log.(1 ./ p_NM)' * U_NK
+    @views for m in 1:model.M
         @views for k in 1:model.K
-            post_shape = model.c + sum(Z_NMK[:, m, k])
-            post_rate = model.d + model.D*sum(log.(1 ./ p_NM[:,m]) .* U_NK[:, k])
+            post_shape = model.c + Z_MK[m,k]#sum(Z_NMK[:, m, k])
+            post_rate = model.d + C_MK[m,k]#model.D*sum(log.(1 ./ p_NM[:,m]) .* U_NK[:, k])
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
         end
     end

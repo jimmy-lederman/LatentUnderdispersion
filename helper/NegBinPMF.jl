@@ -27,18 +27,31 @@ function log_incomplete_beta3(a, b, x; precision=64)
     a = BigFloat(a)
     b = BigFloat(b)
     x = BigFloat(x)
+    #println("inner: ", precision, " ", a, " ", b)
     try
         return a*log(x) + log(pFq((a, 1-b,), (a+1,), x)) - log(a) - log(beta(a,b))
     catch ex
-        return log_incomplete_beta3(a,b,x;precision=2*precision)
+        # if precision > 100000
+        #     return 0
+        # else 
+        #     return log_incomplete_beta3(a,b,x;precision=5*precision)
+        # end
+        return log_incomplete_beta3(a,b,x;precision=5*precision)
     end
 end
 
 function logprobmaxnb(Y,r,p,D;precision=1000)
-    first =D*log_incomplete_beta3(r,Y+1,1-p,precision=precision)
-    second =D*log_incomplete_beta3(r,Y,1-p,precision=precision)
+    #println("outer: ", precision, " ", a, " ", b)
+    first =D*log_incomplete_beta3(r,Y+1,p,precision=precision)
+    second =D*log_incomplete_beta3(r,Y,p,precision=precision)
     result = logsubexp(first, second)
+    
     if isinf(result) || isnan(result) || first >= 0 || second >= 0
+        # if precision > 100000
+        #     return 0
+        # else
+        #     return logprobmaxnb(Y,r,p,D;precision=precision*5)
+        # end
         return logprobmaxnb(Y,r,p,D;precision=precision*5)
     else
         return Float64(result)
@@ -47,12 +60,23 @@ function logprobmaxnb(Y,r,p,D;precision=1000)
 end
 
 function logpmfMaxNegBin(Y,r,p,D)
-    llik = logpdf(OrderStatistic(NegativeBinomial(r,1-p), D, D), Y)
+    llik = logpdf(OrderStatistic(NegativeBinomial(r,p), D, D), Y)
     if isinf(llik) || isnan(llik)
-        llik = logprobmaxnb(Y,r,p,D)
-                # println(Y, " ", r, " ", p)
-                # flush(stdout)
-                #llik = 0
+        #try
+            llik = logprobmaxnb(Y,r,p,D)
+            if llik == 0
+                # if Y > mean(NegativeBinomial(r,p))
+                #     llik = logpdf(NegativeBinomial(r,p), Y)
+                #     @assert llik != 0 && !isinf(llik) && !isnan(llik)
+                # else 
+                    println(Y, " ", r, " ", p)
+                    throw("missed low error")
+                #end
+            end
+        # catch InterruptException
+        #     println(Y, " ", r, " ", p)
+        #     @assert 1 == 2
+        # end
     end
     return llik
 end
