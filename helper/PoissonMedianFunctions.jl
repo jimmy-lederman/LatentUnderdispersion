@@ -209,39 +209,3 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     end
     return total
 end
-
-function logprobMedian(Y,mu;precision=64)
-    #must set precision
-    setprecision(BigFloat,precision)
-    mu = big(mu)
-    Y = big(Y)
-    firstgammas = gamma_inc(Y+1,mu)
-    secondgammas =gamma_inc(Y,mu)
-    result = logsubexp(2*log(firstgammas[2]) + log(1+2*firstgammas[1]), 2*log(secondgammas[2]) + log(1+2*secondgammas[1]))
-    if isinf(result) || isnan(result)
-        return logprobMedian(Y,mu,precision=5*precision)
-    else
-        return Float64(result)
-    end
-end
-
-function logpmfOrderStatPoisson(Y,mu,D,j)
-    try
-        llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
-        # if isinf(llik) || isnan(llik)
-        #     llik = logprob(Y,mu,D)
-        # end
-        if isinf(llik) || isnan(llik)
-            @assert D == 3 && j == 2
-            llik = logprobMedian(Y,mu)
-        end
-        return llik
-        
-    catch ex
-        @assert D == 3 && j == 2
-        #println("second")
-        llik = logprobMedian(Y,mu)
-     
-        return llik
-    end
-end
