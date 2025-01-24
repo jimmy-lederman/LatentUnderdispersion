@@ -77,7 +77,7 @@ scale_shape = 2
 scale_rate = 1
 model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
 
-@time samples = fit(model, data, initseed=seed, nsamples = 500, nburnin=4000, nthin=20, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
+@time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
 results = [K,D,j,seed]
 
