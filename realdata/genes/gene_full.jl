@@ -64,5 +64,5 @@ model = genes(N,M,K,Q,a,b,c,d,D)
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 results = [K,Q,D,chainSeed,nburnin]
 println(inforate)
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/heldoutsamples/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples/"
 save(folder*"/sample_seed2_$(chainSeed)D$(D)K$(K)Q$(Q)Burnin$(nburnin).jld", "results", results, "samples", samples)
