@@ -63,6 +63,97 @@ ggplot(data, aes(x = firstcomp, y = seconcomp, color = labels)) +
 ```
 
 
+```{r}
+weird_binom <- function(i,r,p){
+  return(factorial(r+i-1)/(factorial(i)*factorial(r-1))*((p/(1+p))^i / (1+p)^r))
+}
+total <- 0
+for(i in 0:10){
+  total <- total + weird_binom(i,2,.2)
+}
+total
+```
+
+```{r}
+negbinmax_mean <- function(r,p){
+  part1 <- r*(1-p)/p
+  part2 <- r*(1-p)/p^2
+  part3 <- hypergeo(r+1,.5,2,-4*(1-p)/p^2)
+  return(Re(part1+part2*part3))
+}
+```
+
+```{r}
+negbinmax_mean(r,p)
+```
+
+
+```{r}
+r <- 5
+p <- .4
+B <- 10000000
+beep <- rep(0,B)
+for(i in 1:B){
+  beep[i] <- max(rnbinom(2,r,p))
+}
+mean(beep)
+```
+
+
+```{r}
+n <- 2
+p <- .75
+B <- 100000
+beep <- rep(0,B)
+for(i in 1:B){
+  x <- rbinom(1,n,p)
+  beep[i] <- x*abs(rbinom(1,n,p) - x)
+}
+mean(beep)
+```
+
+```{r}
+mysum <- 0
+for(i in 0:(n-1)){
+  mysum <- mysum + (-1)^i * i * choose(n,i+1)*choose(2*i,i)*(p*(1-p))^i
+}
+mysum*2*p*(1-p)
+```
+
+```{r}
+mysum2 <- 0
+mysum3 <- 0
+for(i in 1:(n-1)){
+  mysum2 <- mysum2 + i * choose(n-1,i-1)*choose(n-1,i)*p^(2*i-1)*(1-p)^(2*n-2*i-1)
+}
+for(i in 0:(n-1)){
+  musum3 <- mysum3 + i * choose(n-1,i)^2*p^(2*i)*(1-p)^(2*n-2*i-2)
+}
+(mysum2+mysum3)*2*n*p*(1-p)
+```
+
+```{r}
+mysum4 <- 0 
+for(i in 0:n){
+  for(j in 0:i){
+    mysum4 <- mysum4 + i*(i-j)*choose(n,i)*choose(n,j)*(p^(i+j)) *((1-p)^(2*n-i-j))
+  }
+}
+mysum4
+```
+
+
+
+```{r}
+part1 <- Re(2*n*(1-p)*p*(n-1)/4 *(hypergeo(-n,1.5,3,4*(1-p)*p)/(hypergeo(1-n,.5,2,4*(1-p)*p))))
+part1
+```
+
+
+
+```{r}
+Re(2*n*(1-p)*p*(hypergeo(1-n,.5,2,4*(1-p)*p) -1))
+```
 
 
 
