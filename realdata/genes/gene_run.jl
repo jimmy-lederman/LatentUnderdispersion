@@ -1,11 +1,14 @@
+println("opened code")
 using CSV
 using DataFrames
 using Random
 using JLD
 
-println(Threads.nthreads())
-include("/home/jlederman/DiscreteOrderStatistics/models/genes_polya/genes.jl")
 
+include("/home/jlederman/DiscreteOrderStatistics/models/genes_polya/genes.jl")
+println("imported packages")
+println(Threads.nthreads())
+flush(stdout)
 function sparsify_format_mask(data, mask)
     D = size(data, 1)
     V = size(data, 2)
@@ -40,7 +43,7 @@ M = size(Y_NM, 2)
 
 seed = 101
 Random.seed!(seed)
-nlil = 3000
+nlil = 1000
 random_indices = randperm(N)[1:nlil]  # Generate random indices
 Y_NMsmall = Y_NM[random_indices,:]
 N = nlil

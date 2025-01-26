@@ -126,16 +126,25 @@ function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     else
         #println("yep")
         if Y > mean(dist) 
-            
-            truncProb = pdf(Truncated(dist, Y, Inf), Y)
-            if isnan(truncProb)
+            truncProb = 1
+            try 
+                truncProb = pdf(Truncated(dist, Y, Inf), Y)
+            catch ex
+                truncProb = 1
+            end
+            if isnan(truncProb) || isinf(truncProb)
                 truncProb = 1
             end
             probUnder = (j-1)/D
             return [probUnder, (1-probUnder)*truncProb,(1-probUnder)*(1-truncProb)]
         else #Y <= mean(dist)
-            truncProb = pdf(Truncated(dist, 0, Y), Y)
-            if isnan(truncProb)
+            truncProb = 1
+            try 
+                truncProb = pdf(Truncated(dist, 0, Y), Y)
+            catch ex
+                truncProb = 1
+            end
+            if isnan(truncProb) || isinf(truncProb)
                 truncProb = 1
             end
             probOver = (D-j+numY)/D
@@ -147,6 +156,11 @@ end
 function logcategorical1(y,dist)
     if pdf(dist,y) < 1e-150
         probs = numericalProbs(y,2,3,dist,0,0,0)
+        for i in 1:3
+            if probs[i] < 1e-8
+                probs[i] = 0
+            end
+        end
         return rand(Categorical(probs/sum(probs)))
     else
         prob1 = logcdf(dist, y-1) + logpdf(OrderStatistic(dist, 2, 1), y)
@@ -160,6 +174,11 @@ end
 function logcategorical2(y,dist)
     if pdf(dist,y) < 1e-150
         probs = numericalProbs(y,2,3,dist,0,1,0)
+        for i in 1:3
+            if probs[i] < 1e-8
+                probs[i] = 0
+            end
+        end
         return rand(Categorical(probs/sum(probs)))
     else
         prob1 = logcdf(dist, y-1) + logccdf(dist, y-1)

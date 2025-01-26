@@ -26,10 +26,11 @@ M = size(cumdf)[2]
 Y_N1 = Int.(reshape(cumdf[:,1], :, 1))
 info = Dict("Y0_N"=>Y_N1,"pop_N"=>pops)
 
-seed = parse(Int, ARGS[1])
-D = parse(Int, ARGS[2])
-j = parse(Int, ARGS[3])
-K = parse(Int, ARGS[4])
+maskSeed = parse(Int, ARGS[1])
+chainSeed = parse(Int, ARGS[2])
+D = parse(Int, ARGS[3])
+j = parse(Int, ARGS[4])
+K = parse(Int, ARGS[5])
 
 #make mask (forecast)
 middlestart = 150
@@ -49,7 +50,7 @@ function make_forecasting_mask(middlestart,middlelength,endlength,county_pct,see
     end
     return BitArray(mask_NM .!= 0)
 end
-mask_NM = make_forecasting_mask(middlestart,middlelength,endlength,county_pct,seed,N,M)
+mask_NM = make_forecasting_mask(middlestart,middlelength,endlength,county_pct,maskSeed,N,M)
 
 
 # cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
@@ -77,10 +78,10 @@ scale_shape = 2
 scale_rate = 1
 model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
 
-@time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
+@time samples = fit(model, data, initseed=chainSeed, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
-results = [K,D,j,seed]
+results = [K,D,j,maskSeed,chainSeed]
 
 samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medianD3/usa/forecast_samples/"
-save(folder*"/sample_seed$(seed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples, "mask", mask_NM)
+save(folder*"/sample_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples, "mask", mask_NM)
