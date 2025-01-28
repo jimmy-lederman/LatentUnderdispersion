@@ -35,6 +35,16 @@ df$project_id.sample_id <- NULL
 ```
 
 ```{r}
+unique(labels)
+```
+
+
+```{r}
+write.csv(labels, "cancer_labels.csv",row.names = FALSE)
+```
+
+
+```{r}
 dfnew <- df[ , which(apply(df, 2, var) != 0)]
 results <- prcomp(t(dfnew), scale = TRUE)
 ```
@@ -81,66 +91,85 @@ negbinmax_mean <- function(r,p){
   part3 <- hypergeo(r+1,.5,2,-4*(1-p)/p^2)
   return(Re(part1+part2*part3))
 }
+negbinmax_var <- function(r,p){
+  part1 <- r*(1-p)/(p^2)
+  part2 <- r*(1-p)/(p^2)
+  part3 <- hypergeo(r+1,.5,2,-4*(1-p)/p^2)
+  return(Re(part1-(part2*part3)^2)+r*(1-p)/(p^2)*hypergeo(r+1,.5,2,-4*(1-p)/p^2))
+}
+negbinmax_var(r,p)
 ```
 
 ```{r}
 negbinmax_mean(r,p)
+
 ```
 
 
 ```{r}
-r <- 5
-p <- .4
-B <- 10000000
+r <- 4.2142314
+p <- .2314
+B <- 1000000
 beep <- rep(0,B)
 for(i in 1:B){
   beep[i] <- max(rnbinom(2,r,p))
 }
 mean(beep)
+var(beep)
+
 ```
 
 
 ```{r}
-n <- 2
-p <- .75
+n <- 1
+p <- .5
 B <- 100000
 beep <- rep(0,B)
 for(i in 1:B){
-  x <- rbinom(1,n,p)
-  beep[i] <- x*abs(rbinom(1,n,p) - x)
+  x <- rnbinom(1,n,p)
+  beep[i] <- x*abs(x - rnbinom(1,n,p))
 }
 mean(beep)
+3*n^(2)*(1-p)/(p^2)*hypergeo(n+1,.5,2,-4*(1-p)/p^2) + n*(1-p)/(p^2)*hypergeo(n+1,.5,2,-4*(1-p)/p^2)/2 
 ```
 
 ```{r}
 mysum <- 0
 for(i in 0:(n-1)){
-  mysum <- mysum + (-1)^i * i * choose(n,i+1)*choose(2*i,i)*(p*(1-p))^i
+  mysum <- mysum + (-1)^i * i*choose(n,i+1)*choose(2*i,i)*(p*(1-p))^i
 }
-mysum*2*p*(1-p)
+(mysum)*2*p*(1-p)
 ```
 
 ```{r}
+n <- 3
+p <- .5
 mysum2 <- 0
 mysum3 <- 0
 for(i in 1:(n-1)){
-  mysum2 <- mysum2 + i * choose(n-1,i-1)*choose(n-1,i)*p^(2*i-1)*(1-p)^(2*n-2*i-1)
+  mysum2 <- mysum2 + i *choose(n-1,i-1)*choose(n-1,i)*p^(2*i-1)*(1-p)^((2*n)-(2*i)-1)
 }
 for(i in 0:(n-1)){
-  musum3 <- mysum3 + i * choose(n-1,i)^2*p^(2*i)*(1-p)^(2*n-2*i-2)
+  mysum3 <- mysum3 + (choose(n-1,i)^2)*p^(2*i)*(1-p)^(2*n-2*i-2)
 }
-(mysum2+mysum3)*2*n*p*(1-p)
+(mysum2+mysum3)*n*p*(1-p)
 ```
 
 ```{r}
 mysum4 <- 0 
 for(i in 0:n){
   for(j in 0:i){
-    mysum4 <- mysum4 + i*(i-j)*choose(n,i)*choose(n,j)*(p^(i+j)) *((1-p)^(2*n-i-j))
+    mysum4 <- mysum4 + i*(i-j)*dbinom(i,n,p)*dbinom(j,n,p)
   }
 }
 mysum4
 ```
+
+```{r}
+(2*choose(6,2)*choose(5,3)+4*choose(6,1)*choose(5,4)+6*choose(6,0)*choose(5,5))*6
+6*(5)*choose(4,2)*choose(4,3)
+```
+
 
 
 

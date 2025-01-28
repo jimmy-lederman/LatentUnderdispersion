@@ -67,16 +67,16 @@ end
 
 
 
-function sample_likelihood(model::flights, mu,p=nothing)
+function sample_likelihood(model::flights, mu,p=nothing,n=1)
     if isnothing(p)
         dist = model.dist(mu)
     else
         dist = model.dist(mu,1-p)
     end
     if model.D == 1
-        return rand(dist)
+        return rand(dist,n)
     else
-        return rand(OrderStatistic(dist, model.D, model.j))
+        return rand(OrderStatistic(dist, model.D, model.j),n)
     end
 end
 

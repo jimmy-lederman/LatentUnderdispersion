@@ -71,7 +71,13 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
     end
 end
 
-
+function sample_likelihood(model::covidsimple, mu,p=nothing,n=1)
+    if model.D == 1
+        return rand(Poisson(mu),n)
+    else
+        return rand(OrderStatistic(Poisson(mu),model.D, model.j),n)
+    end
+end
 
 function sample_prior(model::covidsimple,info=nothing,constantinit=nothing)
     pass = false
