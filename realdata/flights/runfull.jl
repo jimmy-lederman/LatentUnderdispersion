@@ -45,11 +45,11 @@ model = flights(N, M, T, K, a, b, c, d, alpha, beta, D, j, dist)
 # Random.seed!(maskSeed)
 # mask_NM = rand(N, M) .< .2
 
-@time samples = fit(model, data, nsamples = 100, nburnin=10000, nthin=20, info=info,initseed=chainSeed)
-samplesnew = [Dict("Z_TT"=> s["Z_TT"], "U_K"=>s["U_K"], "A_T"=>s["A_T"], "B_T"=>s["B_T"]) for s in samples]
+@time samples = fit(model, data, nsamples = 500, nburnin=5000, nthin=20, info=info,initseed=chainSeed)
+samplesnew = [Dict("Z_TT"=> s["Z_TT"], "U_K"=>s["U_K"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"logprobvec_RK"=>s[logprobvec_RK]) for s in samples]
 # samplesnew[1]["I_NM"] = samples[1]["I_NM"]
 # samplesnew[1]["dist_NM"] = samples[1]["dist_NM"]
-# samplesnew[1]["routes_R4"] = samples[1]["routes_R4"]
+samplesnew[1]["routes_R4"] = samples[1]["routes_R4"]
 # inforate = evaluateInfoRate(model,data,samples, info=info, verbose=false)
 # results = [K,D,maskSeed,inforate]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
