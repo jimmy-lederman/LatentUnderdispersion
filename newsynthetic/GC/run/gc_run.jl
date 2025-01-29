@@ -15,7 +15,7 @@ type = parse(Int, ARGS[3])
 D = parse(Int, ARGS[4])
 
 #get data
-data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/newsynthetic/CMP/data/CMPdata.csv", DataFrame)
+data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/newsynthetic/GC/data/GCdata.csv", DataFrame)
 data_all = select(data_all, Not(1))
 data_all = Matrix(data_all)
 Y_NM = Int.(reshape(data_all[3:1002,datasetnum], :,1))
@@ -24,7 +24,7 @@ nu = data_all[1,datasetnum]
 seed = Int(data_all[2,datasetnum])
 
 #set folder
-folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/CMP/samples/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/GC/samples/"
 
 N = 1000
 M = 1  

@@ -232,6 +232,7 @@ function backward_sample(model::flights, data, state, mask=nothing)
     Z_R3 = zeros(R,3)
     P_3 = zeros(3)
     #locker = Threads.SpinLock()
+    logprobvec_RK = zeros(R,model.K)
     @views for r in 1:R
     #@views @threads for r in 1:R
         #access pre-calculated route info
@@ -256,6 +257,7 @@ function backward_sample(model::flights, data, state, mask=nothing)
         for u in 1:model.K
             logprobvec_K[u] = logpdf(Poisson(rate_factor*numflights*U_K[u]*distance), Z_R3[r,3])
         end
+        logprobvec_RK[r,:] =  logprobvec_K
         #sample categorical using Gumbel trick
         g_K = rand(Gumbel(0,1), model.K)
         Z_TTnew[home,away] = argmax(g_K + logprobvec_K)
@@ -277,7 +279,7 @@ function backward_sample(model::flights, data, state, mask=nothing)
     B_T = rand.(Gamma.(post_shape2_T, 1 ./post_rate2_T))
     flush(stdout)
     state = Dict("Z_TT" => Z_TTnew, "U_K" => U_K, "A_T"=>A_T, "B_T"=>B_T,
-     "I_NM"=>I_NM, "dist_NM" => dist_NM, "routes_R4"=>routes_R4,
+     "I_NM"=>I_NM, "dist_NM" => dist_NM, "routes_R4"=>routes_R4,"logprobvec_RK"=>logprobvec_RK,
      "p"=>p2)
     return data, state
 end
