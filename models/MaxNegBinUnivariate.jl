@@ -1,5 +1,5 @@
 include("../helper/MatrixMF.jl")
-include("../helper/PoissonMaxFunctions.jl")
+include("../helper/OrderStatsSampling.jl")
 using Distributions
 
 function sampleCRT(Y,R)
