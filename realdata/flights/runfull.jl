@@ -4,7 +4,8 @@ println(Threads.nthreads())
 using CSV
 using DataFrames
 using Random
-using JLD2
+#using JLD2
+using JLD
 using Base.Filesystem
 
 #datafile = "/net/projects/schein-lab/jimmy/PoissonMax/flights/airtime.csv"
@@ -46,10 +47,10 @@ model = flights(N, M, T, K, a, b, c, d, alpha, beta, D, j, dist)
 # mask_NM = rand(N, M) .< .2
 
 @time samples = fit(model, data, nsamples = 500, nburnin=5000, nthin=20, info=info,initseed=chainSeed)
-samplesnew = [Dict("Z_TT"=> s["Z_TT"], "U_K"=>s["U_K"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"logprobvec_RK"=>s[logprobvec_RK]) for s in samples]
+samplesnew = [Dict("Z_TT"=> s["Z_TT"], "U_K"=>s["U_K"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"logprobvec_RK"=>s["logprobvec_RK"]) for s in samples]
 # samplesnew[1]["I_NM"] = samples[1]["I_NM"]
 # samplesnew[1]["dist_NM"] = samples[1]["dist_NM"]
-samplesnew[1]["routes_R4"] = samples[1]["routes_R4"]
+#samplesnew[1]["routes_R4"] = samples[1]["routes_R4"]
 # inforate = evaluateInfoRate(model,data,samples, info=info, verbose=false)
 # results = [K,D,maskSeed,inforate]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
