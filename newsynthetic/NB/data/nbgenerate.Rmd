@@ -39,21 +39,19 @@ dgamma_count <- function(k,alpha,beta){
 
 
 ```{r}
-#alphalist <- c(1.25,1.5,2,3,4,5,10)
-alphalist <- c(1.5,2,3)
-#compute PMF for those gamma count
+plist <- c(.1,.5,.9)
 begin = 0
 end = 50
+mu <- 10
 count <- 1
-mat <- matrix(0,nrow=length(alphalist),ncol=length(begin:end))
-for(alpha in alphalist){
-  Th <- 1
-  beta <- 25*alpha
-  x <- dgamma_count(begin:end,alpha,beta*Th)
+mat <- matrix(0,nrow=length(plist),ncol=length(begin:end))
+for(p in plist){
+  r <- mu*p/(1-p)
+  x <- dnbinom(begin:end,r,p)
   mat[count,] <- x
   count <- count + 1
 }
-write.csv(mat, "GCpmf.csv")
+write.csv(mat, "NBpmf.csv")
 ```
 
 

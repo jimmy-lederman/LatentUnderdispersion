@@ -1,17 +1,17 @@
 using Distributions
 using LogExpFunctions
 
-function safeTrunc(dist,lower,upper;n=1)
+function safeTrunc(dist, lower, upper; n=1)
     try
         return rand(Truncated(dist, lower, upper), n)
     catch e
         if lower == 0
-            return fill(upper,n)
+            return fill(upper, n)
         elseif isinf(upper)
-            return fill(lower,n)
+            return fill(lower, n)
         end
     end
-end 
+end
 
 function logprobYatIterationMax(Y,i,dist)
     num = logpdf(dist,Y) + (i-1)*logcdf(dist, Y)
@@ -93,7 +93,9 @@ function sampleSumGivenMax(Y,D,dist)
     if Y == 0
         return 0
     end
-    index = sampleIndex(Y,D,dist,1)
+    #index = sampleIndex(Y,D,dist,1)
+    #@assert 1 == 2
+    index = 1
     sample1 = safeTrunc(dist, 0, Y - 1, n=index - 1)
     sample2 = safeTrunc(dist, 0, Y, n=D - index)
     return sum(sample1) + Y + sum(sample2)
@@ -167,6 +169,7 @@ function logcategorical1(y,dist)
         prob2 = logsumexp(log(2) + logcdf(dist,y-1) + logccdf(dist,y), logpdf(dist,y) + logsubexp(log(2),logpdf(dist,y))) + logpdf(dist,y)
         prob3 = logccdf(dist, y) + logpdf(OrderStatistic(dist, 2, 2), y)
         probs = [prob1,prob2,prob3]
+        println(exp.(probs)./sum(exp.(probs)))
         return argmax(probs .+ rand(Gumbel(0,1),3))
     end
 end
@@ -185,6 +188,7 @@ function logcategorical2(y,dist)
         prob2 = logpdf(dist,y)
         prob3 = logccdf(dist, y) + logcdf(dist,y)  
         probs = [prob1,prob2,prob3]
+        println(exp.(probs)./sum(exp.(probs)))
         return argmax(probs .+ rand(Gumbel(0,1),3))
     end
 end
