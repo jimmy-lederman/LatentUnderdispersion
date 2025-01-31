@@ -3,6 +3,7 @@ include("../helper/OrderStatsSampling.jl")
 include("../helper/PoissonOrderPMF.jl")
 using Distributions
 using LinearAlgebra
+using Base.Threads
 
 struct MaxPoissonMF <: MatrixMF
     N::Int64
