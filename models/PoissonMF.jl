@@ -46,7 +46,7 @@ function backward_sample(model::PoissonMF, data, state, mask=nothing)
         Mu_NM = U_NK * V_KM
     end
     # Loop over the non-zeros in Y_NM and allocate
-    locker = Threads.SpinLock()
+    #locker = Threads.SpinLock()
     @views @threads for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1    

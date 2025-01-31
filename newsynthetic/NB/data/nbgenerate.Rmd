@@ -19,10 +19,9 @@ for(i in 1:length(plist)){
     set.seed(j)
     p <- plist[i]
     r <- mu*p/(1-p)
-    print(r)
     x <- rnbinom(B, r,p)
     
-    print(mean(x))
+    print(var(x)/mean(x))
     mat[,count] <- c(p, j, x)
     count <- count + 1
   }
