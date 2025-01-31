@@ -57,7 +57,6 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
     Z_NM = zeros(Int, model.N, model.M)
     Z_NMK = zeros(Int, model.N, model.M, model.K)
     #Z_NMK = copy(state["Z_NMK"])
-    P_K = zeros(model.K)
     Mu_NM = U_NK * V_KM
     #Loop over the non-zeros in Y_DV and allocate
     @views @threads for idx in 1:(model.N * model.M)
@@ -70,9 +69,8 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
         end
         if Y_NM[n, m] > 0
             Z_NM[n, m] = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Mu_NM[n, m]))
-            P_K[:] = U_NK[n, :] .* V_KM[:, m]
-            P_K[:] = P_K / sum(P_K)
-            Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K))
+            P_K = U_NK[n, :] .* V_KM[:, m]
+            Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K / sum(P_K)))
         end
     end
 
