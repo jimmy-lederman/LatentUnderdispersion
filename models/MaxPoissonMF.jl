@@ -22,9 +22,6 @@ function evalulateLogLikelihood(model::MaxPoissonMF, state, data, info, row, col
     return logpmfMaxPoisson(Y,mu,model.D)
 end
 
-
-
-
 function sample_prior(model::MaxPoissonMF,info=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
