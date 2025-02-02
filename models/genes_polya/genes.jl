@@ -197,6 +197,6 @@ function backward_sample(model::genes, data, state, mask=nothing)
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p_NM"=>p_NM, "Beta_NQ"=>Beta_NQ, "Tau_QM"=>Tau_QM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_NQ"=>Beta_NQ, "Tau_QM"=>Tau_QM)
     return data, state
 end

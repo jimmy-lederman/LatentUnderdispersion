@@ -1,7 +1,4 @@
-include("PoissonMaxFunctions.jl")
-include("PoissonMinFunctions.jl")
-# rewriting = pyimport("sympy.codegen.rewriting")
-# cfunctions = pyimport("sympy.codegen.cfunctions")
+include("OrderStatsSampling.jl")
 
 using Distributions
 
@@ -14,109 +11,6 @@ function poisson_cdf_precise(Y,mu;precision=64)
         return poisson_cdf_precise(Y,mu,precision=5*precision)
     else
         return result
-    end
-end
-
-function safeTrunc(dist,lower,upper;n=1)
-    try
-        return rand(Truncated(dist, lower, upper), n)
-    catch e
-        if lower == 0
-            return fill(upper,n)
-        elseif isinf(upper)
-            return fill(lower,n)
-        end
-    end
-end   
-
-function logcategorical1(y,dist)
-    if pdf(dist,y) < 1e-150
-        probs = numericalProbs(y,2,3,dist,0,0,0)
-    else
-        prob1 = logcdf(dist, y-1) + logpdf(OrderStatistic(dist, 2, 1), y)
-        prob2 = logsumexp(log(2) + logcdf(dist,y-1) + logccdf(dist,y), logpdf(dist,y) + logsubexp(log(2),logpdf(dist,y))) + logpdf(dist,y)
-        prob3 = logccdf(dist, y) + logpdf(OrderStatistic(dist, 2, 2), y)
-        probs = [prob1,prob2,prob3]
-    end
-    return argmax(probs .+ rand(Gumbel(0,1),3))
-end
-
-function categorical2(y,dist)
-    if (y > mean(dist) && pdf(dist,y) < 1e-10) || (y < mean(dist) && pdf(dist,y) < 1e-50)
-        probs = numericalProbs(y,2,3,dist,0,1,0)
-        # println("using numprobs2")
-    else
-        prob1 = cdf(dist, y-1)*ccdf(dist, y-1)
-        prob2 = pdf(dist,y)
-        prob3 = ccdf(dist, y)*cdf(dist,y)  
-        probs = [prob1,prob2,prob3]
-    end
-    #println(probs/sum(probs))
-    probs = probs/sum(probs)
-    for i in 1:3
-        if probs[i] < 1e-10
-            probs[i] = 0
-        end
-    end
-    return rand(Categorical(probs/sum(probs)))
-end
-
-#I should break down probability of each event
-#to try to see a pattern
-
-function sampleSumGivenMedian3(Y,dist)
-    #draw c
-    #do a numeric test
-    c = categorical1(Y,dist)
-    if c == 1 #Z1 < Y
-        result = safeTrunc(dist, 0, Y - 1)[1] + sampleSumGivenMin(Y,2,dist)
-    elseif c == 3 #Z1 > Y 
-        result = safeTrunc(dist, Y+1, Inf)[1] + sampleSumGivenMax(Y,2,dist)
-    else #Z1 == Y
-        #draw new c 
-        #do a numeric test
-        c = categorical2(Y,dist)
-        if c == 1
-            result = Y + safeTrunc(dist, 0, Y - 1)[1] + safeTrunc(dist, Y, Inf)[1]
-        elseif c == 3
-            result = Y + safeTrunc(dist, Y+1, Inf)[1] + safeTrunc(dist, 0, Y)[1]
-        else #Z1 and Z2 = Y
-            result = 2*Y + rand(dist)
-        end
-    end
-    return result
-end
-
-function numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
-    D = D - numY - numUnder - numOver
-    j = j - numUnder
-    #println("ahh")
-    if numY == 0
-        #println("nope")
-        if Y > mean(dist)
-            probUnder = (j-1)/D
-            return [probUnder, (1-probUnder),0]
-        else
-            probOver = (D-j+numY)/D
-            return [0, (1-probOver),probOver]
-        end
-    else
-        #println("yep")
-        if Y > mean(dist) 
-            truncProb = pdf(Truncated(dist, Y, Inf), Y)
-            if isnan(truncProb)
-                truncProb = 1
-            end
-            probUnder = (j-1)/D
-            return [probUnder, (1-probUnder)*truncProb,(1-probUnder)*(1-truncProb)]
-        else #Y <= mean(dist)
-            truncProb = pdf(Truncated(dist, 0, Y), Y)
-            if isnan(truncProb)
-                truncProb = 1
-            end
-            probOver = (D-j+numY)/D
-            return [(1-probOver)*(1-truncProb), (1-probOver)*truncProb,probOver]
-        end
     end
 end
 
