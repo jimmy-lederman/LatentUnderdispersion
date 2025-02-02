@@ -99,7 +99,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     Beta_NQ = copy(state["Beta_NQ"])
     Tau_QM = copy(state["Tau_QM"])
     #p_NM = state["p_NM"]
-    p_NM = Beta_NQ * Tau_QM
+    p_NM = logistic.(Beta_NQ * Tau_QM)
 
     Z1_NM = zeros(Int, model.N, model.M)
     Z2_NM = zeros(Int, model.N, model.M)
