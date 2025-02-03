@@ -44,11 +44,8 @@ end
 function evalulateLogLikelihood(model::genes, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
     r = sum(state["U_NK"][row,:] .* state["V_KM"][:,col])
-    if !isnothing(state["p_NM"])
-        p = state["p_NM"][row,col]
-    else
-        p = logistic(sum(state["Beta_NQ"][row,:] .* state["Tau_QM"][:,col]))
-    end
+    p = logistic(sum(state["Beta_NQ"][row,:] .* state["Tau_QM"][:,col]))
+
     if model.D == 1
         return logpdf(NegativeBinomial(r,p), Y)
     else
