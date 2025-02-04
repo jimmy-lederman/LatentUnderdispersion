@@ -31,9 +31,9 @@ function forward_sample(model::OrderStatisticPoissonUnivariate; state=nothing, i
     mu = state["mu"]
     @assert model.M == 1
 
-    Y_ND = rand(Poisson(mu), model.N, model.D)
-    Z_N = sum(Y_ND,dims=2)
-    Y_NM = reshape(sort(Y_ND,dims=2)[:,model.j],model.N,1)
+    Y_NM = rand(OrderStatistic(Poisson(mu), model.D, model.j),model.N,model.M)
+    #Z_N = sum(Y_ND,dims=2)
+    #Y_NM = reshape(sort(Y_ND,dims=2)[:,model.j],model.N,1)
 
     #Y_NM = rand(OrderStatistic(Poisson(mu), model.D, div(model.D,2) + 1), model.N, model.M)
     data = Dict("Y_NM" => copy(Y_NM))

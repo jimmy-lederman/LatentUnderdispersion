@@ -74,9 +74,17 @@ function sample_likelihood(model::flights, mu,p=nothing,n=1)
         dist = model.dist(mu,1-p)
     end
     if model.D == 1
-        return rand(dist,n)
+        if n == 1
+            return rand(dist)
+        else
+            return rand(dist,n)
+        end
     else
-        return rand(OrderStatistic(dist, model.D, model.j),n)
+        if n == 1
+            return rand(OrderStatistic(dist, model.D, model.j))
+        else
+            return rand(OrderStatistic(dist, model.D, model.j),n)
+        end
     end
 end
 

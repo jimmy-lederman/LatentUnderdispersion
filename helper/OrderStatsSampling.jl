@@ -1,5 +1,6 @@
 using Distributions
 using LogExpFunctions
+# include("PoissonMedianFunctions.jl")
 
 function safeTrunc(dist, lower, upper; n=1)
     try
@@ -93,9 +94,7 @@ function sampleSumGivenMax(Y,D,dist)
     if Y == 0
         return 0
     end
-    #index = sampleIndex(Y,D,dist,1)
-    #@assert 1 == 2
-    index = 1
+    index = sampleIndex(Y,D,dist,1)
     sample1 = safeTrunc(dist, 0, Y - 1, n=index - 1)
     sample2 = safeTrunc(dist, 0, Y, n=D - index)
     return sum(sample1) + Y + sum(sample2)
@@ -169,7 +168,7 @@ function logcategorical1(y,dist)
         prob2 = logsumexp(log(2) + logcdf(dist,y-1) + logccdf(dist,y), logpdf(dist,y) + logsubexp(log(2),logpdf(dist,y))) + logpdf(dist,y)
         prob3 = logccdf(dist, y) + logpdf(OrderStatistic(dist, 2, 2), y)
         probs = [prob1,prob2,prob3]
-        println(exp.(probs)./sum(exp.(probs)))
+        #println(exp.(probs)./sum(exp.(probs)))
         return argmax(probs .+ rand(Gumbel(0,1),3))
     end
 end
@@ -188,7 +187,7 @@ function logcategorical2(y,dist)
         prob2 = logpdf(dist,y)
         prob3 = logccdf(dist, y) + logcdf(dist,y)  
         probs = [prob1,prob2,prob3]
-        println(exp.(probs)./sum(exp.(probs)))
+        #println(exp.(probs)./sum(exp.(probs)))
         return argmax(probs .+ rand(Gumbel(0,1),3))
     end
 end
@@ -230,6 +229,111 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     elseif D == 3 && j == 2
         return sampleSumGivenMedian3(Y,dist)
     else
-        throw("unimplemented")
+        #@assert 1 == 2
+        return sampleSumGivenOrderStatisticAll(Y,D,j,dist)
     end
+end
+
+function poisson_cdf_precise(Y,mu;precision=64)
+    setprecision(BigFloat,precision)
+    mu = big(mu)
+    Y = big(Y)
+    result = gamma_inc(Y+1,mu)[2]
+    if result == 0 || result == 1
+        return poisson_cdf_precise(Y,mu,precision=5*precision)
+    else
+        return result
+    end
+end
+
+function jointY(Y,j,D,dist,numY)
+    #println("D: ", D, " j: ", j, " numY: ", numY)
+    #@assert D > 1
+    @assert D >= 1
+    @assert j >= 1
+    @assert numY <= D
+    if numY == 0
+        return pdf(OrderStatistic(dist, D, j), Y)
+    end
+    if numY == D
+        return pdf(dist,Y)^D
+    end
+    if j == 1 #min case
+        #println("min: ", pdf(dist, Y)^(numY)*ccdf(dist,Y-1)^(D-1))
+        return pdf(dist, Y)^(numY)*ccdf(dist,Y-1)^(D-numY)
+    elseif D == j #max case
+        #println("max: ", pdf(dist, Y)^(numY)*cdf(dist,Y)^(D-1))
+        return pdf(dist, Y)^(numY)*cdf(dist,Y)^(D-numY)
+        
+    elseif numY == max(j,D-j+1) #remaining can be any case
+        #println("Ytie: ", pdf(dist,Y)^(numY))
+        return pdf(dist,Y)^(numY) #not sure of the exponent here, but think numY
+    end
+    return cdf(dist,Y-1)*jointY(Y,j-1,D-1,dist,numY) + ccdf(dist,Y)*jointY(Y,j,D-1,dist,numY) + jointY(Y,j,D,dist,numY+1)
+end
+
+function probVec(Y,j,D,dist,numUnder,numY,numOver)
+    if pdf(dist,Y) < 10e-10
+        #println("numerical: ", Y, " ", dist)
+        return numericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    end
+    conditionD = D - numUnder - numOver
+    conditionj = j - numUnder
+    if conditionD == 1
+        return [0,1,0]
+    end
+    #jointYdenom = jointY(Y,conditionj,conditionD,dist,numY)
+    if numUnder < j - 1
+        jointYless = jointY(Y,conditionj-1,conditionD-1,dist,numY)
+    else
+        jointYless = 0
+    end
+    if numOver < D - j 
+        jointYmore = jointY(Y,conditionj,conditionD-1,dist,numY)
+    else
+        jointYmore = 0
+    end
+    jointequal = jointY(Y,conditionj,conditionD,dist,numY+1)
+    probless = cdf(dist,Y-1)*jointYless#/jointYdenom
+    probmore = ccdf(dist,Y)*jointYmore#/jointYdenom
+    probequal = jointequal#/jointYdenom
+    probs = [probless,probequal,probmore]
+    return probs/sum(probs)
+end
+
+function sampleSumGivenOrderStatisticAll(Y,D,j,dist)
+    numY = 0
+    numUnder = 0
+    numOver = 0
+    total = 0
+    effectiveD = 0
+    effectivej = 0
+    for i in 1:D
+        if i > 1
+            if numY == 0 && effectiveD == effectivej
+                return total + sampleSumGivenMax(Y,effectiveD,dist)
+            elseif numY == 0 && effectivej == 1
+                return total + sampleSumGivenMin(Y,effectiveD,dist)
+            #end
+            elseif numY == max(j,D-j+1)
+                return total + sum(rand(dist, D-i+1))
+            end
+        end
+        probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
+        #println(probs)
+        c = rand(Categorical(probs))
+        if c == 1
+            numUnder += 1
+            total += safeTrunc(dist, 0, Y-1)[1]
+        elseif c == 2
+            numY += 1
+            total += Y
+        else #c == 3
+            numOver += 1
+            total += safeTrunc(dist, Y + 1, Inf)[1]
+        end
+        effectiveD = D - numUnder - numOver - numY
+        effectivej = j - numUnder
+    end
+    return total
 end

@@ -69,24 +69,23 @@ function probVec(Y,j,D,dist,numUnder,numY,numOver)
     return probs/sum(probs)
 end
 
-function sampleSumGivenOrderStatistic(Y,D,j,dist)
-    @assert D >= j
-    #special edge cases for efficiency
-    if D == 1
-        return Y
-    elseif j == 1
-        return sampleSumGivenMin(Y,D,dist)
-    elseif j == D 
-        return sampleSumGivenMax(Y,D,dist)
-    elseif D == 3 && j == 2
-        return sampleSumGivenMedian3(Y,dist)
-    end
-    @assert 1 == 2
+function sampleSumGivenOrderStatisticAll(Y,D,j,dist)
     numY = 0
     numUnder = 0
     numOver = 0
     total = 0
-    for i in 1:D 
+    effectiveD = 0
+    effectivej = 0
+    for i in 1:D
+        if i > 1
+            if numY == 0 && effectiveD == effectivej
+                return total + sampleSumGivenMax(Y,effectiveD,effectivej)
+            elseif numY == 0 && effectivej == 1
+                return total + sampleSumGivenMin(Y,effectiveD,effectivej)
+            elseif numY == max(j,D-j+1)
+                return total + rand(dist, D-i+1)
+            end
+        end
         probs = probVec(Y,j,D,dist,numUnder,numY,numOver)
         #println(probs)
         c = rand(Categorical(probs))
@@ -100,6 +99,8 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
             numOver += 1
             total += safeTrunc(dist, Y + 1, Inf)[1]
         end
+        effectiveD = D - numUnder - numOver - numY
+        effectivej = D - numUnder
     end
     return total
 end

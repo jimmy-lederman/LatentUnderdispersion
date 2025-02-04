@@ -1,4 +1,6 @@
-
+using SpecialFunctions
+using LogExpFunctions
+using Distributions
 #code to compute MaxPoisson logpmf
 
 function logprob(s,z,D)
@@ -65,8 +67,11 @@ function logprobMedian(Y,mu;precision=64)
 end
 
 function logpmfOrderStatPoisson(Y,mu,D,j)
+    llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
     try
+        
         llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
+        println("llik: ", llik)
         # if isinf(llik) || isnan(llik)
         #     llik = logprob(Y,mu,D)
         # end
@@ -77,6 +82,7 @@ function logpmfOrderStatPoisson(Y,mu,D,j)
         return llik
         
     catch ex
+        
         @assert D == 3 && j == 2
         #println("second")
         llik = logprobMedian(Y,mu)
