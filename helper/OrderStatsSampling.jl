@@ -391,7 +391,7 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
                 logtruncProb = 0
             end
             probOver = (D-j+numY)/D
-            return [log(1-probOver)+ log1mexp(1-logtruncProb), log(1-probOver) + logtruncProb,log(probOver)]
+            return [log(1-probOver)+ log1mexp(logtruncProb), log(1-probOver) + logtruncProb,log(probOver)]
         end
     end
 end
