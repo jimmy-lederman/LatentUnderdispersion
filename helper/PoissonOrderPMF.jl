@@ -42,11 +42,11 @@ function logpmfMaxPoisson(Y,mu,D)
         #     llik = logprob(Y,mu,D)
         # end
         if isinf(llik) || isnan(llik)
-            llik = logprobsymbolic(Y,mu,D)
+            llik = logprobMax(Y,mu,D)
         end
         return llik
     catch ex
-        llik = logprobsymbolic(Y,mu,D)
+        llik = logprobMax(Y,mu,D)
         return llik
     end
 end
