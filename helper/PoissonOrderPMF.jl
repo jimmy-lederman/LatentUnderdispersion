@@ -64,6 +64,7 @@ function logprobMax(Y,mu,D;precision=64)
     else
         return Float64(result)
     end
+end
 
 function logprobMedian(Y,mu;precision=64)
     #must set precision
