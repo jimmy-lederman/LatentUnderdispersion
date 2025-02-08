@@ -51,6 +51,20 @@ function logpmfMaxPoisson(Y,mu,D)
     end
 end
 
+function logprobMax(Y,mu,D;precision=64)
+     #must set precision
+     setprecision(BigFloat,precision)
+     mu = big(mu)
+     Y = big(Y)
+     firstgammas = gamma_inc(Y+1,mu)
+     secondgammas = gamma_inc(Y,mu)
+     result = logsubexp(D*log(firstgammas[2]), D*log(secondgammas[2]))
+     if isinf(result) || isnan(result)
+        return logprobMax(Y,mu,D,precision=5*precision)
+    else
+        return Float64(result)
+    end
+
 function logprobMedian(Y,mu;precision=64)
     #must set precision
     setprecision(BigFloat,precision)
