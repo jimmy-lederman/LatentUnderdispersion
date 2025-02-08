@@ -9,7 +9,7 @@ date: "2024-08-27"
 #simulate data from various negative binomial distributions
 B <- 1000
 plist <- c(.1,.5,.9)
-mu <- 10
+mu <- 50
 numDatasets <- 5
 mat <- matrix(0, nrow=B+2,ncol=length(plist)*numDatasets)
 count <- 1
@@ -41,8 +41,8 @@ dgamma_count <- function(k,alpha,beta){
 ```{r}
 plist <- c(.1,.5,.9)
 begin = 0
-end = 50
-mu <- 10
+end = 100
+mu <- 50
 count <- 1
 mat <- matrix(0,nrow=length(plist),ncol=length(begin:end))
 for(p in plist){
