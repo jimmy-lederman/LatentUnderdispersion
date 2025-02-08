@@ -361,7 +361,7 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
         #println("nope")
         if Y > mean(dist)
             probUnder = (j-1)/D
-            return [log(probUnder), log(1-probUnder),0]
+            return [log(probUnder), log(1-probUnder),-Inf]
         else
             probOver = (D-j+numY)/D
             return [-Inf, log(1-probOver),log(probOver)]
@@ -375,9 +375,10 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
             catch ex
                 logtruncProb = 0
             end
-            if isnan(truncProb) || isinf(truncProb)
+            if isnan(logtruncProb) || logtruncProb > 0 
                 logtruncProb = 0
             end
+
             probUnder = (j-1)/D
             return [log(probUnder), log(1-probUnder) + logtruncProb,log(1-probUnder) + log1mexp(logtruncProb)]
         else #Y <= mean(dist)
@@ -387,7 +388,7 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
             catch ex
                 logtruncProb = 0
             end
-            if isnan(logtruncProb) || isinf(logtruncProb)
+            if isnan(logtruncProb) || logtruncProb > 0 
                 logtruncProb = 0
             end
             probOver = (D-j+numY)/D
