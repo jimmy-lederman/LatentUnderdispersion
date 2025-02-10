@@ -85,7 +85,7 @@ function logprobOrderStatisticPoisson(Y,mu,D,j;precision=64)
     end
     result = logsubexp(j*log(firstgammas[2]) + cdf1, j*log(secondgammas[2]) + cdf2)
     if isinf(result) || isnan(result)
-        return logprobOrderStatistic(Y,mu,D,j,precision=5*precision)
+        return logprobOrderStatisticPoisson(Y,mu,D,j,precision=5*precision)
     else
         return Float64(result)
     end
