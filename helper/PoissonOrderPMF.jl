@@ -1,15 +1,7 @@
 using SpecialFunctions
 using LogExpFunctions
 using Distributions
-#code to compute MaxPoisson logpmf
-
-function logprob(s,z,D)
-    if s != 0
-        return logsubexp(D*logcdf(Poisson(z),s),D*logcdf(Poisson(z),s-1))
-    else
-        return D*logcdf(Poisson(z),s)
-    end
-end
+#code to compute PMF for Poisson Order Statistic logpmf
 
 # function logprobsymbolic(s,z,D)
 #     s1, z1 = sympy.symbols("s1 z1")
@@ -36,19 +28,11 @@ end
 # end
 
 function logpmfMaxPoisson(Y,mu,D)
-    #try
     llik = logpdf(OrderStatistic(Poisson(mu), D, D), Y)
-        # if isinf(llik) || isnan(llik)
-        #     llik = logprob(Y,mu,D)
-        # end
     if isinf(llik) || isnan(llik)
          llik = logprobMax(Y,mu,D)
     end
     return llik
-    #catch ex
-        #llik = logprobMax(Y,mu,D)
-        #return llik
-   # end
 end
 
 function logprobMax(Y,mu,D;precision=64)
@@ -66,7 +50,7 @@ function logprobMax(Y,mu,D;precision=64)
     end
 end
 
-function logprobMedian(Y,mu;precision=64)
+function logprobMedian3(Y,mu;precision=1000)
     #must set precision
     setprecision(BigFloat,precision)
     mu = big(mu)
@@ -81,27 +65,36 @@ function logprobMedian(Y,mu;precision=64)
     end
 end
 
+function logprobOrderStatisticPoisson(Y,mu,D,j;precision=64)
+    #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
+    #must set precision
+    setprecision(BigFloat,precision)
+    mu = big(mu)
+    Y = big(Y)
+    firstgammas = gamma_inc(Y+1,mu)
+    secondgammas =gamma_inc(Y,mu)
+
+    cdf1 = 0 #first term is log(choose(j-1,j-1))
+    cdf2 = 0
+    for i in 1:(D-j)
+        part1 = logabsbinomial(j+i-1,j-1)[1] + i*log(firstgammas[1])
+        part2 = logabsbinomial(j+i-1,j-1)[1] + i*log(secondgammas[1])
+        #result = logsumexp(result, logsubexp(part1,part2))
+        cdf1 = logsumexp(cdf1, part1)
+        cdf2 = logsumexp(cdf2, part2)
+    end
+    result = logsubexp(j*log(firstgammas[2]) + cdf1, j*log(secondgammas[2]) + cdf2)
+    if isinf(result) || isnan(result)
+        return logprobOrderStatistic(Y,mu,D,j,precision=5*precision)
+    else
+        return Float64(result)
+    end
+end
+
 function logpmfOrderStatPoisson(Y,mu,D,j)
     llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
-    try
-        
-        llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
-        println("llik: ", llik)
-        # if isinf(llik) || isnan(llik)
-        #     llik = logprob(Y,mu,D)
-        # end
-        if isinf(llik) || isnan(llik)
-            @assert D == 3 && j == 2
-            llik = logprobMedian(Y,mu)
-        end
-        return llik
-        
-    catch ex
-        
-        @assert D == 3 && j == 2
-        #println("second")
-        llik = logprobMedian(Y,mu)
-     
-        return llik
+    if isinf(llik) || isnan(llik)
+        llik = logprobOrderStatisticPoisson(Y,mu,D,j)
     end
+    return llik
 end
