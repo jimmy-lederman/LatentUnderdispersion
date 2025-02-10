@@ -77,8 +77,9 @@ ggplot() +
   geom_point(data = df_all, aes(x = df_all$mu, y = value, color = D)) +
   labs(y = "Fano Factor", x = expression(mu)) +
   facet_grid(~plot,scales="free_x") +
-  geom_hline(yintercept = (pi-1)/pi,
-             linetype = "dashed", color = "black") + theme_bw() + theme(strip.text = element_blank()) 
+  geom_hline(yintercept = (pi-1)/pi, linetype = "dashed", color = "black") +
+  geom_hline(yintercept = 1 - (9-(2*sqrt(3)))/(4*pi), linetype = "dashed", color = "black") +
+  theme_bw() + theme(strip.text = element_blank()) 
 #ggsave("fanoplot.png", plot = p, width = 10, height = 6, units = "in")
 ```
 
@@ -197,78 +198,8 @@ for(mu in muvec){
 
 ```
 
-```{r}
-library(tidyverse)
-ggplot() + 
-  geom_point(data = df, aes(x = muvec_other, y = value, color = D)) +
-  labs(y = "Fano Factor", x = "mu") +
-  geom_hline(yintercept = (pi-1)/pi,
-             linetype = "dashed", color = "red") #+
-  # geom_hline(yintercept = var(rmaxnorm(100000,5,mean=0,sd=1)),
-  #            linetype = "dashed", color = "red") +
-  # geom_hline(yintercept = var(rmaxnorm(100000,10,mean=0,sd=1)),
-  #            linetype = "dashed", color = "red") +
-  # geom_hline(yintercept = var(rmaxnorm(100000,20,mean=0,sd=1)),
-  #            linetype = "dashed", color = "red") +
-  # geom_hline(yintercept = var(rmaxnorm(100000,50,mean=0,sd=1)),
-  #            linetype = "dashed", color = "red") +
-  # geom_hline(yintercept = var(rmaxnorm(100000,100,mean=0,sd=1)),
-  #            linetype = "dashed", color = "red")
-```
 
 
-```{r}
-rmaxnorm <- function(N,D,mean,sd){
-  x <- c()
-  for(i in 1:N){
-    x <- c(x, max(rnorm(n=D,mean=mean,sd=sd)))
-  }
- return(x)
-}
-```
-
-
-```{r}
-mu <- 100
-x <- rmaxnorm(100000,10,mean=0,sd=1)
-mean <- mu + sqrt(mu)*mean(x) + 1/6*(mean(x^2)-1)
-var <- mu*var(x) + 1/3*sqrt(mu)*cov(x,x^2)
-var/mean
-```
-
-```{r}
-(pi-1)/pi
-var(x)
-```
-
-```{r}
-rmaxpois <- function(N,D,mu){
-  x <- c()
-  for(i in 1:N){
-    x <- c(x, max(rpois(n=D,lambda=mu)))
-  }
- return(x)
-}
-```
-
-```{r}
-mu = .01
-x = rmaxpois(100000,1,mu)
-var(x)
-x = rmaxpois(100000,2,mu)
-var(x)
-x = rmaxpois(100000,3,mu)
-var(x)
-x = rmaxpois(100000,4,mu)
-var(x)
-x = rmaxpois(100000,5,mu)
-var(x)
-```
-```{r}
-mu <- 0.01
-mu + mu*(besselI(2*mu, 0, expon.scaled = TRUE)
-          + besselI(2*mu, 1, expon.scaled = TRUE))
-```
 
 
 

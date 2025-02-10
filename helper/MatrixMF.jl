@@ -220,6 +220,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                     if verbose next!(prog) end
                 end
             end
+            #if row % 1000 == 0 println(row) end
         end
     else #sparse
         @views for ind in axes(Ysparse, 1)

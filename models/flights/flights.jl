@@ -49,12 +49,8 @@ function evalulateLogLikelihood(model::flights, state, data, info, row, col)
         if model.D == 1
             return logpdf(model.dist(mu), Y)
         else
-            try
-                return logpdf(OrderStatistic(mode.dist(mu), model.D, model.j), Y)
-            catch ex #this needs to be updated with the non symbolic version
-                @assert model.D == model.j
-                return logpmfMaxPoisson(Y,mu,model.D)
-            end
+            @assert model.D == model.j
+            return logpmfMaxPoisson(Y,mu,model.D)
         end
     else
         p = state["p"]
