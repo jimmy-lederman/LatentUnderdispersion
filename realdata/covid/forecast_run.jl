@@ -33,24 +33,22 @@ j = parse(Int, ARGS[4])
 K = parse(Int, ARGS[5])
 
 #make mask (forecast)
-middlestart = 150
-middlelength = 10
 endlength = 10
 county_pct = .2
-function make_forecasting_mask(middlestart,middlelength,endlength,county_pct,seed,N,M)
+function make_forecasting_mask(endlength,county_pct,seed,N,M)
     Random.seed!(seed)
     missing_counties = rand(N) .< county_pct
 
     mask_NM = zeros(N, M)
-    for i in 0:(middlelength-1)
-        mask_NM[:,middlestart + i] = missing_counties
-    end
+    # for i in 0:(middlelength-1)
+    #     mask_NM[:,middlestart + i] = missing_counties
+    # end
     for i in (M-endlength+1):M
         mask_NM[:,i] = missing_counties
     end
     return BitArray(mask_NM .!= 0)
 end
-mask_NM = make_forecasting_mask(middlestart,middlelength,endlength,county_pct,maskSeed,N,M)
+mask_NM = make_forecasting_mask(endlength,county_pct,maskSeed,N,M)
 
 
 # cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/CTFL.csv",DataFrame))
