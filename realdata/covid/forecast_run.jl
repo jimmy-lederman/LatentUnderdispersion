@@ -81,5 +81,5 @@ model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
 results = [K,D,j,maskSeed,chainSeed]
 
 samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medianD3/usa/forecast_samples/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medians/heldout_samples/"
 save(folder*"/sample_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)j$(j)K$(K).jld", "results", results, "samples", samples, "mask", mask_NM)
