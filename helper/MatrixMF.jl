@@ -51,7 +51,6 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     end
     println("start")
     for s in 1:S
-        
         if s == 1 || s == 2
             println(state)
         end
@@ -61,6 +60,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
                 anneal += 1
                 println(anneal, " ", s)
             end
+            @assert anneal <= model.D
             if s < nburnin/4 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
             else

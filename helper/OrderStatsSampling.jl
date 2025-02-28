@@ -192,7 +192,7 @@ function sampleFirstKGivenOrderStatistic2(Y,D,j,dist,K)
             r_loweq = K - k + 1
             break
         elseif r_equal >= j - r_lower && r_equal >= D - r_highr - j + 1
-            r_any = D - k + 1
+            r_any = K - k + 1
             break
         end
         logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)

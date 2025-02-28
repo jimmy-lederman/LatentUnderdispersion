@@ -66,7 +66,12 @@ end
 
 function sample_likelihood(model::genes, mu,p=nothing)
     if model.D == 1
-        return rand(NegativeBinomial(mu,p))
+        try
+            return rand(NegativeBinomial(mu,p))
+        catch ex 
+            println(mu, " ", p)
+            throw(ErrorException("could not sample D=1 lik"))
+        end
     else
         return rand(OrderStatistic(NegativeBinomial(mu,p), model.D, model.D))
     end
@@ -100,6 +105,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     Tau_QM = copy(state["Tau_QM"])
     #p_NM = state["p_NM"]
     p_NM = logistic.(Beta_NQ * Tau_QM)
+    @assert sum(p_NM .> 1) .== 0
 
     Z1_NM = zeros(Int, model.N, model.M)
     Z2_NM = zeros(Int, model.N, model.M)

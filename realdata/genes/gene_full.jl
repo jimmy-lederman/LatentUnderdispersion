@@ -31,27 +31,28 @@ K = parse(Int, ARGS[3])
 Q = parse(Int, ARGS[4])
 nburnin = parse(Int, ARGS[5])
 
-file_path = "/home/jlederman/DiscreteOrderStatistics/data/cancer.csv"
+file_path = "/home/jlederman/DiscreteOrderStatistics/data/cancer_small.csv"
 df = CSV.read(file_path, DataFrame)
-df = select(df, Not(1))
-Y_NM = transpose(Matrix(df));
+# df = select(df, Not(1))
+# Y_NM = transpose(Matrix(df));
+Y_NM = Matrix(df)
 N = size(Y_NM, 1)
 M = size(Y_NM, 2)
 
-seed = 101
-Random.seed!(seed)
-nlil = 3000
-random_indices = randperm(N)[1:nlil]  # Generate random indices
-Y_NMsmall = Y_NM[random_indices,:]
-N = nlil
+# seed = 101
+# Random.seed!(seed)
+# nlil = 3000
+# random_indices = randperm(N)[1:nlil]  # Generate random indices
+# Y_NMsmall = Y_NM[random_indices,:]
+# N = nlil
 
 #Random.seed!(maskSeed)
 #mask_NM = rand(N, M) .< .025
 mask_NM = zeros(N,M)
 
-Ysparse, _ = sparsify_format_mask(Y_NMsmall, mask_NM)
+Ysparse, _ = sparsify_format_mask(Y_NM, mask_NM)
 
-data = Dict("Y_NM"=>Y_NMsmall, "Ysparse"=>Ysparse)
+data = Dict("Y_NM"=>Y_NM, "Ysparse"=>Ysparse)
 
 a = 1
 b = 1
@@ -63,5 +64,5 @@ model = genes(N,M,K,Q,a,b,c,d,D)
 @time samples = fit(model, data, nsamples = 1, nburnin=nburnin, nthin=1, initseed = chainSeed)
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 results = [K,Q,D,chainSeed,nburnin]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples_subset/"
 save(folder*"/sample_seed2_$(chainSeed)D$(D)K$(K)Q$(Q)Burnin$(nburnin).jld", "results", results, "samples", samples)
