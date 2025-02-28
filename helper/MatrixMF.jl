@@ -16,7 +16,7 @@ end
 
 abstract type MatrixMF end
 
-function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing)
+function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing)
     #some checks
     # Y_NM = data["Y_NM"]
     # @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
@@ -36,8 +36,13 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
             for (var, value) in constantinit
                 state[var] = value
             end
-            
+            println(state)
         end
+    end
+    if !isnothing(annealStrat)
+        anneal = 1
+    else
+        anneal = nothing 
     end
     
     S = nburnin + nthin*nsamples
@@ -46,13 +51,27 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     end
     println("start")
     for s in 1:S
-        # if s > 2500
-        #     println(s)
-        # end
-        if s < nburnin/2 && !isnothing(skipupdate)
-            ~, state = backward_sample(model, data, state, mask, skipupdate)
+        
+        if s == 1 || s == 2
+            println(state)
+        end
+        
+        if s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
+            if s > nburnin/4 + anneal*(3*nburnin/4)/(model.D)
+                anneal += 1
+                println(anneal, " ", s)
+            end
+            if s < nburnin/4 && griddy
+                ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
+            else
+                ~, state = backward_sample(model, data, state, mask, griddy=false,annealStrat=annealStrat,anneal=anneal)
+            end
         else
-            ~, state = backward_sample(model, data, state, mask)
+            if s < nburnin/4 && griddy
+                ~, state = backward_sample(model, data, state, mask, griddy=true)
+            else
+                ~, state = backward_sample(model, data, state, mask, griddy=false)
+            end
         end
         if s > nburnin && mod(s,nthin) == 0
             push!(samplelist, state)

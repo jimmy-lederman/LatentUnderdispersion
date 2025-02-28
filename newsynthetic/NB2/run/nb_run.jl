@@ -13,6 +13,22 @@ datasetnum = parse(Int, ARGS[1]) #datset to do experiment on
 dist = parse(Int, ARGS[2])
 type = parse(Int, ARGS[3])
 D = parse(Int, ARGS[4])
+if length(ARGS) > 4
+    griddy = parse(Int, ARGS[5])
+    annealstrat = parse(Int, ARGS[6])
+else
+    griddy = false
+    annealstrat = nothing
+end
+if griddy == 1
+    griddy = true
+else
+    griddy = false
+end
+if annealstrat == 0
+    annealstrat = nothing
+end
+
 
 #get data
 data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/newsynthetic/NB2/data/NBdata.csv", DataFrame)
@@ -68,7 +84,7 @@ elseif dist == 2
             model = OrderStatisticNegBinUnivariate(N, M, a, b, alpha, beta, D, D)
         end
     end
-    samples = fit(model, data, nsamples = 1000, nburnin=10000, nthin=10, constantinit=Dict("mu"=>100,"p"=>.5))
+    samples = fit(model, data, nsamples = 1000, nburnin=10000, nthin=10, constantinit=Dict("mu"=>100,"p"=>.5),annealstrat=annealstrat,griddy=griddy)
 end
 
 outfile = folder * "samples_Dist$(dist)Type$(type)D$(D)NU$(nu)Seed$(seed).jld"

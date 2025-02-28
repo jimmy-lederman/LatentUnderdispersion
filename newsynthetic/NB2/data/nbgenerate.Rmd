@@ -7,7 +7,7 @@ date: "2024-08-27"
 
 ```{r}
 #simulate data from various negative binomial distributions
-B <- 1000
+B <- 50000
 plist <- c(.1,.5,.9)
 mu <- 50
 numDatasets <- 5
@@ -19,9 +19,10 @@ for(i in 1:length(plist)){
     set.seed(j)
     p <- plist[i]
     r <- mu*p/(1-p)
+    print(r)
     x <- rnbinom(B, r,p)
     
-    print(var(x)/mean(x))
+    #print(var(x)/mean(x))
     mat[,count] <- c(p, j, x)
     count <- count + 1
   }
