@@ -61,13 +61,13 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
                 println(anneal, " ", s)
             end
             @assert anneal <= model.D
-            if s < nburnin/4 && griddy
+            if s < nburnin/2 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
             else
                 ~, state = backward_sample(model, data, state, mask, griddy=false,annealStrat=annealStrat,anneal=anneal)
             end
         else
-            if s < nburnin/4 && griddy
+            if s < nburnin/2 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=true)
             else
                 ~, state = backward_sample(model, data, state, mask, griddy=false)

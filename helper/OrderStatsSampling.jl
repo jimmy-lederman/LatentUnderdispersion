@@ -34,9 +34,17 @@ function safeTrunc2(dist, lower, upper; n=1)
 end
 
 
-function sampleSumGivenOrderStatistic2(Y,D,j,dist)
+function sampleSumGivenOrderStatistic(Y,D,j,dist)
     if D == 1
         return Y 
+    end
+    if Y == 0
+        if D == j 
+            return 0
+        end
+        # else
+        #     start = j 
+        # end
     end
     @assert D >= j
     r_lower = 0
@@ -237,9 +245,6 @@ function logprobY2(Y,D,j,dist,numY)
 end
 
 function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
-    if pdf(dist,Y) < 1e-15
-        return lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
-    end
     conditionD = D - numUnder - numOver
     conditionj = j - numUnder
     if conditionD == 1
@@ -255,12 +260,14 @@ function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
     else
         jointYmore = -Inf
     end
-    
     logprobequal = logprobY2(Y,conditionD,conditionj,dist,numY+1)
     logprobless = logcdf(dist,Y-1) + jointYless#/jointYdenom
     logprobmore = logccdf(dist,Y) + jointYmore#/jointYdenom
     
     logprobs = [logprobless,logprobequal,logprobmore]
+    if sum(isinf.(logprobs)) ==  3
+        logprobs = lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    end
     #println(logprobs)
     @assert sum(isinf.(logprobs)) <  3
     # println(logprobY2(Y,1,1,dist,1))

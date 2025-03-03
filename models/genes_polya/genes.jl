@@ -17,6 +17,7 @@ struct genes <: MatrixMF
     c::Float64
     d::Float64
     D::Int64
+    j::Int64
 end
 
 function sampleCRT(Y,R)
@@ -48,8 +49,10 @@ function evalulateLogLikelihood(model::genes, state, data, info, row, col)
 
     if model.D == 1
         return logpdf(NegativeBinomial(r,p), Y)
-    else
+    elseif model.D == model.j
         return logpmfMaxNegBin(Y, r, p, model.D)
+    else
+        throw(ErrorException("NB median pmf unimplemented"))
     end
 end
 
@@ -73,7 +76,7 @@ function sample_likelihood(model::genes, mu,p=nothing)
             throw(ErrorException("could not sample D=1 lik"))
         end
     else
-        return rand(OrderStatistic(NegativeBinomial(mu,p), model.D, model.D))
+        return rand(OrderStatistic(NegativeBinomial(mu,p), model.D, model.j))
     end
 end
 
@@ -131,7 +134,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
             end
         end
         if Y_NM[n, m] > 0 
-            Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.D, NegativeBinomial(mu,p))
+            Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
             Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], model.D*mu)
             P_K = U_NK[n, :] .* V_KM[:, m]
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
