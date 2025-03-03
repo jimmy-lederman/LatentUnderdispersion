@@ -30,6 +30,7 @@ D = parse(Int, ARGS[2])
 K = parse(Int, ARGS[3])
 Q = parse(Int, ARGS[4])
 nburnin = parse(Int, ARGS[5])
+j = parse(Int, ARGS[6])
 
 file_path = "/home/jlederman/DiscreteOrderStatistics/data/cancer_small.csv"
 df = CSV.read(file_path, DataFrame)
@@ -58,11 +59,11 @@ a = 1
 b = 1
 c = 1
 d = 1
-model = genes(N,M,K,Q,a,b,c,d,D)
+model = genes(N,M,K,Q,a,b,c,d,D,j)
 
 
-@time samples = fit(model, data, nsamples = 1, nburnin=nburnin, nthin=1, initseed = chainSeed)
+@time samples = fit(model, data, nsamples = 200, nburnin=nburnin, nthin=10, initseed = chainSeed)
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 results = [K,Q,D,chainSeed,nburnin]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples_subset/"
-save(folder*"/sample_seed2_$(chainSeed)D$(D)K$(K)Q$(Q)Burnin$(nburnin).jld", "results", results, "samples", samples)
+save(folder*"/sample_seed2_$(chainSeed)D$(D)j$(j)K$(K)Q$(Q)Burnin$(nburnin).jld", "results", results, "samples", samples)

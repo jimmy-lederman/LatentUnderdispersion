@@ -133,12 +133,12 @@ function backward_sample(model::genes, data, state, mask=nothing)
                 Y_NM[n,m] = sample_likelihood(model, mu, p) 
             end
         end
-        if Y_NM[n, m] > 0 
+        #if Y_NM[n, m] > 0 
             Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
             Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], model.D*mu)
             P_K = U_NK[n, :] .* V_KM[:, m]
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
-        end
+        #end
     end
     
     #Polya-gamma augmentation to update p

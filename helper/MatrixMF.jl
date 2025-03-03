@@ -36,7 +36,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
             for (var, value) in constantinit
                 state[var] = value
             end
-            println(state)
+            # println(state)
         end
     end
     if !isnothing(annealStrat)
@@ -51,9 +51,9 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     end
     println("start")
     for s in 1:S
-        if s == 1 || s == 2
-            println(state)
-        end
+        # if s == 1 || s == 2
+        #     println(state)
+        # end
         
         if s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
             if s > nburnin/4 + anneal*(3*nburnin/4)/(model.D)
@@ -64,13 +64,13 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
             if s < nburnin/2 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
             else
-                ~, state = backward_sample(model, data, state, mask, griddy=false,annealStrat=annealStrat,anneal=anneal)
+                ~, state = backward_sample(model, data, state, mask,annealStrat=annealStrat,anneal=anneal)
             end
         else
             if s < nburnin/2 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=true)
             else
-                ~, state = backward_sample(model, data, state, mask, griddy=false)
+                ~, state = backward_sample(model, data, state, mask)
             end
         end
         if s > nburnin && mod(s,nthin) == 0
@@ -80,6 +80,8 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         #     println(s)
         # end
         if verbose next!(prog) end
+        println(s)
+        flush(stdout)
     end
     if verbose finish!(prog) end
 
