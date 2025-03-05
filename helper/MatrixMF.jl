@@ -16,7 +16,7 @@ end
 
 abstract type MatrixMF end
 
-function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing)
+function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing,firstiter=false)
     #some checks
     # Y_NM = data["Y_NM"]
     # @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
@@ -54,6 +54,9 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         # if s == 1 || s == 2
         #     println(state)
         # end
+        if s == 1 && firstiter
+            ~, state = backward_sample(model, data, state, mask, firstiter=true)
+        end
         
         if s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
             if s > nburnin/4 + anneal*(3*nburnin/4)/(model.D)
@@ -80,7 +83,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         #     println(s)
         # end
         if verbose next!(prog) end
-        println(s)
+        # println(s)
         flush(stdout)
     end
     if verbose finish!(prog) end

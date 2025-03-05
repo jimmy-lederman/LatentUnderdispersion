@@ -33,6 +33,13 @@ function safeTrunc2(dist, lower, upper; n=1)
     end
 end
 
+function expnormalizeCat(x)
+    cdf = cumsum(exp.(x .- maximum(x)))     # the exp-normalize trick
+    z = last(cdf)
+    u = rand()  # uniform(0, 1)
+    return searchsortedlast(cdf, u * z) + 1
+end
+
 
 function sampleSumGivenOrderStatistic(Y,D,j,dist)
     if D == 1
@@ -81,8 +88,11 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
             break
         end
         logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
-        #println(logprobs)
         c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
+        #c = expnormalizeCat(logprobs)
+        if c == 0
+            println(logprobs)
+        end
         if c == 1
             r_lower += 1
         elseif c == 2
@@ -91,10 +101,8 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
             r_highr += 1
         end
     end
-    #println(r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any)
     @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == D
     if r_any != 0
-        #@assert 1 == 2
         return sum(rand(dist, r_any)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
         return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))

@@ -1,5 +1,6 @@
 include("../helper/MatrixMF.jl")
 include("../helper/OrderStatsSampling.jl")
+include("../helper/OrderStatsSampling_old.jl")
 using Distributions
 using Base.Threads
 
@@ -86,7 +87,7 @@ function griddy_gibbs2(model::OrderStatisticNegBinUnivariate, Z1sum, Z2sum, plis
 end
 
 
-function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mask=nothing;griddy=false,annealStrat=nothing,anneal=nothing)
+function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mask=nothing;griddy=false,annealStrat=nothing,anneal=nothing,firstiter = false)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     mu = copy(state["mu"])
@@ -97,15 +98,19 @@ function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mas
     # println(mu)
     @views @threads for n in 1:model.N
         if isnothing(annealStrat) || annealStrat == 2
-            Z1_N[n] = sampleSumGivenOrderStatistic2(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p))
+            # if p >= .9999
+            #     Z1_N[n] = model.D*Y_NM[n,1]
+            # else
+            Z1_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p))
+            #end
             Z2_N[n] = sampleCRT(Z1_N[n], model.D*mu)
         else
             if annealStrat == 1
-                Zlist = sampleListGivenOrderStatistic2(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p))
+                Zlist = sampleListGivenOrderStatistic(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p))
                 Z1_N[n] = sum(Zlist[1:anneal])
                 Z2_N[n] = sampleCRT(Z1_N[n],anneal*mu)
             elseif annealStrat == 3
-                Z1_N[n] = sampleFirstKGivenOrderStatistic2(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p), anneal)
+                Z1_N[n] = sampleFirstKGivenOrderStatistic(Y_NM[n,1], model.D, model.j,NegativeBinomial(mu, 1-p), anneal)
                 #Z1_N[n] = sum(Zlist)
                 Z2_N[n] = sampleCRT(Z1_N[n],anneal*mu)
             end
@@ -123,6 +128,14 @@ function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mas
     end
     if griddy
         (p,mu) = griddy_gibbs(model, sum(Z1_N), sum(Z2_N), shape_factor, rate_factor)
+    elseif firstiter
+        post_shape = model.a + shape_factor*sum(Z2_N)
+        post_rate = model.b + rate_factor*log(1/(1-p))*model.N
+        mu = rand(Gamma(post_shape, 1/post_rate))
+
+        post_alpha = model.alpha + shape_factor*sum(Z1_N)
+        post_beta = model.beta + rate_factor*model.N*mu
+        p = rand(Beta(post_alpha,post_beta))
     else
         post_alpha = model.alpha + shape_factor*sum(Z1_N)
         post_beta = model.beta + rate_factor*model.N*mu
@@ -131,12 +144,9 @@ function backward_sample(model::OrderStatisticNegBinUnivariate, data, state, mas
         post_shape = model.a + shape_factor*sum(Z2_N)
         post_rate = model.b + rate_factor*log(1/(1-p))*model.N
         mu = rand(Gamma(post_shape, 1/post_rate))
-
-
-       
-
     end
-
+    # println("mu: ", mu)
+    # println("p: ", p)
 
 
 
