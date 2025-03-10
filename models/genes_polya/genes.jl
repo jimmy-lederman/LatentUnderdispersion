@@ -119,16 +119,9 @@ function backward_sample(model::genes, data, state, mask=nothing)
     Mu_NM = U_NK * V_KM
 
      #Loop over the non-zeros in Y_DV and allocate
-    @views for idx in 1:(model.N * model.M)
+    @views @threads for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1  
-    # println(mean(p_NM), " ", minimum(p_NM), " ", maximum(p_NM))
-    # println(mean(Mu_NM), " ", minimum(Mu_NM), " ", maximum(Mu_NM))
-    # @time @views for ind in axes(Ysparse, 1)
-        #rng = MersenneTwister(Threads.threadid())
-        # count = Ysparse[ind, :]
-        # n = count[1]
-        # m = count[2]
         mu = Mu_NM[n,m]
         p = p_NM[n,m]
         if !isnothing(mask)
@@ -136,12 +129,8 @@ function backward_sample(model::genes, data, state, mask=nothing)
                 Y_NM[n,m] = sample_likelihood(model, mu, p) 
             end
         end
-        # if n == 50 && m == 50
-        #     println(mu, " ", p, " ", Y_NM[n,m])
-        #     Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
-        # else
-            Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
-        # end
+
+        Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
         if Z2_NM[n,m] > 0
             Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], model.D*mu)
             P_K = U_NK[n, :] .* V_KM[:, m]
