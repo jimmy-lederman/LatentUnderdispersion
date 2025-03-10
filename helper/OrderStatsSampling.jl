@@ -7,9 +7,17 @@ function safeTrunc(dist, lower, upper; n=1)
     if n == 0
         return 0
     end
-    try
-        return rand(Truncated(dist, lower, upper), n)
-    catch e
+    # do not attempt to try-catch instead of using this condition
+    #if the truncation point is sufficiently far in the tail of dist,
+    #then it will take a long time to attempt to sample from it and fail
+    if (lower != 0 && pdf(dist,lower) > 1e-100) || pdf(dist,upper) > 1e-100
+        #try
+            return rand(Truncated(dist, lower, upper), n)
+        # catch ex
+        #     println(dist, " ", lower, " ", upper)
+        #     throw("safeTruncation error")
+        # end
+    else
         if lower == 0
             return fill(upper, n)
         elseif isinf(upper)
@@ -18,20 +26,20 @@ function safeTrunc(dist, lower, upper; n=1)
     end
 end
 
-function safeTrunc2(dist, lower, upper; n=1)
-    if n == 0
-        return []
-    end
-    try
-        return rand(Truncated(dist, lower, upper), n)
-    catch e
-        if lower == 0
-            return fill(upper, n)
-        elseif isinf(upper)
-            return fill(lower, n)
-        end
-    end
-end
+# function safeTrunc2(dist, lower, upper; n=1)
+#     if n == 0
+#         return []
+#     end
+#     if pdf(dist,lower) != 0 || pdf(dist,upper) != 0
+#         return rand(Truncated(dist, lower, upper), n)
+#     else
+#         if lower == 0
+#             return fill(upper, n)
+#         elseif isinf(upper)
+#             return fill(lower, n)
+#         end
+#     end
+# end
 
 function expnormalizeCat(x)
     cdf = cumsum(exp.(x .- maximum(x)))     # the exp-normalize trick
@@ -53,6 +61,10 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
         #     start = j 
         # end
     end
+    # if pdf(dist,Y) < 1e-100
+    #     return Y*D
+    # end
+
     @assert D >= j
     r_lower = 0
     r_highr = 0
@@ -68,8 +80,7 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
         #     start = j 
         # end
     end
-    @assert D >= j
-    
+    @assert D >= j    
     @views for k in 1:D
         @assert (j - r_lower) >= 1
         @assert (D - r_highr) >= j
@@ -87,12 +98,15 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
             r_any = D - k + 1
             break
         end
+        # if j - r_lower == 1
+        #     logprobs = [-Inf, -1, -1]
+        # elseif D - r_highr == j
+        #     logprobs = [-1, -1, -Inf]
+        # else 
+        #     logprobs = [-1, -1, -1]
+        # end
         logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
         c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
-        #c = expnormalizeCat(logprobs)
-        if c == 0
-            println(logprobs)
-        end
         if c == 1
             r_lower += 1
         elseif c == 2
@@ -103,11 +117,124 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     end
     @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == D
     if r_any != 0
+        #return Y*r_equal
         return sum(rand(dist, r_any)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
-        return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
+        #return Y*r_equal
+        return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower))  + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     end
 end
+
+function logprobY2(Y,D,j,dist,numY)
+    if numY < j && numY < D - j + 1
+        # println("D: ", D, " j: ", j, " Y: ", numY)
+        # println("general")
+        #println(numY*logpdf(dist,Y) + logsubexp(logcdf(OrderStatistic(dist, D-numY, j-numY), Y), logcdf(OrderStatistic(dist, D-numY, j), Y-1)))
+        return numY*logpdf(dist,Y) + logsubexp(logcdf(OrderStatistic(dist, D-numY, j-numY), Y), logcdf(OrderStatistic(dist, D-numY, j), Y-1))
+    elseif numY < D - j + 1 && numY >= j
+        # println("D: ", D, " j: ", j, " Y: ", numY)
+        # println("low")
+        return numY*logpdf(dist,Y) + logccdf(OrderStatistic(dist, D-numY, j), Y-1)
+    elseif numY < j && numY >= D - j + 1
+        # println("D: ", D, " j: ", j, " Y: ", numY)
+        # println("high")
+        return numY*logpdf(dist,Y) + logcdf(OrderStatistic(dist, D-numY, j-numY), Y)
+    elseif numY >= j && numY >= D - j + 1
+        #println("D: ", D, " j: ", j, " Y: ", numY)
+        return numY*logpdf(dist,Y)
+    end
+end
+
+function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
+    if pdf(dist,Y) < 1e-100
+        return lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    end
+    conditionD = D - numUnder - numOver
+    conditionj = j - numUnder
+    if conditionD == 1
+        return [-Inf,0,-Inf]
+    end
+    if numUnder < j - 1 && Y > 0
+        jointYless = logprobY2(Y,conditionD-1,conditionj-1,dist,numY)
+    else
+        jointYless = -Inf
+    end
+    if numOver < D - j 
+        jointYmore = logprobY2(Y,conditionD-1,conditionj,dist,numY)
+    else
+        jointYmore = -Inf
+    end
+    logprobequal = logprobY2(Y,conditionD,conditionj,dist,numY+1)
+    logprobless = logcdf(dist,Y-1) + jointYless#/jointYdenom
+    logprobmore = logccdf(dist,Y) + jointYmore#/jointYdenom
+    
+    logprobs = [logprobless,logprobequal,logprobmore]
+    if sum(isinf.(logprobs)) ==  3
+        # println(" ")
+        # println(Y,j,D,dist,numUnder,numY,numOver)
+        # println(jointYless, " ", logprobequal, " ", jointYmore)
+        # println(logcdf(dist,Y-1), " ", logccdf(dist,Y))
+        #println(jointYless, " ", logprobequal, " ", jointYmore)
+        # flush(stdout)
+        #@assert 1 == 2
+        logprobs = lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    end
+    #println(logprobs)
+    @assert sum(isinf.(logprobs)) <  3
+    # println(logprobY2(Y,1,1,dist,1))
+    # 
+    # println("D: ", D, " j: ", j, " numY: ", numY, " numUnder: ", numUnder, " numOver: ", numOver)
+    # println(dist, " ", Y-1)
+    # println(jointYless, " ", logcdf(dist,Y-1))
+    # println(logprobs)
+    # @assert 1 == 2
+    return logprobs
+end
+
+function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
+    D = D - numY - numUnder - numOver
+    j = j - numUnder
+    #println("ahh")
+    if numY == 0
+        #println("nope")
+        if Y > mean(dist)
+            probUnder = (j-1)/D
+            return [log(probUnder), log(1-probUnder),-Inf]
+        else
+            probOver = (D-j+numY)/D
+            return [-Inf, log(1-probOver),log(probOver)]
+        end
+    else
+        #println("yep")
+        if Y > mean(dist) 
+            logtruncProb = 0
+            if pdf(dist,Y) != 0 
+                logtruncProb = logpdf(Truncated(dist, Y, Inf), Y)
+            else
+                logtruncProb = 0
+            end
+            if isnan(logtruncProb) || logtruncProb > 0 
+                logtruncProb = 0
+            end
+
+            probUnder = (j-1)/D
+            return [log(probUnder), log(1-probUnder) + logtruncProb,log(1-probUnder) + log1mexp(logtruncProb)]
+        else #Y <= mean(dist)
+            logtruncProb = 0
+            if pdf(dist,Y) != 0 
+                logtruncProb = logpdf(Truncated(dist, 0, Y), Y)
+            else
+                logtruncProb = 0
+            end
+            if isnan(logtruncProb) || logtruncProb > 0 
+                logtruncProb = 0
+            end
+            probOver = (D-j+numY)/D
+            return [log(1-probOver)+ log1mexp(logtruncProb), log(1-probOver) + logtruncProb,log(probOver)]
+        end
+    end
+end
+
 
 function sampleListGivenOrderStatistic2(Y,D,j,dist)
     if D == 1
@@ -186,6 +313,7 @@ function sampleFirstKGivenOrderStatistic2(Y,D,j,dist,K)
         # end
     end
 
+
     @assert D >= j
     r_lower = 0
     r_highr = 0
@@ -228,106 +356,5 @@ function sampleFirstKGivenOrderStatistic2(Y,D,j,dist,K)
         return sum(rand(dist, r_any)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
         return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
-    end
-end
-
-
-function logprobY2(Y,D,j,dist,numY)
-    if numY < j && numY < D - j + 1
-        # println("D: ", D, " j: ", j, " Y: ", numY)
-        # println("general")
-        #println(numY*logpdf(dist,Y) + logsubexp(logcdf(OrderStatistic(dist, D-numY, j-numY), Y), logcdf(OrderStatistic(dist, D-numY, j), Y-1)))
-        return numY*logpdf(dist,Y) + logsubexp(logcdf(OrderStatistic(dist, D-numY, j-numY), Y), logcdf(OrderStatistic(dist, D-numY, j), Y-1))
-    elseif numY < D - j + 1 && numY >= j
-        # println("D: ", D, " j: ", j, " Y: ", numY)
-        # println("low")
-        return numY*logpdf(dist,Y) + logccdf(OrderStatistic(dist, D-numY, j), Y-1)
-    elseif numY < j && numY >= D - j + 1
-        # println("D: ", D, " j: ", j, " Y: ", numY)
-        # println("high")
-        return numY*logpdf(dist,Y) + logcdf(OrderStatistic(dist, D-numY, j-numY), Y)
-    elseif numY >= j && numY >= D - j + 1
-        #println("D: ", D, " j: ", j, " Y: ", numY)
-        return numY*logpdf(dist,Y)
-    end
-end
-
-function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
-    conditionD = D - numUnder - numOver
-    conditionj = j - numUnder
-    if conditionD == 1
-        return [-Inf,0,-Inf]
-    end
-    if numUnder < j - 1
-        jointYless = logprobY2(Y,conditionD-1,conditionj-1,dist,numY)
-    else
-        jointYless = -Inf
-    end
-    if numOver < D - j 
-        jointYmore = logprobY2(Y,conditionD-1,conditionj,dist,numY)
-    else
-        jointYmore = -Inf
-    end
-    logprobequal = logprobY2(Y,conditionD,conditionj,dist,numY+1)
-    logprobless = logcdf(dist,Y-1) + jointYless#/jointYdenom
-    logprobmore = logccdf(dist,Y) + jointYmore#/jointYdenom
-    
-    logprobs = [logprobless,logprobequal,logprobmore]
-    if sum(isinf.(logprobs)) ==  3
-        logprobs = lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
-    end
-    #println(logprobs)
-    @assert sum(isinf.(logprobs)) <  3
-    # println(logprobY2(Y,1,1,dist,1))
-    # 
-    # println("D: ", D, " j: ", j, " numY: ", numY, " numUnder: ", numUnder, " numOver: ", numOver)
-    # println(dist, " ", Y-1)
-    # println(jointYless, " ", logcdf(dist,Y-1))
-    # println(logprobs)
-    # @assert 1 == 2
-    return logprobs
-end
-
-function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
-    D = D - numY - numUnder - numOver
-    j = j - numUnder
-    #println("ahh")
-    if numY == 0
-        #println("nope")
-        if Y > mean(dist)
-            probUnder = (j-1)/D
-            return [log(probUnder), log(1-probUnder),-Inf]
-        else
-            probOver = (D-j+numY)/D
-            return [-Inf, log(1-probOver),log(probOver)]
-        end
-    else
-        #println("yep")
-        if Y > mean(dist) 
-            logtruncProb = 0
-            try 
-                logtruncProb = logpdf(Truncated(dist, Y, Inf), Y)
-            catch ex
-                logtruncProb = 0
-            end
-            if isnan(logtruncProb) || logtruncProb > 0 
-                logtruncProb = 0
-            end
-
-            probUnder = (j-1)/D
-            return [log(probUnder), log(1-probUnder) + logtruncProb,log(1-probUnder) + log1mexp(logtruncProb)]
-        else #Y <= mean(dist)
-            logtruncProb = 0
-            try 
-                logtruncProb = logpdf(Truncated(dist, 0, Y), Y)
-            catch ex
-                logtruncProb = 0
-            end
-            if isnan(logtruncProb) || logtruncProb > 0 
-                logtruncProb = 0
-            end
-            probOver = (D-j+numY)/D
-            return [log(1-probOver)+ log1mexp(logtruncProb), log(1-probOver) + logtruncProb,log(probOver)]
-        end
     end
 end

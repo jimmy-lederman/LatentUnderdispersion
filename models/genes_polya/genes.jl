@@ -1,8 +1,10 @@
 include("../../helper/MatrixMF.jl")
+include("../../helper/OrderStatsSampling_old.jl")
 include("../../helper/OrderStatsSampling.jl")
 include("../../helper/NegBinPMF.jl")
 using LinearAlgebra
 using Base.Threads
+#using Suppressor
 include("PolyaGammaHybridSamplers.jl/src/pghybrid.jl")
 
 using LogExpFunctions
@@ -101,7 +103,7 @@ end
 function backward_sample(model::genes, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
-    Ysparse = copy(data["Ysparse"])
+    #Ysparse = copy(data["Ysparse"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
     Beta_NQ = copy(state["Beta_NQ"])
@@ -117,15 +119,16 @@ function backward_sample(model::genes, data, state, mask=nothing)
     Mu_NM = U_NK * V_KM
 
      #Loop over the non-zeros in Y_DV and allocate
-    #  @views for idx in 1:(model.N * model.M)
-    #     n = div(idx - 1, model.M) + 1
-    #     m = mod(idx - 1, model.M) + 1  
-
-    @views @threads for ind in axes(Ysparse, 1)
+    @views for idx in 1:(model.N * model.M)
+        n = div(idx - 1, model.M) + 1
+        m = mod(idx - 1, model.M) + 1  
+    # println(mean(p_NM), " ", minimum(p_NM), " ", maximum(p_NM))
+    # println(mean(Mu_NM), " ", minimum(Mu_NM), " ", maximum(Mu_NM))
+    # @time @views for ind in axes(Ysparse, 1)
         #rng = MersenneTwister(Threads.threadid())
-        count = Ysparse[ind, :]
-        n = count[1]
-        m = count[2]
+        # count = Ysparse[ind, :]
+        # n = count[1]
+        # m = count[2]
         mu = Mu_NM[n,m]
         p = p_NM[n,m]
         if !isnothing(mask)
@@ -133,11 +136,17 @@ function backward_sample(model::genes, data, state, mask=nothing)
                 Y_NM[n,m] = sample_likelihood(model, mu, p) 
             end
         end
-        #if Y_NM[n, m] > 0 
+        # if n == 50 && m == 50
+        #     println(mu, " ", p, " ", Y_NM[n,m])
+        #     Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
+        # else
             Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], model.D, model.j, NegativeBinomial(mu,p))
+        # end
+        if Z2_NM[n,m] > 0
             Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], model.D*mu)
             P_K = U_NK[n, :] .* V_KM[:, m]
             Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
+        end
         #end
     end
     
@@ -180,7 +189,7 @@ function backward_sample(model::genes, data, state, mask=nothing)
     end
 
     p_NM = logistic.(Beta_NQ * Tau_QM)
-
+    # println(minimum(p_NM))
 
     # @time @views @threads for idx in 1:(model.N*model.K)
     #     n = div(idx - 1, model.K) + 1
