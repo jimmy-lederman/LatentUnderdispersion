@@ -13,7 +13,7 @@ datasetnum = parse(Int, ARGS[1]) #datset to do experiment on
 dist = parse(Int, ARGS[2])
 type = parse(Int, ARGS[3])
 D = parse(Int, ARGS[4])
-initseed=parse(INT, ARGS[5])
+initseed=parse(Int, ARGS[5])
 # if length(ARGS) > 4
 #     griddy = parse(Int, ARGS[5])
 #     annealstrat = parse(Int, ARGS[6])
@@ -42,7 +42,7 @@ nu = data_all[1,datasetnum]
 seed = Int(data_all[2,datasetnum])
 
 #set folder
-folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/NB2/samples_burnin/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/NB2/samples_init/"
 
 N = 1000
 M = 1  

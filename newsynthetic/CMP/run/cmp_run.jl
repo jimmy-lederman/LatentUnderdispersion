@@ -41,7 +41,7 @@ nu = data_all[1,datasetnum]
 seed = Int(data_all[2,datasetnum])
 
 #set folder
-folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/CMP/samples_burnin/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/synthetic/CMP/samples_init/"
 
 N = 1000
 M = 1  

@@ -50,7 +50,7 @@ function backward_sample(model::OrderStatisticPoissonUnivariate, data, state, ma
     # println(Z_N)
     #@views @threads for n in 1:model.N
     @views for n in 1:model.N
-        Z_N[n] = sampleSumGivenOrderStatistic2(Y_NM[n,1], model.D, model.j, Poisson(mu))
+        Z_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], model.D, model.j, Poisson(mu))
     end
 
     post_shape = model.a + sum(Z_N)
