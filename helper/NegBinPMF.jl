@@ -83,6 +83,55 @@ end
 
 #need to do: implement median
 
+function logprobOrderStatisticNB(Y,r,p,D,j;precision=1000)
+    #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
+    #must set precision
+    setprecision(BigFloat,precision)
+    r = big(r)
+    p = big(p)
+    Y = big(Y)
+    firstbeta = log_incomplete_beta3(r,Y+1,p,precision=precision)
+    secondbeta = log_incomplete_beta3(r,Y,p,precision=precision)
+    #println(firstbeta, " ", secondbeta)
+    if firstbeta >= 0 || secondbeta >= 0
+        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision)
+    end
+    firstbeta_comp = log1mexp(firstbeta)
+    secondbeta_comp = log1mexp(secondbeta)
+    # println(firstbeta)
+    # println(secondbeta)
+    # println(firstbeta_comp)
+    # println(secondbeta_comp)
+    cdf1 = 0 #first term is log(choose(j-1,j-1))
+    cdf2 = 0
+    for i in 1:(D-j)
+        part1 = logabsbinomial(j+i-1,j-1)[1] + i*firstbeta_comp
+        part2 = logabsbinomial(j+i-1,j-1)[1] + i*secondbeta_comp
+        #result = logsumexp(result, logsubexp(part1,part2))
+        cdf1 = logsumexp(cdf1, part1)
+        cdf2 = logsumexp(cdf2, part2)
+    end
+    
+    result = logsubexp(j*firstbeta + cdf1, j*secondbeta + cdf2)
+    if isinf(result) || isnan(result)
+        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision)
+    else
+        return Float64(result)
+    end
+end
+
+function logpmfOrderStatNegBin(Y,r,p,D,j)
+    llik = logpdf(OrderStatistic(NegativeBinomial(r,p), D, j), Y)
+    if isinf(llik) || isnan(llik)
+        llik = logprobOrderStatisticNB(Y,r,p,D,j)
+        if llik == 0
+            println(Y, " ", r, " ", p)
+            throw("missed low error")
+        end
+    end
+    return llik
+end
+
 
 # function logprobMedianNegBin(Y,mu)
 #     #must set precision

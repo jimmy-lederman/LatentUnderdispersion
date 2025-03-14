@@ -72,7 +72,7 @@ function logprobOrderStatisticPoisson(Y,mu,D,j;precision=64)
     mu = big(mu)
     Y = big(Y)
     firstgammas = gamma_inc(Y+1,mu)
-    secondgammas =gamma_inc(Y,mu)
+    secondgammas = gamma_inc(Y,mu)
 
     cdf1 = 0 #first term is log(choose(j-1,j-1))
     cdf2 = 0
