@@ -51,7 +51,7 @@ M = size(Y_NM, 2)
 # N = nlil
 
 Random.seed!(maskSeed)
-mask_NM = rand(N, M) .< .025
+mask_NM = rand(N, M) .< .001
 
 Ysparse, _ = sparsify_format_mask(Y_NM, mask_NM)
 

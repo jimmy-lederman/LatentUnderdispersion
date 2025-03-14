@@ -62,7 +62,7 @@ d = 1
 model = genes(N,M,K,Q,a,b,c,d,D,j)
 
 
-@time samples = fit(model, data, nsamples = 200, nburnin=nburnin, nthin=10, initseed = chainSeed)
+@time samples = fit(model, data, nsamples = 100, nburnin=nburnin, nthin=10, initseed = chainSeed)
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 results = [K,Q,D,chainSeed,nburnin]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples_subset/"

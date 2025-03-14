@@ -10,19 +10,40 @@ function safeTrunc(dist, lower, upper; n=1)
     # do not attempt to try-catch instead of using this condition
     #if the truncation point is sufficiently far in the tail of dist,
     #then it will take a long time to attempt to sample from it and fail
-    if (lower != 0 && pdf(dist,lower) > 1e-100) || pdf(dist,upper) > 1e-100
-        #try
+    if (lower != 0 && pdf(dist,lower) > 1e-300) || pdf(dist,upper) > 1e-300
+        try
             return rand(Truncated(dist, lower, upper), n)
-        # catch ex
-        #     println(dist, " ", lower, " ", upper)
-        #     throw("safeTruncation error")
-        # end
+        catch ex
+            if lower == 0
+                return fill(upper, n)
+            elseif isinf(upper)
+                return fill(lower, n)
+            end
+        end
     else
         if lower == 0
             return fill(upper, n)
         elseif isinf(upper)
             return fill(lower, n)
         end
+    end
+end
+
+function saferand(dist, n, y)
+    if n == 0
+        return 0
+    end
+    try
+        return rand(dist, n)
+    catch ex
+        for i in 1:100
+            try
+                return rand(dist,n)
+            catch ex
+                # do nothing
+            end
+        end
+        return y
     end
 end
 
@@ -118,7 +139,7 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == D
     if r_any != 0
         #return Y*r_equal
-        return sum(rand(dist, r_any)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
+            return sum(saferand(dist, r_any, Y)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
         #return Y*r_equal
         return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower))  + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
@@ -146,7 +167,7 @@ function logprobY2(Y,D,j,dist,numY)
 end
 
 function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
-    if pdf(dist,Y) < 1e-100
+    if pdf(dist,Y) < 1e-300
         return lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     end
     conditionD = D - numUnder - numOver
@@ -170,24 +191,12 @@ function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
     
     logprobs = [logprobless,logprobequal,logprobmore]
     if sum(isinf.(logprobs)) ==  3
-        # println(" ")
-        # println(Y,j,D,dist,numUnder,numY,numOver)
-        # println(jointYless, " ", logprobequal, " ", jointYmore)
-        # println(logcdf(dist,Y-1), " ", logccdf(dist,Y))
-        #println(jointYless, " ", logprobequal, " ", jointYmore)
-        # flush(stdout)
-        #@assert 1 == 2
+
         logprobs = lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     end
-    #println(logprobs)
+
     @assert sum(isinf.(logprobs)) <  3
-    # println(logprobY2(Y,1,1,dist,1))
-    # 
-    # println("D: ", D, " j: ", j, " numY: ", numY, " numUnder: ", numUnder, " numOver: ", numOver)
-    # println(dist, " ", Y-1)
-    # println(jointYless, " ", logcdf(dist,Y-1))
-    # println(logprobs)
-    # @assert 1 == 2
+
     return logprobs
 end
 
@@ -245,10 +254,6 @@ function sampleListGivenOrderStatistic2(Y,D,j,dist)
         if D == j 
             return 0
         end
-        # else
-        #     D = D - j + 1
-        #     j = 1
-        # end
     end
 
     @assert D >= j
