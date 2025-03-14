@@ -54,7 +54,7 @@ function evalulateLogLikelihood(model::genes, state, data, info, row, col)
     elseif model.D == model.j
         return logpmfMaxNegBin(Y, r, p, model.D)
     else
-        throw(ErrorException("NB median pmf unimplemented"))
+        return logpmfOrderStatNegBin(Y, r, p, model.D, model.j)
     end
 end
 
