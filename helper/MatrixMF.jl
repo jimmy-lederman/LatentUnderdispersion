@@ -296,7 +296,7 @@ function evaluateInfoRateSplit(model::MatrixMF, data, samples; info=nothing, mas
                     llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                     llikvector[s] = llik
                 end
-                if data[row,col] <= cutoff
+                if data["Y_NM"][row,col] <= cutoff
                     inforatetotal1 += logsumexpvec(llikvector) - log(S)
                     I1 += 1
                 else
