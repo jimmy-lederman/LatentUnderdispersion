@@ -311,6 +311,47 @@ function evaluateInfoRateSplit(model::MatrixMF, data, samples; info=nothing, mas
     return [inforatetotal1/I1, inforatetotal2/I2]
 end
 
+function evaluateInfoRateSplit3(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing, cutoff1=0, cutoff2=0)
+    S = size(samples)[1]
+    I1 = 0 #total number of masked points
+    inforatetotal1 = 0
+    I2 = 0
+    inforatetotal2 = 0
+    I3 = 0
+    inforatetotal3 = 0
+    if verbose
+        prog = Progress(S, desc="calculating inforate")
+    end
+    @views for row in 1:model.N
+        @views for col in 1:model.M
+            if !isnothing(cols) && !(col in cols)
+                continue
+            end
+            if !isnothing(mask) && mask[row,col]
+                llikvector = Vector{Float64}(undef, S)
+                for s in 1:S
+                    sample = samples[s]
+                    llik = evalulateLogLikelihood(model, sample, data, info, row, col)
+                    llikvector[s] = llik
+                end
+                if data["Y_NM"][row,col] <= cutoff1
+                    inforatetotal1 += logsumexpvec(llikvector) - log(S)
+                    I1 += 1
+                elseif data["Y_NM"][row,col] <= cutoff2
+                    inforatetotal2 += logsumexpvec(llikvector) - log(S)
+                    I2 += 1
+                else 
+                    inforatetotal3 += logsumexpvec(llikvector) - log(S)
+                    I3 += 1
+                end
+                if verbose next!(prog) end
+            end
+        end
+    end
+    if verbose finish!(prog) end
+    return [inforatetotal1/I1, inforatetotal2/I2, inforatetotal3/I3]
+end
+
 function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true,sparse=true)
     S = size(samples)[1]
     heldoutprobs = []
