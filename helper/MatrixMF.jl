@@ -221,23 +221,17 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     end
     # println(S)
     if !sparse
-        for row in 1:model.N
-            for col in 1:model.M
+        @views for row in 1:model.N
+            @views for col in 1:model.M
                 if !isnothing(cols) && !(col in cols)
                     continue
                 end
                 if !isnothing(mask) && mask[row,col]
                     llikvector = Vector{Float64}(undef, S)
-                    haveusedbackup = false
                     for s in 1:S
                         sample = samples[s]
-                        # @assert 1 == 2
                         llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                         llikvector[s] = llik
-                        # if llik == 0
-                        #     llik0count += 1
-                        #     badmat[llik0count,:] = [data["Y_NM"][row,col],dot(sample["U_NK"][row,:], sample["V_KM"][:,col]),sample["p_N"][row]]
-                        # end
                     end
                     inforatetotal += logsumexpvec(llikvector) - log(S)
                     I += 1
@@ -279,6 +273,42 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     println("0 count: ", llik0count)
     if verbose finish!(prog) end
     return inforatetotal/I#, badmat
+end
+
+function evaluateInfoRateSplit(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing, cutoff=0)
+    S = size(samples)[1]
+    I1 = 0 #total number of masked points
+    inforatetotal1 = 0
+    I2 = 0
+    inforatetotal1 = 0
+    if verbose
+        prog = Progress(S, desc="calculating inforate")
+    end
+    @views for row in 1:model.N
+        @views for col in 1:model.M
+            if !isnothing(cols) && !(col in cols)
+                continue
+            end
+            if !isnothing(mask) && mask[row,col]
+                llikvector = Vector{Float64}(undef, S)
+                for s in 1:S
+                    sample = samples[s]
+                    llik = evalulateLogLikelihood(model, sample, data, info, row, col)
+                    llikvector[s] = llik
+                end
+                if data[row,col] <= cutoff
+                    inforatetotal1 += logsumexpvec(llikvector) - log(S)
+                    I1 += 1
+                else
+                    inforatetotal2 += logsumexpvec(llikvector) - log(S)
+                    I2 += 1
+                end
+                if verbose next!(prog) end
+            end
+        end
+    end
+    if verbose finish!(prog) end
+    return [inforatetotal1/I1, inforatetotal2/I2]
 end
 
 function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true,sparse=true)
