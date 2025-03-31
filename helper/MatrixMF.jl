@@ -280,7 +280,7 @@ function evaluateInfoRateSplit(model::MatrixMF, data, samples; info=nothing, mas
     I1 = 0 #total number of masked points
     inforatetotal1 = 0
     I2 = 0
-    inforatetotal1 = 0
+    inforatetotal2 = 0
     if verbose
         prog = Progress(S, desc="calculating inforate")
     end
