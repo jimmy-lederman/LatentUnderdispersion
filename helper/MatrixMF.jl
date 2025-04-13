@@ -57,8 +57,10 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if s == 1 && firstiter
             ~, state = backward_sample(model, data, state, mask, firstiter=true)
         end
-        
-        if s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
+
+        if s < nburnin/2 && !isnothing(skipupdate)
+            ~, state = backward_sample(model, data, state, mask, skipupdate=skipupdate)
+        elseif s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
             if s > nburnin/4 + anneal*(3*nburnin/4)/(model.D)
                 anneal += 1
                 println(anneal, " ", s)
@@ -94,7 +96,7 @@ end
 function gewekeTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nburnin=1000, nthin=5,info=nothing)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
-    # sample forward from the prior and likelihood
+    #sample forward from the prior and likelihood
     @showprogress for i in 1:nsamples
         ~, state = forward_sample(model,info=info)
         #  we will only collect the states
@@ -210,7 +212,6 @@ function sequential_test(model::MatrixMF, varlist::Vector{String}; nsamples=1000
 end
 
 function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing,sparse=false)
-    
     S = size(samples)[1]
     I = 0 #total number of masked points
     llik0count = 0
@@ -273,6 +274,36 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     println("0 count: ", llik0count)
     if verbose finish!(prog) end
     return inforatetotal/I#, badmat
+end
+
+function evaluateInfoRateCategories(model::MatrixMF, data, samples, categories; info=nothing, mask=nothing, verbose=true, cols=nothing,sparse=false)
+    I = zeros(length(unique(categories))) #total number of masked points
+    inforatetotal = zeros(length(unique(categories)))
+    # if verbose
+    #     prog = Progress(S, desc="calculating inforate")
+    # end
+    @views for row in 1:model.N
+        @views for col in 1:model.M
+            if !isnothing(cols) && !(col in cols)
+                continue
+            end
+            if !isnothing(mask) && mask[row,col]                
+                sample = samples[1]
+                llik = evalulateLogLikelihood(model, sample, data, info, row, col)
+                cat = categories[row,col]
+                inforatetotal[cat] += llik
+                I[cat] += 1
+                #if verbose next!(prog) end
+            end
+        end
+        #if row % 1000 == 0 println(row) end
+    end
+
+
+ 
+
+    #f verbose finish!(prog) end
+    return inforatetotal ./ I#, badmat
 end
 
 function evaluateInfoRateSplit(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true, cols=nothing, cutoff=0)

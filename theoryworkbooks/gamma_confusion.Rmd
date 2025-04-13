@@ -17,6 +17,9 @@ plot(x,y)
 shape/rate
 shape/rate^2
 ```
+
+
+
 ```{r}
 rgamma(n=5,shape = shape, rate = rate)
 ```

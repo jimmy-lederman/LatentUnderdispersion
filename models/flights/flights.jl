@@ -207,7 +207,11 @@ function backward_sample(model::flights, data, state, mask=nothing)
         end
         if Y_NM[n, 1] > 0 || model.D != model.j
             mu = A_T[home] + B_T[away] + U_K[Z_TT[home,away]]*dist_NM[n,1]
-            Z1_NM[n,1] = sampleSumGivenOrderStatistic(Y_NM[n, 1], model.D, model.j, lik(mu))
+            if model.D == 1
+                Z1_NM[n,1] = Y_NM[n, 1]
+            else
+                Z1_NM[n,1] = sampleSumGivenOrderStatistic(Y_NM[n, 1], model.D, model.j, lik(mu))
+            end
             if lik(mu) isa NegativeBinomial
                 Z2_NM[n,1] = copy(Z1_NM[n,1])
                 Z1_NM[n,1] = sampleCRT(Z1_NM[n,1], model.D*mu)
@@ -281,7 +285,7 @@ function backward_sample(model::flights, data, state, mask=nothing)
     U_K = rand.(Gamma.(post_shape_K, 1 ./post_rate_K))
 
     A_T = rand.(Gamma.(post_shape1_T, 1 ./post_rate1_T))
-    B_T = rand.(Gamma.(post_shape2_T, 1 ./post_rate2_T))
+    #B_T = rand.(Gamma.(post_shape2_T, 1 ./post_rate2_T))
     flush(stdout)
     state = Dict("Z_TT" => Z_TTnew, "U_K" => U_K, "A_T"=>A_T, "B_T"=>B_T,
      "I_NM"=>I_NM, "dist_NM" => dist_NM, "routes_R4"=>routes_R4,"logprobvec_RK"=>logprobvec_RK,

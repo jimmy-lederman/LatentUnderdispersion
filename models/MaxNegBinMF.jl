@@ -1,5 +1,7 @@
 include("../helper/MatrixMF.jl")
 include("../helper/PoissonMaxFunctions.jl")
+include("../helper/OrderStatsSampling.jl")
+include("../helper/NegBinPMF.jl")
 using Distributions
 using LinearAlgebra
 
@@ -26,17 +28,25 @@ function sampleCRT(Y,R)
     return sum(rand.(Bernoulli.(probs)))
 end
 
-# function evalulateLogLikelihood(model::MaxPoissonMF, state, data, info, row, col)
-#     Y = data["Y_NM"][row,col]
-#     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-#     return logpmfMaxPoisson(Y,mu,model.D)
-# end
-
 function evalulateLogLikelihood(model::MaxNegBinMF, state, data, info, row, col)
+    # println("lol")
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
-    return logpdf(OrderStatistic(NegativeBinomial(mu, 1-model.p), model.D, model.D), Y)
+    if model.D == 1
+        return logpdf(NegativeBinomial(mu,1-model.p), Y)
+    # elseif model.D == model.j
+    #     return logpmfMaxNegBin(Y, r, p, model.D)
+    else
+        return logpmfMaxNegBin(Y, mu, 1-model.p, model.D)
+        #return logpmfOrderStatNegBin(Y, mu, model.p, model.D, model.D)
+    end
 end
+
+# function evalulateLogLikelihood(model::MaxNegBinMF, state, data, info, row, col)
+#     Y = data["Y_NM"][row,col]
+#     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
+#     return logpdf(OrderStatistic(NegativeBinomial(mu, 1-model.p), model.D, model.D), Y)
+# end
 
 function sample_prior(model::MaxNegBinMF, info=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
@@ -78,7 +88,7 @@ function backward_sample(model::MaxNegBinMF, data, state, mask=nothing)
             if Y_NM[n, m] > 0
                 
                 #first sample sum of NegBin from NegBinMax
-                Z1_NM[n,m] = sampleSumGivenMax(Y_NM[n,m],model.D, NegativeBinomial(Mu_NM[n,m],1-model.p))
+                Z1_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m],model.D, model.D, NegativeBinomial(Mu_NM[n,m],1-model.p))
                 #now sample poisson from sum of NegBin (which is NegBin)
                 Z2_NM[n,m] = sampleCRT(Z1_NM[n,m],model.D*Mu_NM[n,m])
                 #println(Y_NM[n, m], " ", Z1_NM[n,m], " ", Z2_NM[n,m])

@@ -16,7 +16,7 @@ struct genes <: MatrixMF
     Q::Int64
     a::Float64
     b::Float64
-    c::Float64
+    c::Float64x2
     d::Float64
     D::Int64
     j::Int64

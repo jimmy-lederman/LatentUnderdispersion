@@ -28,25 +28,30 @@ using Distributions
 # end
 
 function logpmfMaxPoisson(Y,mu,D)
-    llik = logpdf(OrderStatistic(Poisson(mu), D, D), Y)
-    if isinf(llik) || isnan(llik)
-         llik = logprobMax(Y,mu,D)
+    if D == 1
+        return logpdf(Poisson(mu), Y)
+    else
+        llik = logpdf(OrderStatistic(Poisson(mu), D, D), Y)
+        if isinf(llik) || isnan(llik)
+            llik = logprobMax(Y,mu,D)
+        end
     end
     return llik
 end
 
-function logprobMax(Y,mu,D;precision=64)
+function logprobMax(Y,mu,D;precision=1000)
      #must set precision
-     setprecision(BigFloat,precision)
-     mu = big(mu)
-     Y = big(Y)
-     firstgammas = gamma_inc(Y+1,mu)
-     secondgammas = gamma_inc(Y,mu)
-     result = logsubexp(D*log(firstgammas[2]), D*log(secondgammas[2]))
-     if isinf(result) || isnan(result)
-        return logprobMax(Y,mu,D,precision=5*precision)
-    else
-        return Float64(result)
+     setprecision(BigFloat,precision) do
+        mu = big(mu)
+        Y = big(Y)
+        firstgammas = gamma_inc(Y+1,mu)
+        secondgammas = gamma_inc(Y,mu)
+        result = logsubexp(D*log(firstgammas[2]), D*log(secondgammas[2]))
+        if isinf(result) || isnan(result)
+            return logprobMax(Y,mu,D,precision=5*precision)
+        else
+            return Float64(result)
+        end
     end
 end
 
@@ -65,7 +70,7 @@ function logprobMedian3(Y,mu;precision=1000)
     end
 end
 
-function logprobOrderStatisticPoisson(Y,mu,D,j;precision=64)
+function logprobOrderStatisticPoisson(Y,mu,D,j;precision=1000)
     #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
     #must set precision
     setprecision(BigFloat,precision)

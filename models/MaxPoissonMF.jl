@@ -68,7 +68,7 @@ function backward_sample(model::MaxPoissonMF, data, state, mask=nothing)
             end
         end
         if Y_NM[n, m] > 0
-            Z_NM[n, m] = sampleSumGivenMax(Y_NM[n, m], model.D, Poisson(Mu_NM[n, m]))
+            Z_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, model.D, Poisson(Mu_NM[n, m]))
             P_K = U_NK[n, :] .* V_KM[:, m]
             Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K / sum(P_K)))
         end
