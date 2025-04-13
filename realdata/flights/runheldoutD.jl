@@ -72,7 +72,7 @@ if D == 0
     samplesnew = [Dict("U_R"=> s["U_R"], "D_R"=>s["D_R"], "A_T"=>s["A_T"], "B_T"=>s["B_T"], "p"=>s["p"]) for s in samples]
 else
     include("/home/jlederman/DiscreteOrderStatistics/models/flights/flights3base.jl")
-    model = flights(N, M, T, R, D, a, b, c, d, alpha, beta)
+    model = flightsbase(N, M, T, R, D, a, b, c, d, alpha, beta)
     @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, info=info,initseed=chainSeed)
     samplesnew = [Dict("U_R"=> s["U_R"],"A_T"=>s["A_T"], "B_T"=>s["B_T"]) for s in samples]
 end
