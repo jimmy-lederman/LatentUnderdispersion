@@ -40,7 +40,7 @@ end
 
 
 
-function sample_likelihood(model::flightsbase, mu,D,n=1)
+function sample_likelihood(model::flightsbase, mu,n=1)
     if D == 1
         if n == 1
             return rand(Poisson(mu))
@@ -49,11 +49,11 @@ function sample_likelihood(model::flightsbase, mu,D,n=1)
         end
     else
         if n == 1
-            j = div(D,2) + 1
-            return rand(OrderStatistic(Poisson(mu), D, j))
+            j = div(mode.D,2) + 1
+            return rand(OrderStatistic(Poisson(mu), model.D, j))
         else
-            j = div(D,2) + 1
-            return rand(OrderStatistic(Poisson(mu), D, j),n)
+            j = div(model.D,2) + 1
+            return rand(OrderStatistic(Poisson(mu), model.D, j),n)
         end
     end
 end
