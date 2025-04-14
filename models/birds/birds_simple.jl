@@ -35,11 +35,9 @@ function sample_D(model::birds, Y, mu, p)
     return D
 end
 
-function sample_prior(model::birds,info=nothing)
+function sample_prior(model::birds,info=nothing, constantinit=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
-    X_NP = info["X_NP"]
-    P = size(X_NP)[2]
     Tau_NP = rand(Normal(0,1), model.N, model.P)
     Beta_PM = rand(Normal(0,1), model.P, model.M) 
     D_NM = rand.(Binomial.(model.Dmax - 1, logistic.(Tau_NP * Beta_PM))) .+ 1
@@ -48,7 +46,7 @@ function sample_prior(model::birds,info=nothing)
     return state
 end
 
-function forward_sample(model::birds; state=nothing, info=nothing)
+function forward_sample(model::birds; state=nothing, info=nothing, constantinit=nothing)
     if isnothing(state)
         state = sample_prior(model, info)
     end
@@ -61,7 +59,7 @@ function forward_sample(model::birds; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::birds, data, state, mask=nothing)
+function backward_sample(model::birds, data, state, mask=nothing;skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -73,37 +71,39 @@ function backward_sample(model::birds, data, state, mask=nothing)
     Z_NMK = zeros(Int, model.N, model.M, model.K)
     Mu_NM = U_NK * V_KM
     D_NM = copy(state["D_NM"])
-   
-    #Polya-gamma augmentation to update Beta
-    F_NM = Tau_NP * Beta_PM
-    W_NM = zeros(Float64, model.N, model.M)
-    
-    @views @threads for idx in 1:(model.N * model.M)
-        n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1 
-        pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
-        W_NM[n,m] = rand(pg)
-    end
-    
-    @views @threads for m in 1:model.M
-        W = Diagonal(W_NM[:,m]) 
-        V = inv(Tau_NP' * W * Tau_NP + Matrix{Int}(I, model.P, model.P))
-        V = .5(V + V')
-        k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
-        mvec = Float64.(V*(Tau_NP' * k))
-        Beta_PM[:,m] = rand(MvNormal(mvec,V))
-    end
 
-    @views @threads for n in 1:model.N
-        W = Diagonal(W_NM[n,:]) 
-        V = inv(Beta_PM * W * Beta_PM' + Matrix{Int}(I, model.P, model.P))
-        V = .5(V + V')
-        k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
-        mvec = Float64.(V*(Beta_PM * k))
-        Tau_NP[n,:] = rand(MvNormal(mvec,V))
-    end
+    if isnothing(skipupdate) || !("D_NM" in skipupdate)
+        #Polya-gamma augmentation to update Beta
+        F_NM = Tau_NP * Beta_PM
+        W_NM = zeros(Float64, model.N, model.M)
+        
+        @views @threads for idx in 1:(model.N * model.M)
+            n = div(idx - 1, model.M) + 1
+            m = mod(idx - 1, model.M) + 1 
+            pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
+            W_NM[n,m] = rand(pg)
+        end
+        
+        @views @threads for m in 1:model.M
+            W = Diagonal(W_NM[:,m]) 
+            V = inv(Tau_NP' * W * Tau_NP + Matrix{Int}(I, model.P, model.P))
+            V = .5(V + V')
+            k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
+            mvec = Float64.(V*(Tau_NP' * k))
+            Beta_PM[:,m] = rand(MvNormal(mvec,V))
+        end
+
+        @views @threads for n in 1:model.N
+            W = Diagonal(W_NM[n,:]) 
+            V = inv(Beta_PM * W * Beta_PM' + Matrix{Int}(I, model.P, model.P))
+            V = .5(V + V')
+            k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
+            mvec = Float64.(V*(Beta_PM * k))
+            Tau_NP[n,:] = rand(MvNormal(mvec,V))
+        end
     
-    p_NM = logistic.(Tau_NP * Beta_PM)
+        p_NM = logistic.(Tau_NP * Beta_PM)
+    end
     #D_NM = zeros(Int, model.N, model.M)
 
     #Loop over the non-zeros in Y_DV and allocate
@@ -113,7 +113,9 @@ function backward_sample(model::birds, data, state, mask=nothing)
         n = div(idx - 1, model.M) + 1
         m = mod(idx - 1, model.M) + 1  
         
-        D_NM[n,m] = sample_D(model, Y_NM[n,m], Mu_NM[n,m], p_NM[n,m])
+        if isnothing(skipupdate) || !("D_NM" in skipupdate)
+            D_NM[n,m] = sample_D(model, Y_NM[n,m], Mu_NM[n,m], p_NM[n,m])
+        end
         
 
         if !isnothing(mask)
