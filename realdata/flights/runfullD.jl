@@ -11,6 +11,7 @@ using Base.Filesystem
 D = parse(Int, ARGS[1])
 maskSeed = parse(Int, ARGS[2])
 chainSeed = parse(Int, ARGS[3])
+T = 99 
 
 datafile = "/home/jlederman/DiscreteOrderStatistics/data/airtime.csv"
 df = CSV.read(datafile, DataFrame)
@@ -64,7 +65,7 @@ alpha = beta = 1 #not used
 Dmax = 9
 model = flights(N, M, T, R, Dmax, a, b, c, d, alpha, beta)
 
-@time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, info=info,initseed=chainSeed)
+@time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, info=info,initseed=chainSeed, constantinit=Dict("D_R"=>ones(Int, R)), skipupdate=["D_R"])
 samplesnew = [Dict("U_R"=> s["U_R"], "D_R"=>s["D_R"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"p"=>s["p"]) for s in samples]
 
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
