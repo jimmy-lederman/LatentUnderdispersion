@@ -29,7 +29,11 @@ end
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
 function sample_D(model::birds, Y, mu, p)
-    logprobs = [logpmfMaxPoisson(Y,mu,d) + logbinomial(model.Dmax-1, d-1) + (d-1)*log(p) + (model.Dmax - d)*log(1-p) for d in 1:model.Dmax]
+    logprobs = [logpmfMaxPoisson(Y,mu,d,compute=false) + logbinomial(model.Dmax-1, d-1) + (d-1)*log(p) + (model.Dmax - d)*log(1-p) for d in 1:model.Dmax]
+    # if sum(isinf.(logprobs)) > 0
+       #println(logprobs)
+    #     @assert 1 == 2
+    # end
     D = argmax(rand(Gumbel(0,1), model.Dmax) .+ logprobs)
     @assert D >= 1 && D <= model.Dmax
     return D
@@ -72,51 +76,12 @@ function backward_sample(model::birds, data, state, mask=nothing;skipupdate=noth
     Mu_NM = U_NK * V_KM
     D_NM = copy(state["D_NM"])
 
-    if isnothing(skipupdate) || !("D_NM" in skipupdate)
-        #Polya-gamma augmentation to update Beta
-        F_NM = Tau_NP * Beta_PM
-        W_NM = zeros(Float64, model.N, model.M)
-        
-        @views @threads for idx in 1:(model.N * model.M)
-            n = div(idx - 1, model.M) + 1
-            m = mod(idx - 1, model.M) + 1 
-            pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
-            W_NM[n,m] = rand(pg)
-        end
-        
-        @views @threads for m in 1:model.M
-            W = Diagonal(W_NM[:,m]) 
-            V = inv(Tau_NP' * W * Tau_NP + Matrix{Int}(I, model.P, model.P))
-            V = .5(V + V')
-            k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
-            mvec = Float64.(V*(Tau_NP' * k))
-            Beta_PM[:,m] = rand(MvNormal(mvec,V))
-        end
-
-        @views @threads for n in 1:model.N
-            W = Diagonal(W_NM[n,:]) 
-            V = inv(Beta_PM * W * Beta_PM' + Matrix{Int}(I, model.P, model.P))
-            V = .5(V + V')
-            k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
-            mvec = Float64.(V*(Beta_PM * k))
-            Tau_NP[n,:] = rand(MvNormal(mvec,V))
-        end
-    
-        p_NM = logistic.(Tau_NP * Beta_PM)
-    end
-    #D_NM = zeros(Int, model.N, model.M)
-
     #Loop over the non-zeros in Y_DV and allocate
     @views @threads for idx in 1:(model.N * model.M)
        
     #for idx in 1:(model.N * model.M)
         n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1  
-        
-        if isnothing(skipupdate) || !("D_NM" in skipupdate)
-            D_NM[n,m] = sample_D(model, Y_NM[n,m], Mu_NM[n,m], p_NM[n,m])
-        end
-        
+        m = mod(idx - 1, model.M) + 1      
 
         if !isnothing(mask)
             if mask[n,m] == 1
@@ -141,6 +106,41 @@ function backward_sample(model::birds, data, state, mask=nothing;skipupdate=noth
     Z_KM = dropdims(sum(Z_NMK, dims=1),dims=1)'
     V_KM = rand.(Gamma.(model.c .+ Z_KM, 1 ./(model.d .+ C_KM)))
 
+    if isnothing(skipupdate) || !("D_NM" in skipupdate)
+        #Polya-gamma augmentation to update Beta
+        F_NM = Tau_NP * Beta_PM
+        p_NM = logistic.(F_NM)
+        W_NM = zeros(Float64, model.N, model.M)
+        Mu_NM = U_NK * V_KM
+        @views @threads for idx in 1:(model.N * model.M)
+            n = div(idx - 1, model.M) + 1
+            m = mod(idx - 1, model.M) + 1      
+
+            D_NM[n,m] = sample_D(model, Y_NM[n,m], Mu_NM[n,m], p_NM[n,m])
+            pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
+            W_NM[n,m] = rand(pg)
+        end
+        
+        @views @threads for m in 1:model.M
+            W = Diagonal(W_NM[:,m]) 
+            V = inv(Tau_NP' * W * Tau_NP + Matrix{Int}(I, model.P, model.P))
+            V = .5(V + V')
+            k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
+            mvec = Float64.(V*(Tau_NP' * k))
+            Beta_PM[:,m] = rand(MvNormal(mvec,V))
+        end
+
+        @views @threads for n in 1:model.N
+            W = Diagonal(W_NM[n,:]) 
+            V = inv(Beta_PM * W * Beta_PM' + Matrix{Int}(I, model.P, model.P))
+            V = .5(V + V')
+            k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
+            mvec = Float64.(V*(Beta_PM * k))
+            Tau_NP[n,:] = rand(MvNormal(mvec,V))
+        end
+    
+        
+    end
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "Tau_NP"=>Tau_NP, "D_NM"=>D_NM)
     return data, state
 end

@@ -40,7 +40,7 @@ end
 
 
 
-function sample_likelihood(model::flightsbase, mu;n=1)
+function sample_likelihood(model::flightsbase, mu,n=1)
     if model.D == 1
         if n == 1
             return rand(Poisson(mu))

@@ -27,12 +27,12 @@ using Distributions
 #     return combine_result
 # end
 
-function logpmfMaxPoisson(Y,mu,D)
+function logpmfMaxPoisson(Y,mu,D;compute=true)
     if D == 1
         return logpdf(Poisson(mu), Y)
     else
         llik = logpdf(OrderStatistic(Poisson(mu), D, D), Y)
-        if isinf(llik) || isnan(llik)
+        if (isinf(llik) || isnan(llik)) && compute
             llik = logprobMax(Y,mu,D)
         end
     end
