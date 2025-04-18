@@ -69,4 +69,4 @@ model = flights(N, M, T, R, Dmax, a, b, c, d, alpha, beta)
 samplesnew = [Dict("U_R"=> s["U_R"], "D_R"=>s["D_R"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"p"=>s["p"]) for s in samples]
 
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
-save(folder*"fullsamplesD/sampleK$(K)D$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "samples", samplesnew, "I_N3",  samples[1]["I_N3"], "dist_N", samples[1]["dist_N"], "routes_R4", samples[1]["routes_R4"])
+save(folder*"fullsamplesD/sampleD$(D)seedChain$(chainSeed).jld", "samples", samplesnew, "I_N3",  samples[1]["I_N3"], "dist_N", samples[1]["dist_N"], "routes_R4", samples[1]["routes_R4"])

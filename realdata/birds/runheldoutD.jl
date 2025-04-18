@@ -14,7 +14,7 @@ chainSeed = parse(Int, ARGS[5])
 
 using CSV, DataFrames
 
-data = Dict("Y_NM" => Matrix(CSV.read("../../data/birds/birds_dunson.csv", DataFrame))[:,2:end]);
+data = Dict("Y_NM" => Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/birds/birds_dunson.csv", DataFrame))[:,2:end]);
 N, M = size(data["Y_NM"])
 
 
@@ -32,19 +32,20 @@ mask_NM = rand(N, M) .< .05
 
 if D == 0
     Dmax = 5
-    include("/home/jlederman/DiscreteOrderStatistics/models/flights/birds_simple.jl")
-    model = birds_simple(N, M, K, P, Dmax, a, b, c, d)
-    @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, info=info,initseed=chainSeed)
+    include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds_simple.jl")
+    model = birds(N, M, K, P, Dmax, a, b, c, d)
+    @time samples = fit(model, data, nsamples = 100, nburnin=1000, nthin=10, mask=mask_NM, initseed=chainSeed, 
+    skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 elseif D == 1
     include("/home/jlederman/DiscreteOrderStatistics/models/PoissonMF.jl")
-    model = Birds_simple_base(N, M, K, a, b, c, d)
-    @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, info=info,initseed=chainSeed)
+    model = PoissonMF(N, M, K, a, b, c, d)
+    @time samples = fit(model, data, nsamples = 100, nburnin=1000, nthin=10, mask=mask_NM, initseed=chainSeed)
 else #D > 1
     include("/home/jlederman/DiscreteOrderStatistics/models/MaxPoissonMF.jl")
-    model = Birds_simple_base(N, M, K, D, a, b, c, d)
-    @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, info=info,initseed=chainSeed)
+    model = MaxPoissonMF(N, M, K, D, a, b, c, d)
+    @time samples = fit(model, data, nsamples = 100, nburnin=1000, nthin=10, mask=mask_NM, initseed=chainSeed)
 end
 
-params = [D,K,p,maskSeed,chainSeed]
+params = [D,K,P,maskSeed,chainSeed]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/birds/"
-save(folder*"heldoutsamplesD/sampleD$(D)seedMask$(maskSeed)seedChain$(chainSeed).jld", "params", params, "samples", samples)
+save(folder*"heldoutsamplesD/sampleD$(D)K$(K)P$(P)seedMask$(maskSeed)seedChain$(chainSeed).jld", "params", params, "samples", samples)
