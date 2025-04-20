@@ -32,17 +32,17 @@ mask_NM = rand(N, M) .< .05
 
 if D == 0
     Dmax = 5
-    include("/home/jlederman/DiscreteOrderStatistics/models/flights/birds_simple.jl")
-    model = birds_simple(N, M, K, P, Dmax, a, b, c, d)
+    include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds_simple.jl")
+    model = birds(N, M, K, P, Dmax, a, b, c, d)
     @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, initseed=chainSeed,
     skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 elseif D == 1
     include("/home/jlederman/DiscreteOrderStatistics/models/PoissonMF.jl")
-    model = Birds_simple_base(N, M, K, a, b, c, d)
+    model = PoissonMF(N, M, K, a, b, c, d)
     @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, initseed=chainSeed)
 else #D > 1
     include("/home/jlederman/DiscreteOrderStatistics/models/MaxPoissonMF.jl")
-    model = Birds_simple_base(N, M, K, D, a, b, c, d)
+    model = MaxPoissonMF(N, M, K, D, a, b, c, d)
     @time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, mask=mask_NM, initseed=chainSeed)
 end
 
