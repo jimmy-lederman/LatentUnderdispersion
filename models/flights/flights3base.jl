@@ -142,7 +142,7 @@ function backward_sample(model::flightsbase, data, state, mask=nothing)
     @views @threads for n in 1:model.N   
         home = home_N[n]
         away = away_N[n]
-        mu = A_T[home]+B_T[away]+dist_NM[n,1]*U_R[routes_N[n]]
+        mu = A_T[home]+B_T[away]+dist_N[n]*U_R[routes_N[n]]
         if !isnothing(mask) && mask[n,1] == 1
             Y_NM[n,1] = sample_likelihood(model,mu,model.D)
         end
