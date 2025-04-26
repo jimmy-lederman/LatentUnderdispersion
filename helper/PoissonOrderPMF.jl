@@ -96,9 +96,12 @@ function logprobOrderStatisticPoisson(Y,mu,D,j;precision=1000)
     end
 end
 
-function logpmfOrderStatPoisson(Y,mu,D,j)
+function logpmfOrderStatPoisson(Y,mu,D,j;compute=true)
+    if D == 1
+        return logpdf(Poisson(mu), Y)
+    end
     llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
-    if isinf(llik) || isnan(llik)
+    if (isinf(llik) || isnan(llik)) && compute
         llik = logprobOrderStatisticPoisson(Y,mu,D,j)
     end
     return llik

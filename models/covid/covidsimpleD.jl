@@ -85,7 +85,7 @@ end
 function sample_prior(model::covidsimple,info=nothing,constantinit=nothing)
     pass = false
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
-    # V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
+    #V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     if !isnothing(constantinit)
         pass = ("V_KM" in keys(constantinit))
     end
@@ -166,6 +166,10 @@ function forward_sample(model::covidsimple; state=nothing, info=nothing)
         end 
     end
     #Y_NM = dropdims(sum(Y_NMKplus2,dims=3),dims=3)
+    # if maximum(Y_NM) > 10000
+    #     println(Y_NM)
+    #     @assert 1 == 2
+    # end
     data = Dict("Y_NM" => Y_NM)
     # state = Dict("U_NK" =>  state["U_NK"], "V_KM" => state["V_KM"], #"R_KTS" => state["R_KTS"],"
     #  "eps" => eps, "alpha" => alpha,
@@ -177,13 +181,13 @@ end
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
 function update_D(model::covidsimple, Y, mu, p)
-    logprobs = [logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1) + logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
+    logprobs = [logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1,compute=false) + logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
     D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
     @assert D >= 1 && D <= model.Dmax
     return D
 end
 
-function backward_sample(model::covidsimple, data, state, mask=nothing, skipupdate=nothing)
+function backward_sample(model::covidsimple, data, state, mask=nothing; skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -254,18 +258,29 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
 
     #update time factors
     Y_MK = dropdims(sum(Y_NMKplus2,dims=1),dims=1)[:,1:model.K]
-    C1_KM = alpha * pop_N .* U_NK' * D_NM
+    C1_KM = alpha * (pop_N .* U_NK)' * D_NM
+    # @views for m in 1:model.M
+    #     @views for k in 1:model.K
+    #         post_shape = model.c + Y_MK[m,k]
+    #         post_rate = model.d + C1_KM[k,m]
+    #         V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
+    #     end
+    # end
 
     l_KM = zeros(model.K,model.M+1)
     q_KM = zeros(model.K,model.M+1)
+    
     #backward pass
     @views @threads for m in model.M:-1:2
         @views for k in 1:model.K
             q_KM[k,m] = log(1 + (C1_KM[k,m]/model.c) + q_KM[k,m+1])
-            temp = sampleCRT(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
+            
+            temp = sampleCRTlecam(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
+            
             l_KM[k,m] = rand(Binomial(temp, model.c*V_KM[k,m-1]/(model.c*V_KM[k,m-1] + model.d)))
         end 
     end
+    
     @assert sum(l_KM[:,model.M+1]) == 0 && sum(q_KM[:,model.M+1]) == 0
     #forward pass
     @views for m in 1:model.M
@@ -278,7 +293,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
             end 
         end 
     end 
-
+    
 
 
     #Polya-gamma augmentation to update D, Beta and Tau
@@ -298,15 +313,14 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
             probvec = pop*U_NK[n,:] .* V_KM[:,m]
             mu1 = sum(probvec) 
             mu = Ylast + pop*eps + alpha*mu1
-            D_NM[n,m] = update_D(model, Y_NM[n,m], mu, p_NM[n,m])
-        end
-
-
-       
-        
-        @views @threads for idx in 1:(model.N * model.M)
-            n = div(idx - 1, model.M) + 1
-            m = mod(idx - 1, model.M) + 1 
+            
+            try
+                D_NM[n,m] = update_D(model, Y_NM[n,m], mu, p_NM[n,m])
+            catch InterruptException
+                println(Y_NM[n,m], " ", mu, " ", p_NM[n,m])
+                @assert 1 == 2
+            end
+            
             pg = PolyaGammaHybridSampler((model.Dmax - 1)/2, F_NM[n,m])
             W_NM[n,m] = rand(pg)
         end
@@ -319,7 +333,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing, skipupda
             mvec = Float64.(V*(Beta_NQ' * k))
             Tau_QM[:,m] = rand(MvNormal(mvec,V))
             #update variance
-            sigma_M[M] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum(Tau_QM[:,m].^2)/2))
+            sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum(Tau_QM[:,m].^2)/2))
         end
 
         @views @threads for n in 1:model.N

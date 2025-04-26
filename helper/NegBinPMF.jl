@@ -59,24 +59,14 @@ function logprobmaxnb(Y,r,p,D;precision=1000)
     #return 0
 end
 
-function logpmfMaxNegBin(Y,r,p,D)
+function logpmfMaxNegBin(Y,r,p,D;compute=true)
     llik = logpdf(OrderStatistic(NegativeBinomial(r,p), D, D), Y)
-    if isinf(llik) || isnan(llik)
-        #try
+    if (isinf(llik) || isnan(llik)) && compute
             llik = logprobmaxnb(Y,r,p,D)
             if llik == 0
-                # if Y > mean(NegativeBinomial(r,p))
-                #     llik = logpdf(NegativeBinomial(r,p), Y)
-                #     @assert llik != 0 && !isinf(llik) && !isnan(llik)
-                # else 
                     println(Y, " ", r, " ", p)
                     throw("missed low error")
-                #end
             end
-        # catch InterruptException
-        #     println(Y, " ", r, " ", p)
-        #     @assert 1 == 2
-        # end
     end
     return llik
 end
