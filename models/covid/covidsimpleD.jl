@@ -180,6 +180,16 @@ end
 
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
+function update_D2(model::covidsimple, Y, mu, p)
+    Dlist = 1:2:model.Dmax
+    jlist = div.(Dlist,2) .+ 1
+    logpmfs = logpmfOrderStatPoissonVec(Y,mu,Dlist,jlist,compute=false)
+    logpriors = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
+    D = 2*argmax(rand(Gumbel(0,1), length(logpmfs)) .+ logpmfs .* logpriors) - 1
+    @assert D >= 1 && D <= model.Dmax
+    return D
+end
+
 function update_D(model::covidsimple, Y, mu, p)
     logprobs = [logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1,compute=false) + logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
     D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
@@ -226,7 +236,6 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
                 Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), D_NM[n,m], div(D_NM[n,m], 2) + 1))
             end
         end
-
         Z = sampleSumGivenOrderStatistic(Y_NM[n, m], D_NM[n,m], div(D_NM[n,m],2)+1, Poisson(Ylast + alpha*mu1 + pop*eps))
         if Z > 0 
             probvec = vcat(alpha*probvec, Ylast, pop*eps)
@@ -241,15 +250,16 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
 
     #update county factors
     Y_NK = dropdims(sum(Y_NMKplus2,dims=2),dims=2)[:,1:model.K]
-    C2_NK = alpha * D_NM * V_KM'
-    @views for n in 1:model.N
-        pop =  pop_N[n]
-        @views for k in 1:model.K
-            post_shape = model.a + Y_NK[n,k]
-            post_rate = model.b + pop * C2_NK[n, k]
-            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
-        end
-    end
+    C2_NK = alpha * pop_N .* D_NM * V_KM'
+    U_NK = rand.(Gamma.(model.a .+ Y_NK, 1 ./(model.b .+ C2_NK)))
+    # @views for n in 1:model.N
+    #     pop =  pop_N[n]
+    #     @views for k in 1:model.K
+    #         post_shape = model.a + Y_NK[n,k]
+    #         post_rate = model.b + pop * C2_NK[n, k]
+    #         U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
+    #     end
+    # end
 
     #update noise term
     post_shape = model.g + sum(Y_NMKplus2[:,:,model.K+2])
@@ -314,12 +324,12 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
             mu1 = sum(probvec) 
             mu = Ylast + pop*eps + alpha*mu1
             
-            try
-                D_NM[n,m] = update_D(model, Y_NM[n,m], mu, p_NM[n,m])
-            catch InterruptException
-                println(Y_NM[n,m], " ", mu, " ", p_NM[n,m])
-                @assert 1 == 2
-            end
+            # try
+            D_NM[n,m] = update_D(model, Y_NM[n,m], mu, p_NM[n,m])
+            # catch InterruptException
+            #     println(Y_NM[n,m], " ", mu, " ", p_NM[n,m])
+            #     @assert 1 == 2
+            # end
             
             pg = PolyaGammaHybridSampler((model.Dmax - 1)/2, F_NM[n,m])
             W_NM[n,m] = rand(pg)

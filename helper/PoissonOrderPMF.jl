@@ -106,3 +106,18 @@ function logpmfOrderStatPoisson(Y,mu,D,j;compute=true)
     end
     return llik
 end
+
+function logpmfOrderStatPoissonVec(Y, mu, Dlist, jlist; compute=true)
+    n = length(Dlist)
+    result = Vector{Float64}(undef, n)
+    @inbounds for d in 1:n
+        val = logpmfOrderStatPoisson(Y, mu, Dlist[d], jlist[d], compute=compute)
+        result[d] = val
+        if isinf(val) || isnan(val)
+            result[d+1:end] .= -Inf
+            break
+        end
+    end
+    return result
+end
+
