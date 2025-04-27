@@ -144,7 +144,7 @@ function backward_sample(model::flightsbase, data, state, mask=nothing)
         away = away_N[n]
         mu = A_T[home]+B_T[away]+dist_N[n]*U_R[routes_N[n]]
         if !isnothing(mask) && mask[n,1] == 1
-            Y_NM[n,1] = sample_likelihood(model,mu,model.D)
+            Y_NM[n,1] = sample_likelihood(model,mu)
         end
         # if Y_NM[n, 1] > 0 &&  
         Z1_NM[n,1] = sampleSumGivenOrderStatistic(Y_NM[n, 1], model.D, div(model.D,2)+1, Poisson(mu))
