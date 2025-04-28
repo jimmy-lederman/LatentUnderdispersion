@@ -65,7 +65,7 @@ alpha = beta = 1 #not used
 Dmax = 9
 model = flights(N, M, T, R, Dmax, a, b, c, d, alpha, beta)
 
-@time samples = fit(model, data, nsamples = 100, nburnin=4000, nthin=10, info=info,initseed=chainSeed, constantinit=Dict("D_R"=>ones(Int, R)), skipupdate=["D_R"])
+@time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, info=info,initseed=chainSeed, constantinit=Dict("D_R"=>ones(Int, R)), skipupdate=["D_R"])
 samplesnew = [Dict("U_R"=> s["U_R"], "D_R"=>s["D_R"], "A_T"=>s["A_T"], "B_T"=>s["B_T"],"p"=>s["p"]) for s in samples]
 
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"

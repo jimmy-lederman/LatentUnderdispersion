@@ -56,7 +56,7 @@ function evalulateLogLikelihood(model::genes, state, data, info, row, col)
     if D == 1
         return logpdf(NegativeBinomial(r,p), Y)
     else
-        return logpmfMaxNegBin(Y, r, p, D)
+        return logpmfOrderStatNegBin(Y, r, p, D, div(D,2)+1)
     end
 end
 
@@ -88,15 +88,22 @@ function sample_likelihood(model::genes, mu,p,D)
     if D == 1
         return rand(NegativeBinomial(mu,p))
     else
-        return rand(OrderStatistic(NegativeBinomial(mu,p), D, D))
+        return rand(OrderStatistic(NegativeBinomial(mu,p), D, div(D,2)+1))
     end
 end
 
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
-function sample_D(model::genes, Y, r, p1, p2)
+function update_Dmax(model::genes, Y, r, p1, p2)
     logprobs = [logpmfMaxNegBin(Y,r,p1,d,compute=false) + logbinomial(model.Dmax-1, d-1) + (d-1)*log(p2) + (model.Dmax - d)*log(1-p2) for d in 1:model.Dmax]
     D = argmax(rand(Gumbel(0,1), model.Dmax) .+ logprobs)
+    @assert D >= 1 && D <= model.Dmax
+    return D
+end
+
+function update_Dmedian(model::genes, Y, r, p1, p2)
+    logprobs = [logpmfOrderStatNegBin(Y,r,p1,d,div(d,2)+1,compute=false) + logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p2)/2 + (model.Dmax - d)*log(1-p2)/2 for d in 1:2:model.Dmax]
+    D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
     @assert D >= 1 && D <= model.Dmax
     return D
 end
@@ -155,13 +162,12 @@ function backward_sample(model::genes, data, state, mask=nothing;skipupdate=noth
                 Y_NM[n,m] = sample_likelihood(model, mu, p, D) 
             end
         end
-        if Y_NM[n,m] > 0
-            Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], D, D, NegativeBinomial(mu,p))
-            if Z2_NM[n,m] > 0
-                Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], D*mu)
-                P_K = U_NK[n, :] .* V_KM[:, m]
-                Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
-            end
+        
+        Z2_NM[n,m] = sampleSumGivenOrderStatistic(Y_NM[n,m], D, div(D,2)+1, NegativeBinomial(mu,p))
+        if Z2_NM[n,m] > 0
+            Z1_NM[n,m] = sampleCRTlecam(Z2_NM[n,m], D*mu)
+            P_K = U_NK[n, :] .* V_KM[:, m]
+            Z_NMK[n, m, :] = rand(Multinomial(Z1_NM[n, m], P_K / sum(P_K)))
         end
     end
 
@@ -180,7 +186,9 @@ function backward_sample(model::genes, data, state, mask=nothing;skipupdate=noth
     
     
     #Update D
+    
     if isnothing(skipupdate) || !("D_NM" in skipupdate)
+        
         #Polya-gamma augmentation to update Beta
         F_NM = Beta_NQp1 * Tau_Qp1M
         p_NM = logistic.(F_NM)
@@ -188,10 +196,10 @@ function backward_sample(model::genes, data, state, mask=nothing;skipupdate=noth
         Mu_NM = U_NK * V_KM
         @views @threads for idx in 1:(model.N * model.M)
             n = div(idx - 1, model.M) + 1
-            m = mod(idx - 1, model.M) + 1      
-            
-            D_NM[n,m] = sample_D(model, Y_NM[n,m], Mu_NM[n,m], p_N[n], p_NM[n,m])
-            
+            m = mod(idx - 1, model.M) + 1 
+
+            D_NM[n,m] = update_Dmedian(model, Y_NM[n,m], Mu_NM[n,m], p_N[n], p_NM[n,m])
+
             pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
             W_NM[n,m] = rand(pg)
         end

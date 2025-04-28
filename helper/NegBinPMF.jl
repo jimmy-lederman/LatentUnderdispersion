@@ -73,7 +73,7 @@ end
 
 #need to do: implement median
 
-function logprobOrderStatisticNB(Y,r,p,D,j;precision=1000)
+function logprobOrderStatisticNB(Y,r,p,D,j;precision=100)
     #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
     #must set precision
     setprecision(BigFloat,precision)
@@ -110,9 +110,10 @@ function logprobOrderStatisticNB(Y,r,p,D,j;precision=1000)
     end
 end
 
-function logpmfOrderStatNegBin(Y,r,p,D,j)
+function logpmfOrderStatNegBin(Y,r,p,D,j;compute=true)
+
     llik = logpdf(OrderStatistic(NegativeBinomial(r,p), D, j), Y)
-    if isinf(llik) || isnan(llik)
+    if (isinf(llik) || isnan(llik)) && compute
         llik = logprobOrderStatisticNB(Y,r,p,D,j)
         if llik == 0
             println(Y, " ", r, " ", p)
