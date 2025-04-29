@@ -75,11 +75,11 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
     end
 end
 
-function sample_likelihood(model::covidsimple, mu,p=nothing,n=1)
-    if model.D == 1
+function sample_likelihood(model::covidsimple, mu,D,n=1)
+    if D == 1
         return rand(Poisson(mu),n)
     else
-        return rand(OrderStatistic(Poisson(mu),model.D, model.j),n)
+        return rand(OrderStatistic(Poisson(mu),D, div(D,2)+1),n)
     end
 end
 

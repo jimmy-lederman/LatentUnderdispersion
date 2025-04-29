@@ -30,7 +30,7 @@ function sampleCRTlecam(Y,R,tol=.4)
 end
 
 
-struct covidsimple <: MatrixMF
+struct covidsimplebase <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
@@ -49,7 +49,7 @@ struct covidsimple <: MatrixMF
 end
 
 
-function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
+function evalulateLogLikelihood(model::covidsimplebase, state, data, info, row, col)
     @assert !isnothing(info)
     if col == 1
         Ylast = info["Y0_N"][row]
@@ -71,7 +71,7 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
     end
 end
 
-function sample_likelihood(model::covidsimple, mu,p=nothing,n=1)
+function sample_likelihood(model::covidsimplebase, mu,p=nothing,n=1)
     if model.D == 1
         return rand(Poisson(mu),n)
     else
@@ -79,7 +79,7 @@ function sample_likelihood(model::covidsimple, mu,p=nothing,n=1)
     end
 end
 
-function sample_prior(model::covidsimple,info=nothing,constantinit=nothing)
+function sample_prior(model::covidsimplebase,info=nothing,constantinit=nothing)
     pass = false
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     # V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
@@ -107,7 +107,7 @@ function sample_prior(model::covidsimple,info=nothing,constantinit=nothing)
     return state
 end
 
-function forward_sample(model::covidsimple; state=nothing, info=nothing)
+function forward_sample(model::covidsimplebase; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model, info)
     end
@@ -157,7 +157,7 @@ function forward_sample(model::covidsimple; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::covidsimple, data, state, mask=nothing, skipupdate=nothing)
+function backward_sample(model::covidsimplebase, data, state, mask=nothing, skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -268,7 +268,7 @@ end
 
 #forecasting code 
 
-function predict(model::covidsimple, state, info, n, m, Ylast)
+function predict(model::covidsimplebase, state, info, n, m, Ylast)
     pop_N = info["pop_N"]
     eps = state["eps"]
     alpha = state["alpha"]
@@ -278,7 +278,7 @@ function predict(model::covidsimple, state, info, n, m, Ylast)
     return rand(OrderStatistic(Poisson(Ylast + pop*eps + alpha * pop * sum(U_NK[n,:] .* V_KM[:,m])), model.D, model.j))
 end
 
-function predict_x(model::covidsimple, state, info, n, mstart, Ystart, x)
+function predict_x(model::covidsimplebase, state, info, n, mstart, Ystart, x)
     result = zeros(x)
     Ylast = Ystart
     m = mstart + 1
@@ -291,7 +291,7 @@ function predict_x(model::covidsimple, state, info, n, mstart, Ystart, x)
 end
 
 
-function forecast(model::covidsimple, state, data, info, Ti)
+function forecast(model::covidsimplebase, state, data, info, Ti)
     lastgamma = state["V_KM"][:,end]
     forecastGamma_KTi = zeros(model.K, Ti)
     for i in 1:Ti
