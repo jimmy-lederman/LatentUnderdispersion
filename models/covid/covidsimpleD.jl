@@ -60,6 +60,7 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
         Ylast = data["Y_NM"][row,col-1]
     end
     Y = data["Y_NM"][row,col]
+    D = state["D_NM"][row,col]
     pop = info["pop_N"][row]
     eps = state["eps"]
     alpha = state["alpha"]
@@ -67,10 +68,10 @@ function evalulateLogLikelihood(model::covidsimple, state, data, info, row, col)
     V_KM = state["V_KM"]
     mu = sum(U_NK[row,:] .* V_KM[:,col])
     rate = Ylast+alpha*pop*mu+pop*eps
-    if model.D == 1
+    if D == 1
         return logpdf(Poisson(rate), Y)
     else
-        return logpmfOrderStatPoisson(Y,rate,model.D,model.j)
+        return logpmfOrderStatPoisson(Y,rate,D,div(D,2)+1)
     end
 end
 
