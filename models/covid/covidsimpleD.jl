@@ -376,7 +376,8 @@ function predict(model::covidsimple, state, info, n, m, Ylast)
     pop = pop_N[n]
     U_NK = state["U_NK"]
     V_KM = state["V_KM"]
-    return rand(OrderStatistic(Poisson(Ylast + pop*eps + alpha * pop * sum(U_NK[n,:] .* V_KM[:,m])), model.D, model.j))
+    D_NM = state["D_NM"]
+    return rand(OrderStatistic(Poisson(Ylast + pop*eps + alpha * pop * sum(U_NK[n,:] .* V_KM[:,m])), D_NM[n,m],div(D_NM[n,m],2)+1))
 end
 
 function predict_x(model::covidsimple, state, info, n, mstart, Ystart, x)
