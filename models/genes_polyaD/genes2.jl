@@ -22,7 +22,7 @@ struct genes <: MatrixMF
     alpha::Float64
     beta::Float64
     constant::Float64
-    sigma2::Float64
+    #model.sigma2::Float64
 end
 
 function sampleCRT(Y,R)
@@ -70,8 +70,10 @@ function sample_prior(model::genes,info=nothing)
     Beta_NQ = hcat(rand.(Normal.(0,sqrt.(sigma_N)),model.Q)...)'
     Tau_QM = hcat(rand.(Normal.(0,sqrt.(sigma_M)),model.Q)...)
 
-    Beta_N = rand(Normal(model.constant, sqrt(model.sigma2)), model.N)
-    Tau_M = rand(Normal(1,sqrt(model.sigma2)), model.M)
+    #Beta_N = rand.(Normal.(model.constant, sqrt.(sigma_N)))
+    #Beta_N = rand(Normal(model.constant, 1), model.N)
+    #Tau_M = rand(Normal(1, sqrt(model.sigma2)), model.MatrixMF)
+    #Tau_M = fill(1, model.M)
 
     Beta_NQp1 = hcat(Beta_NQ, Beta_N)
     Tau_Qp1M = hcat(Tau_QM', Tau_M)'
@@ -191,8 +193,10 @@ function backward_sample(model::genes, data, state, mask=nothing;skipupdate=noth
         
         #Polya-gamma augmentation to update Beta
         F_NM = Beta_NQp1 * Tau_Qp1M
+        #F_NM2 = Beta_NQp1[:,1:end-1] * Tau_Qp1M[1:end-1,:]
         p_NM = logistic.(F_NM)
         W_NM = zeros(Float64, model.N, model.M)
+        #W_NM2 = zeros(Float64, model.N, model.M)
         Mu_NM = U_NK * V_KM
         @views @threads for idx in 1:(model.N * model.M)
             n = div(idx - 1, model.M) + 1
@@ -200,38 +204,47 @@ function backward_sample(model::genes, data, state, mask=nothing;skipupdate=noth
 
             D_NM[n,m] = update_Dmedian(model, Y_NM[n,m], Mu_NM[n,m], p_N[n], p_NM[n,m])
 
-            pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
+            pg = PolyaGammaHybridSampler((model.Dmax - 1)/2, F_NM[n,m])
+            #pg2 = PolyaGammaHybridSampler(model.Dmax - 1, F_NM2[n,m])
             W_NM[n,m] = rand(pg)
+            #W_NM2[n,m] = rand(pg)
         end
         
-        offset = zeros(model.Q+1)
-        offset[end] = 1/model.sigma2
-        @views @threads for m in 1:model.M
+        # offset = zeros(model.Q+1)
+        # offset[end] = 1/model.sigma2
+
+        Beta_NQ = Beta_NQp1[:,1:(end-1)]
+        @views for m in 1:model.M
             W = Diagonal(W_NM[:,m]) 
-            ident =  (1/sigma_M[m])*Matrix{Int}(I, model.Q+1, model.Q+1)
-            ident[end,end] = (1/model.sigma2)
-            V = inv(Beta_NQp1' * W * Beta_NQp1 + ident)
+            ident =  (1/sigma_M[m])*Matrix{Int}(I, model.Q, model.Q)
+            #ident[end,end] = 1/model.sigma2
+            V = inv(Beta_NQ' * W * Beta_NQ + ident)
             V = .5(V + V')
             k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
-            mvec = Float64.(V*(Beta_NQp1' * k + offset))
-            Tau_Qp1M[:,m] = rand(MvNormal(mvec,V))
+            offset = fill(sum(Beta_NQp1[:,end])/sigma_N[m], model.Q)
+            #offset[end] = 
+            mvec = Float64.(V*(Beta_NQ' * k + offset))
+            Tau_Qp1M[:,m] = vcat(rand(MvNormal(mvec,V)),1)
+            
             #update variance
             sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum(Tau_Qp1M[1:(end-1),m].^2)/2))
         end
-        
-        offset = zeros(model.Q+1)
-        offset[end] = model.constant/model.sigma2
-        @views @threads for n in 1:model.N
+        # Tau_Qp1M[end,:] = fill(1,model.M)
+        # println(Tau_Qp1M)
+        @views for n in 1:model.N
             W = Diagonal(W_NM[n,:]) 
             ident = (1/sigma_N[n])*Matrix{Int}(I, model.Q+1, model.Q+1)
-            ident[end,end] = (1/model.sigma2)
+            # ident[end,end] = 1 
             V = inv(Tau_Qp1M * W * Tau_Qp1M' + ident)
             V = .5(V + V')
             k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
+            offset = zeros(model.Q+1)
+            offset[end] = model.constant/sigma_N[n]
             mvec = Float64.(V*(Tau_Qp1M * k + offset))
             Beta_NQp1[n,:] = rand(MvNormal(mvec,V))
             #update variance
-            sigma_N[n] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum(Beta_NQp1[n,1:(end-1)].^2)/2))
+
+            sigma_N[n] = rand(InverseGamma(model.alpha0 + (model.Q+1)/2, model.beta0 + sum((offset .- Beta_NQp1[n,1:end]).^2)/2))
         end
     end
 

@@ -1,0 +1,47 @@
+---
+title: "Dregression"
+output: html_document
+date: "2025-04-30"
+---
+
+```{r}
+Dmean <- as.matrix(read.csv("/Users/jimmy/Desktop/OrderStats/figures/birds/Dregression/D_NMmean.csv"))
+X <- as.matrix(read.csv("/Users/jimmy/Desktop/OrderStats/data/birds/birds_dunsonX.csv"))
+```
+
+```{r}
+index <- sample(1:nrow(X), 100)
+Xsub <- X[index,]
+Dmeansub <- Dmean[index,]
+```
+
+
+```{r}
+values <- c(Dmean)
+species <- rep(1:ncol(Dmean), each = nrow(Dmean))
+
+repeated_mat <- X[rep(1:nrow(X), each = ncol(Dmean)), ]
+Dmeanvec <- cbind(values, species,repeated_mat)
+```
+
+```{r}
+df <- data.frame(Dmeanvec)
+df$X<- NULL
+df$X.Intercept. <- NULL
+df[] <- lapply(df, function(x) as.numeric(as.character(x)))
+df$species <- as.factor(species)
+```
+
+```{r}
+model1 <- lm(data=df,values~.)
+```
+
+```{r}
+summary(model1)
+```
+
+
+
+
+
+
