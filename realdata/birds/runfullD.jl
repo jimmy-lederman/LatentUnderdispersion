@@ -24,7 +24,7 @@ d = 1
 
 if D == 0
     Dmax = 5
-    include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds_simple.jl")
+    include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds_simple2.jl")
     model = birds(N, M, K, P, Dmax, a, b, c, d)
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,
     skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
