@@ -54,7 +54,7 @@ function sample_prior(model::birds,info=nothing, constantinit=nothing)
     # Beta_Pp1M = hcat(Beta_PM', Beta_M)'
     D_NM = rand.(Binomial.(model.Dmax - 1, logistic.(Tau_NP * Beta_PM))) .+ 1
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_Pp1M"=>Beta_Pp1M, "Tau_NPp1"=>Tau_NPp1, #"Beta_M"=>Beta_M, "Tau_N"=>Tau_N, 
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "Tau_NP"=>Tau_NP, #"Beta_M"=>Beta_M, "Tau_N"=>Tau_N, 
     "D_NM"=>D_NM)
     return state
 end
