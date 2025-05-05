@@ -39,12 +39,13 @@ function sample_prior(model::birdsCov,info=nothing, constantinit=nothing)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     X_NP = info["X_NP"]
     P = size(X_NP)[2]
-    Beta_PM = rand(Normal(0,1), P, model.M) #???
-
-    
+    Beta_P = rand(Normal(0,1), P)
+    sigma2_P = rand(InverseGamma(1,1), P)
+    # Beta_PM = rand(Normal.(Beta_P, sigma_P), model.M)'
+    Beta_PM = hcat(rand.(Normal.(Beta_P,sqrt.(sigma2_P)),model.M)...)'
     D_NM = rand.(Binomial.(model.Dstar - 1, logistic.(X_NP*Beta_PM))) .+ 1
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "D_NM"=>D_NM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "D_NM"=>D_NM, "Beta_P"=>Beta_P, "sigma2_P"=>sigma2_P)
     return state
 end
 
@@ -80,6 +81,8 @@ function backward_sample(model::birdsCov, data, state, mask=nothing;skipupdate=n
     V_KM = copy(state["V_KM"])
     Beta_PM = copy(state["Beta_PM"])
     D_NM = copy(state["D_NM"])
+    Beta_P =copy(state["Beta_P"])
+    sigma2_P =copy(state["sigma2_P"])
     
     X_NP = info["X_NP"]
     P = size(X_NP)[2]
@@ -100,8 +103,6 @@ function backward_sample(model::birdsCov, data, state, mask=nothing;skipupdate=n
             end
         end
 
-        
-        
         if Y_NM[n, m] > 0
             Z_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], D_NM[n,m], D_NM[n,m], Poisson(Mu_NM[n, m]))
             P_K = U_NK[n, :] .* V_KM[:, m]
@@ -141,20 +142,29 @@ function backward_sample(model::birdsCov, data, state, mask=nothing;skipupdate=n
         
         @views @threads for m in 1:model.M
             W = Diagonal(W_NM[:,m]) 
-            
-            V = inv(X_NP' * W * X_NP + Matrix{Int}(I, P, P))
-            
+            B_inv = Diagonal(1 ./ sigma2_P)
+            V = inv(X_NP' * W * X_NP +  B_inv)
+
+            #V = inv(X_NP' * W * X_NP + Matrix{Int}(I, P, P))
             V = .5(V + V')
             k = D_NM[:,m] .- (model.Dstar - 1)/2 .- 1
         
-            mvec = Float64.(V*(X_NP' * k))
+            mvec = Float64.(V*(X_NP' * k + B_inv * Beta_P))
             
             Beta_PM[:,m] = rand(MvNormal(mvec,V))
         end
+
+        @views for p in 1:P
+            tau_p = 1/(model.M/sigma2_P[p] + 1)
+            mu_p = sum(Beta_PM[p,:])/(sigma2_P[p] + model.M)
+            Beta_P[p] = rand(Normal(mu_p,sqrt(tau_p)))
+
+            sigma2_P[p] = rand(InverseGamma(1 + model.M/2, 1 + .5*sum((Beta_PM[p,:] .- Beta_P[p]).^2)))
+        end 
         
         p_NM = logistic.(X_NP * Beta_PM)
     end
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "D_NM"=>D_NM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "D_NM"=>D_NM, "Beta_P"=>Beta_P, "sigma2_P"=>sigma2_P)
     return data, state
 end
