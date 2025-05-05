@@ -84,7 +84,7 @@ if D == 0
 else
     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
     j = div(D,2)+1
-    model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
+    model = covidsimplebase(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
     @time samples = fit(model, data, initseed=chainSeed, nsamples = 100, nburnin=4000, nthin=20,
      mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
 end

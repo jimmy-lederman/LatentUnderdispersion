@@ -51,13 +51,13 @@ beta = 1
 if D == 0
     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimpleD.jl")
     model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,alpha,beta)
-    @time samples = fit(model, data, initseed=chainSeed, nsamples = 100, nburnin=4000, nthin=20,
+    @time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=20,
     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
 else
     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
     j = div(D,2)+1
-    model = covidsimple(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
-    @time samples = fit(model, data, initseed=chainSeed, nsamples = 100, nburnin=4000, nthin=20,
+    model = covidsimplebase(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
+    @time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=20,
     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
 end
 
