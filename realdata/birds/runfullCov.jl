@@ -26,7 +26,7 @@ Dmax = 5
 
 include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds.jl")
 model = birdsCov(N, M, K, Dmax, a, b, c, d)
-@time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,
+@time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,info=info,
 skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 
 params = [K,chainSeed]
