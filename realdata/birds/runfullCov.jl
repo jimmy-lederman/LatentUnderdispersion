@@ -31,4 +31,4 @@ skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 
 params = [K,chainSeed]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/birds/"
-save(folder*"fullsamplesCov/sampleD$(D)seedChain$(chainSeed).jld", "params", params, "samples", samples)
+save(folder*"fullsamplesCov/sampleK$(K)seedChain$(chainSeed).jld", "params", params, "samples", samples)
