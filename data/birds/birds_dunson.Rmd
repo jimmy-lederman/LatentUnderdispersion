@@ -10,11 +10,17 @@ data <- birds$Y
 ```
 
 ```{r}
+species = colnames(data)
+```
+
+
+```{r}
 covariates <- birds$XData
 ```
 
 
 ```{r}
+write.csv(data.frame(index=1:137,species=species),"birds_dunson_names.csv")
 write.csv(data, "birds_dunson.csv")
 write.csv(covariates, "birds_dunsonX.csv")
 ```
