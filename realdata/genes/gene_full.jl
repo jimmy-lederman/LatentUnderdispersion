@@ -30,12 +30,12 @@ constant = -50
 sigma2 = 10
 Dmax = 9
 
-model1 = genes(N,M,K,Q,Dmax,a,b,c,d,alpha0,beta0,alpha,beta,constant,sigma2)
+model = genes(N,M,K,Q,Dmax,a,b,c,d,alpha0,beta0,alpha,beta,constant,sigma2)
 
 
-@time samples = fit(model, data, nsamples = 100, nburnin=100, nthin=10, initseed = chainSeed,
+@time samples = fit(model, data, nsamples =500, nburnin=4000, nthin=20, initseed = chainSeed,
 skipupdate=["D_NM"],constantinit=Dict("D_NM"=>ones(Int, N, M)))
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 params = [chainSeed,K,Q]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/fullsamples_subset/"
-save(folder*"/sample_seed2_$(chainSeed)D$(D)j$(j)K$(K)Q$(Q)Burnin$(nburnin).jld", "params", params, "samples", samples)
+save(folder*"/sample_seed2_$(chainSeed)K$(K)Q$(Q).jld", "params", params, "samples", samples)
