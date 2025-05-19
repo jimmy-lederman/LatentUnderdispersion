@@ -218,7 +218,11 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
         if Y > mean(dist) 
             logtruncProb = 0
             if pdf(dist,Y) != 0 
-                logtruncProb = logpdf(Truncated(dist, Y, Inf), Y)
+                try
+                    logtruncProb = logpdf(Truncated(dist, Y, Inf), Y)
+                catch ex
+                    logtruncProb = 0
+                end
             else
                 logtruncProb = 0
             end
@@ -231,7 +235,11 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
         else #Y <= mean(dist)
             logtruncProb = 0
             if pdf(dist,Y) != 0 
-                logtruncProb = logpdf(Truncated(dist, 0, Y), Y)
+                try 
+                    logtruncProb = logpdf(Truncated(dist, 0, Y), Y)
+                catch ex
+                    logtruncProb = 0
+                end
             else
                 logtruncProb = 0
             end
