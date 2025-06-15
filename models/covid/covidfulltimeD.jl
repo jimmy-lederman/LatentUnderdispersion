@@ -326,7 +326,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
         F_NM = Beta_NQ * Tau_QM
         W_NM = zeros(Float64, model.N, model.M)
         p_NM = logistic.(F_NM)
-        @views for idx in 1:(model.N * model.M)
+        @views @threads for idx in 1:(model.N * model.M)
             m = div(idx - 1, model.N) + 1
             n = mod(idx - 1, model.N) + 1
             if m == 1
@@ -350,7 +350,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
             W_NM[n,m] = rand(pg)
         end
         Ident = Matrix{Int}(I, model.Q, model.Q)
-        @views for m in 1:model.M
+        @views @threads for m in 1:model.M
             W = Diagonal(W_NM[:,m])
             if m == M
                 V = inv(Beta_NQ' * W * Beta_NQ + (1/sigma_M[m])*Ident)
@@ -375,7 +375,7 @@ function backward_sample(model::covidsimple, data, state, mask=nothing; skipupda
             end
         end
 
-        @views for n in 1:model.N
+        @views @threads for n in 1:model.N
             W = Diagonal(W_NM[n,:]) 
             V = inv(Tau_QM * W * Tau_QM' + (1/sigma_N[n])*Matrix{Int}(I, model.Q, model.Q))
             V = .5(V + V')
