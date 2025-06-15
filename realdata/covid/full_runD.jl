@@ -38,8 +38,8 @@ a = 1
 b = 1
 c = 100
 d = .1
-starta = .01
-startb = 1
+# starta = .01
+# startb = 1
 g = .5
 h = 1
 scale_shape = 2
@@ -47,12 +47,19 @@ scale_rate = 1
 Dmax = 9
 alpha = 1
 beta = 1
+start_tau = 0
+start_V1 = .01
+start_V2 = 1
+tauc = 1
+taud = 0
+
+
 
 if D == 0
-    include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimpleD.jl")
-    model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,alpha,beta)
+    include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidfulltimeD.jl")
+    model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,start_V1,start_V2,alpha,beta,tauc,taud,start_tau)
     @time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=20,
-    info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
+     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
 else
     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
     j = div(D,2)+1
@@ -67,5 +74,5 @@ end
 params = [K,Q,D,seed]
 
 # samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medians/full_samplesD/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medians/full_samplesD_dynamic/"
 save(folder*"/sample_seed$(seed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples)

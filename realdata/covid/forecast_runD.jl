@@ -67,8 +67,8 @@ a = 1
 b = 1
 c = 100
 d = .1
-starta = .01
-startb = 1
+# starta = .01
+# startb = 1
 g = .5
 h = 1
 scale_shape = 2
@@ -77,7 +77,7 @@ Dmax = 9
 alpha = 1
 beta = 1
 start_tau = 0
-start_V1 = 1
+start_V1 = .01
 start_V2 = 1
 tauc = 1
 taud = 0
@@ -103,5 +103,5 @@ end
 params = [K,Q,D,maskSeed,chainSeed]
 
 # samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medians/heldout_samplesD/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/medians/heldout_samplesD_dynamic/"
 save(folder*"/sample_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
