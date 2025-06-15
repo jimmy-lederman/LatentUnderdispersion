@@ -7,11 +7,13 @@ date: "2024-08-27"
 
 ```{r}
 #simulate data from various gamma count distributions
-B <- 1000
-alphalist <- c(1.25,1.5,2,3,4,5,10)
+B <- 100000
+# alphalist <- c(1.25,1.5,2,3,4,5,10)
+alphalist <- c(3)
 numDatasets <- 5
 mat <- matrix(0, nrow=B+2,ncol=length(alphalist)*numDatasets)
 count <- 1
+n <- 100
 for(i in 1:length(alphalist)){
   for(j in 1:numDatasets){
     set.seed(j)
@@ -24,12 +26,14 @@ for(i in 1:length(alphalist)){
       v_n <- cumsum(tau_n)
       x[b] <- sum(v_n <= Th)
     }
+    print(alpha)
+    print(var(x)/mean(x))
     mat[,count] <- c(alpha, j, x)
     count <- count + 1
   }
 }
 
-write.csv(mat, "/Users/jimmylederman/Desktop/synthetic/GammaCount/data/gcsamples.csv")
+#write.csv(mat, "/Users/jimmylederman/Desktop/synthetic/GammaCount/data/gcsamples.csv")
 #hist(x)
 ```
 

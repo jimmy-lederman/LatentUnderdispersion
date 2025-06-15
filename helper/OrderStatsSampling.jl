@@ -103,6 +103,7 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
     end
     @assert D >= j    
     @views for k in 1:D
+        # println(k, " ", j, " ", r_lower, D, " ", r_highr)
         @assert (j - r_lower) >= 1
         @assert (D - r_highr) >= j
         if r_equal == 0 && r_lower + r_highr == D - 1
@@ -188,14 +189,21 @@ function logprobVec2(Y,j,D,dist,numUnder,numY,numOver)
     logprobequal = logprobY2(Y,conditionD,conditionj,dist,numY+1)
     logprobless = logcdf(dist,Y-1) + jointYless#/jointYdenom
     logprobmore = logccdf(dist,Y) + jointYmore#/jointYdenom
+
+    
     
     logprobs = [logprobless,logprobequal,logprobmore]
     if sum(isinf.(logprobs)) ==  3
 
         logprobs = lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
     end
-
     @assert sum(isinf.(logprobs)) <  3
+    #for checking
+    #logdenom = logprobY2(Y,conditionD,conditionj,dist,numY)
+    # logprobs = [exp(logprobless),exp(logprobequal),exp(logprobmore)]
+    # logprobs = logprobs ./ sum(logprobs)
+
+    
 
     return logprobs
 end

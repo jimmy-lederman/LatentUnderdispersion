@@ -76,9 +76,16 @@ scale_rate = 1
 Dmax = 9
 alpha = 1
 beta = 1
+start_tau = 0
+start_V = 0
+tauc = 1
+taud = 0
+
+
+
 if D == 0
-    include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimpleD.jl")
-    model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,alpha,beta)
+    include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidfulltimeD.jl")
+    model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,start_V,alpha,beta,start_tau,tauc,taud)
     @time samples = fit(model, data, initseed=chainSeed, nsamples = 100, nburnin=4000, nthin=20,
      mask=mask_NM,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
 else
