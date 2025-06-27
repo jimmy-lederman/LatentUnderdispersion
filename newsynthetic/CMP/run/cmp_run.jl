@@ -32,7 +32,7 @@ initseed = parse(Int, ARGS[5])
 # println(griddy)
 # println(annealstrat)
 #get data
-data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/newsynthetic/CMP/data/CMPdata.csv", DataFrame)
+data_all = CSV.read("/home/jlederman/DiscreteOrderStatistics/newsynthetic/CMP/data/CMPdata_final.csv", DataFrame)
 data_all = select(data_all, Not(1))
 data_all = Matrix(data_all)
 Y_NM = Int.(reshape(data_all[3:1002,datasetnum], :,1))

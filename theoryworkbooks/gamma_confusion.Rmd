@@ -7,11 +7,11 @@ date: "2024-11-14"
 
 
 ```{r}
-shape <- 100
+shape <- .01
 rate <- 1
 # shape <- 100
 # rate <- 1
-x <- seq(.01,10,.01)
+x <- seq(.01,1,.01)
 y <- dgamma(x, shape = shape, rate = rate)
 plot(x,y)
 shape/rate

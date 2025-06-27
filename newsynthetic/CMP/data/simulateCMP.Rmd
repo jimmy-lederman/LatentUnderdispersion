@@ -12,7 +12,7 @@ library(COMPoissonReg)
 #simulate data from various CMP
 B <- 1000
 #nulist <- c(1.1,1.3,1.5,1.7,2,2.5,3.5,5,10)
-nulist <- c(1.1,2,2.5)
+nulist <- c(1,1.3)
 clist <- c()
 numDatasets <- 5
 mat <- matrix(0, nrow=B+2,ncol=length(nulist)*numDatasets)
@@ -30,13 +30,13 @@ for(i in 1:length(nulist)){
   }
 }
 
-write.csv(mat, "CMPdata.csv")
+write.csv(mat, "CMPdata_choicefinal.csv")
 #hist(x)
 ```
 
 ```{r}
 #nulist <- c(1.1,1.3,1.5,1.7,2,2.5,3.5,5,10)
-nulist <- c(1.1,2,2.5)
+nulist <- c(1,1.3)
 #compute PMF for those CMP
 begin = 50
 end = 150
@@ -48,7 +48,7 @@ for(nu in nulist){
   mat[count,] <- x
   count <- count + 1
 }
-write.csv(mat, "CMPpmf.csv")
+write.csv(mat, "CMPpmf_final.csv")
 ```
 
 
