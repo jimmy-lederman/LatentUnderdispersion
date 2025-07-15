@@ -47,28 +47,6 @@ function saferand(dist, n, y)
     end
 end
 
-# function safeTrunc2(dist, lower, upper; n=1)
-#     if n == 0
-#         return []
-#     end
-#     if pdf(dist,lower) != 0 || pdf(dist,upper) != 0
-#         return rand(Truncated(dist, lower, upper), n)
-#     else
-#         if lower == 0
-#             return fill(upper, n)
-#         elseif isinf(upper)
-#             return fill(lower, n)
-#         end
-#     end
-# end
-
-function expnormalizeCat(x)
-    cdf = cumsum(exp.(x .- maximum(x)))     # the exp-normalize trick
-    z = last(cdf)
-    u = rand()  # uniform(0, 1)
-    return searchsortedlast(cdf, u * z) + 1
-end
-
 
 function sampleSumGivenOrderStatistic(Y,D,j,dist)
     if D == 1
@@ -120,13 +98,6 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
             r_any = D - k + 1
             break
         end
-        # if j - r_lower == 1
-        #     logprobs = [-Inf, -1, -1]
-        # elseif D - r_highr == j
-        #     logprobs = [-1, -1, -Inf]
-        # else 
-        #     logprobs = [-1, -1, -1]
-        # end
         logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
         c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
         if c == 1
@@ -257,125 +228,5 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
             probOver = (D-j+numY)/D
             return [log(1-probOver)+ log1mexp(logtruncProb), log(1-probOver) + logtruncProb,log(probOver)]
         end
-    end
-end
-
-
-function sampleListGivenOrderStatistic2(Y,D,j,dist)
-    if D == 1
-        return Y 
-    end
-    @assert D >= j
-    if Y == 0
-        if D == j 
-            return 0
-        end
-    end
-
-    @assert D >= j
-    r_lower = 0
-    r_highr = 0
-    r_equal = 0
-    r_higheq = 0
-    r_loweq = 0
-    r_any = 0
-    @views for k in 1:D #just sample first one
-        #println(r_lower)
-        @assert (j - r_lower) >= 1
-        @assert (D - r_highr) >= j
-        if r_equal == 0 && r_lower + r_highr == D - 1
-            r_equal = 1
-            break
-        end
-        if r_equal >= 1 && j - r_lower == 1
-            r_higheq = D - k + 1
-            break
-        elseif r_equal >= 1 && D - r_highr == j
-            r_loweq = D - k + 1
-            break
-        elseif r_equal >= j - r_lower && r_equal >= D - r_highr - j + 1
-            r_any = D - k + 1
-            break
-        end
-        logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
-        #println(logprobs)
-        c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
-        if c == 1
-            r_lower += 1
-        elseif c == 2
-            r_equal += 1
-        else #c == 3
-            r_highr += 1
-        end
-    end
-    @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == D
-    if r_any != 0
-        #@assert 1 == 2
-        lst = vcat(rand(dist, r_any), fill(Y,r_equal), safeTrunc2(dist, 0, Y-1,n=r_lower), safeTrunc2(dist, Y + 1, Inf,n=r_highr))
-        return shuffle(lst)
-    else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
-        lst = vcat(safeTrunc2(dist, 0, Y,n=r_loweq), safeTrunc2(dist, Y, Inf,n=r_higheq), fill(Y,r_equal), safeTrunc2(dist, 0, Y-1,n=r_lower), safeTrunc2(dist, Y + 1, Inf,n=r_highr))
-        return shuffle(lst)
-    end
-end
-
-function sampleFirstKGivenOrderStatistic2(Y,D,j,dist,K)
-    if D == 1
-        return Y 
-    end
-    @assert D >= j
-    if Y == 0
-        if D == j 
-            return 0
-        end
-        # else
-        #     D = D - j + 1
-        #     j = 1
-        # end
-    end
-
-
-    @assert D >= j
-    r_lower = 0
-    r_highr = 0
-    r_equal = 0
-    r_higheq = 0
-    r_loweq = 0
-    r_any = 0
-    @views for k in 1:K 
-        #println(r_lower)
-        @assert (j - r_lower) >= 1
-        @assert (D - r_highr) >= j
-        if r_equal == 0 && r_lower + r_highr == D - 1
-            r_equal = 1
-            break
-        end
-        if r_equal >= 1 && j - r_lower == 1
-            r_higheq = K - k + 1
-            break
-        elseif r_equal >= 1 && D - r_highr == j
-            r_loweq = K - k + 1
-            break
-        elseif r_equal >= j - r_lower && r_equal >= D - r_highr - j + 1
-            r_any = K - k + 1
-            break
-        end
-        logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
-        #println(logprobs)
-        c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
-        if c == 1
-            r_lower += 1
-        elseif c == 2
-            r_equal += 1
-        else #c == 3
-            r_highr += 1
-        end
-    end
-    @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == K
-    if r_any != 0
-        #@assert 1 == 2
-        return sum(rand(dist, r_any)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
-    else #at least one of first two will be 0, safeTrunc, if given n=0, returns 0; both can be 0 as well
-        return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower)) + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     end
 end

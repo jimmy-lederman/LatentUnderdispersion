@@ -14,7 +14,7 @@ B <- 1000
 #nulist <- c(1.1,1.3,1.5,1.7,2,2.5,3.5,5,10)
 nulist <- c(1,1.3)
 clist <- c()
-numDatasets <- 5
+numDatasets <- 1
 mat <- matrix(0, nrow=B+2,ncol=length(nulist)*numDatasets)
 count <- 1
 for(i in 1:length(nulist)){
@@ -36,7 +36,7 @@ write.csv(mat, "CMPdata_choicefinal.csv")
 
 ```{r}
 #nulist <- c(1.1,1.3,1.5,1.7,2,2.5,3.5,5,10)
-nulist <- c(1,1.3)
+nulist <- c(1.3)
 #compute PMF for those CMP
 begin = 50
 end = 150
@@ -50,9 +50,6 @@ for(nu in nulist){
 }
 write.csv(mat, "CMPpmf_final.csv")
 ```
-
-
-
 
 
 
