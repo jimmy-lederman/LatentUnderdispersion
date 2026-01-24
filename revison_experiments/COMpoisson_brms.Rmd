@@ -1,0 +1,256 @@
+---
+title: "com_brms"
+output: html_document
+date: "2025-09-22"
+---
+```{r}
+data_mat <- readRDS("revision1.rds")
+true_pmf <- readRDS("revision1_pmf.rds")
+```
+
+
+```{r}
+
+Y_Nseeds <- read.csv("revision1.csv")
+```
+
+```{r}
+library(brms)
+library(COMPoissonReg)
+```
+
+```{r}
+library(Rcpp)
+Rcpp::evalCpp("2 + 2")
+```
+
+
+
+
+```{r}
+
+
+rmedianPois <- function(n, mu, D){
+  result <- rep(0,n)
+  for(i in 1:n){
+    sample <- rpois(D, mu)
+    result[i] <- median(sample)
+  }
+  return(result)
+}
+y <- rmedianPois(100, 25, 3)
+data <- data.frame(y = y)
+
+# Assuming 'data' is your dataset and 'y' is the count variable
+# fit <- brm(
+#   formula = y ~ 1,  # Replace with your model formula
+#   data = data,
+#   family = brmsfamily("com_poisson"),
+#   chains = 4,
+#   iter = 10,
+#   warmup = 5
+# )
+brm(
+  y ~ 1,
+  data = data,
+  family = brmsfamily("com_poisson"),
+  chains = 1,
+  iter = 10,
+  warmup = 5
+)
+```
+
+```{r}
+nsamples <- 1000
+nburnin <- 1000
+nchains <- 4
+seeds <- 1:5
+Ds <- c(3,5,7,9,11,13,15)
+results <- array(0, dim = c(length(seeds),length(Ds),4))
+
+for(d in 1:length(Ds)){
+  ground_truth <- true_pmf[d,]
+  for(seed in seeds){
+    Y_N <- data_mat[,seed,d]
+    data <- data.frame(y = Y_N)
+    start_time <- Sys.time()
+    fit <- brm(
+      formula = y ~ 1,
+      data = data,
+      family = brmsfamily("com_poisson"),
+      chains = nchains,
+      iter = nburnin+nsamples,
+      warmup =nburnin
+    )
+    end_time <- Sys.time()
+    elapsed <- end_time - start_time
+    samples_df <- posterior_samples(fit)
+    intercept_samples <- samples_df$b_Intercept
+    shape_samples <- samples_df$shape
+    param_matrix <- cbind(intercept_samples, shape_samples)
+    chains_array <- array(NA, dim = c(nsamples, 2, nchains))
+    for (ch in 1:nchains) {
+      rows <- ((ch-1)*niter + 1):(ch*niter)
+      chains_array[ , , ch] <- param_matrix[rows, ]
+    }
+    results[seed,d,1] <- ess_multichain(chains_array)[1]
+    results[seed,d,2] <- rhat_split_multivariate(chains_array)[1]
+    results[seed,d,3] <- elapsed
+    begin <- 0
+    end <- 75
+    pmf <- calcTotalPmfCOM(intercept_samples,shape_samples,begin,end)
+    results[seed,d,4] <- jensen_shannon_distance(ground_truth, pmf)
+  }
+}
+```
+
+
+```{r}
+colMeans(results)
+```
+
+```{r, warning=FALSE}
+samples_df <- posterior_samples(fit)
+intercept_samples <- samples_df$b_Intercept
+shape_samples <- samples_df$shape
+
+# Combine the two parameters into a matrix: iterations * chains × parameters
+param_matrix <- cbind(intercept_samples, shape_samples)
+
+# Convert to array: iterations × parameters × chains
+niter <- 1000
+nchains <- 4
+chains_array <- array(NA, dim = c(niter, 2, nchains))
+
+for (ch in 1:nchains) {
+  rows <- ((ch-1)*niter + 1):(ch*niter)
+  chains_array[ , , ch] <- param_matrix[rows, ]
+}
+
+ess_multichain(chains_array)
+rhat_split_multivariate(chains_array)
+
+jensen_shannon_distance(ground_truth, pmf)
+```
+
+```{r}
+begin <- 0
+end <- 75
+pmf <- calcTotalPmfCOM(intercept_samples,shape_samples,begin,end)
+jensen_shannon_distance(ground_truth, pmf)
+```
+
+
+
+
+
+```{r}
+calcTotalPmfCOM <- function(means, shapes, b, e){
+  pmf = rep(0, length(b:e))
+  for(i in 1:length(means)){
+    m = means[i]
+    s = shapes[i]
+    pmf <- pmf + dcmp(begin:end,lambda=exp(means[i]), nu=shapes[i])
+  }
+  return(pmf / length(means))
+}
+library(entropy)
+
+jensen_shannon_distance <- function(p, q) {
+  # normalize to sum to 1
+  p <- p / sum(p)
+  q <- q / sum(q)
+  
+  # average distribution
+  m <- 0.5 * (p + q)
+  
+  # KL divergence using plugin estimator
+  kl_pm <- KL.plugin(p, m)
+  kl_qm <- KL.plugin(q, m)
+  
+  # Jensen-Shannon divergence
+  js_div <- 0.5 * (kl_pm + kl_qm)
+  
+  # Jensen-Shannon distance
+  sqrt(js_div)
+}
+
+ess_multichain <- function(chains, maxlag = 500) {
+  # chains: 3D array, dimensions = iterations × parameters × chains
+  dims <- dim(chains)
+  N <- dims[1]
+  nparam <- dims[2]
+  nch <- dims[3]
+  
+  ess_vec <- numeric(nparam)
+  
+  for (p in 1:nparam) {
+    # flatten chains for this parameter (concatenate all chains)
+    combined <- as.vector(apply(chains[, p, ], 1:2, c))
+    
+    # center
+    y <- combined - mean(combined)
+    L <- min(maxlag, length(y) - 1)
+    
+    # autocorrelation for lags 0:L
+    ac <- acf(y, lag.max = L, plot = FALSE)$acf[,1,1]
+    
+    # Geyer's initial positive sequence
+    s <- 0
+    k <- 1
+    while ((k + 1) <= L) {
+      pair <- ac[k + 1] + ac[k + 2]  # R is 1-based
+      if (pair <= 0) break
+      s <- s + pair
+      k <- k + 2
+    }
+    
+    ess_val <- length(y) / (1 + 2 * s)
+    ess_vec[p] <- max(ess_val, 1)
+  }
+  
+  return(ess_vec)
+}
+
+rhat_split_multivariate <- function(chains) {
+  # chains: 3D array: iterations × parameters × chains
+  dims <- dim(chains)
+  N <- dims[1]
+  nparams <- dims[2]
+  M <- dims[3]
+  
+  half <- floor(N / 2)
+  if (half < 2) stop("Chains too short to split")
+  
+  rhat_vec <- numeric(nparams)
+  
+  for (p in 1:nparams) {
+    # Create 2*M split chains for this parameter
+    splits <- matrix(NA, nrow = half, ncol = 2*M)
+    for (m in 1:M) {
+      splits[, 2*m - 1] <- chains[1:half, p, m]
+      splits[, 2*m]     <- chains[(half+1):(2*half), p, m]
+    }
+    
+    # Compute mean and variance per split chain
+    means <- apply(splits, 2, mean)
+    vars  <- apply(splits, 2, var)  # sample variance (corrected=TRUE by default)
+    
+    # Within-chain and between-chain variance
+    W <- mean(vars)
+    B <- (half / (2*M - 1)) * sum((means - mean(means))^2)
+    
+    # Posterior variance estimate
+    var_hat <- ((half - 1)/half) * W + (B / half)
+    
+    # Split-chain R-hat (enforce ≥1)
+    rhat_vec[p] <- sqrt(max(var_hat / W, 1.0))
+  }
+  
+  return(rhat_vec)
+}
+
+
+```
+
+

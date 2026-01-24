@@ -7,6 +7,9 @@ function safeTrunc(dist, lower, upper; n=1)
     if n == 0
         return 0
     end
+    if lower == 0 && upper == Inf
+        return rand(dist, n)
+    end
     # do not attempt to try-catch instead of using this condition
     #if the truncation point is sufficiently far in the tail of dist,
     #then it will take a long time to attempt to sample from it and fail
