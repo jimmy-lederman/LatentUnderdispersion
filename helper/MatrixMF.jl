@@ -49,7 +49,6 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
-    println("start")
     for s in 1:S
         # if s == 1 || s == 2
         #     println(state)
@@ -75,6 +74,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
             if s < nburnin/2 && griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=true)
             else
+                #@time ~, state = backward_sample(model, data, state, mask)
                 ~, state = backward_sample(model, data, state, mask)
             end
         end
@@ -234,6 +234,14 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                         llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                         llikvector[s] = llik
                     end
+                    #try
+                    @assert !isnan(logsumexpvec(llikvector))
+                    # catch ex
+                    #     println(row)
+                    #     e = evalulateLogLikelihood(model, samples[1], data, info, row, col)
+                    #     #println(llikvector)
+                    #     @assert 1 == 2
+                    # end
                     inforatetotal += logsumexpvec(llikvector) - log(S)
                     I += 1
                     if verbose next!(prog) end
@@ -271,7 +279,7 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
     # println(total)
     # flush(stdout)
     # @assert 1 == 2
-    println("0 count: ", llik0count)
+    if llik0count > 0 println("0 count: ", llik0count) end
     if verbose finish!(prog) end
     return inforatetotal/I#, badmat
 end
