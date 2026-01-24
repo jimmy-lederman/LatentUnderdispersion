@@ -1,7 +1,7 @@
 include("../../helper/MatrixMF.jl")
 include("../../helper/OrderStatsSampling.jl")
 include("../../helper/PoissonOrderPMF.jl")
-include("../genes_polya/PolyaGammaHybridSamplers.jl/src/pghybrid.jl")
+include("../genes_final/genes_polya/PolyaGammaHybridSamplers.jl/src/pghybrid.jl")
 using Distributions
 using LogExpFunctions
 using LinearAlgebra
