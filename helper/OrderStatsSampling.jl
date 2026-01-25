@@ -119,6 +119,25 @@ function sampleSumGivenOrderStatistic(Y,D,j,dist)
         #return Y*r_equal
         return sum(safeTrunc(dist, 0, Y,n=r_loweq)) + sum(safeTrunc(dist, Y, Inf,n=r_higheq)) + Y*r_equal + sum(safeTrunc(dist, 0, Y-1,n=r_lower))  + sum(safeTrunc(dist, Y + 1, Inf,n=r_highr))
     end
+    #tasks = Task[]
+
+    # if r_any != 0
+    #     push!(tasks, @spawn sum(saferand(dist, r_any, Y)))
+    # else
+    #     push!(tasks, @spawn sum(safeTrunc(dist, 0, Y, n=r_loweq)))
+    #     push!(tasks, @spawn sum(safeTrunc(dist, Y, Inf, n=r_higheq)))
+    # end
+
+    # push!(tasks, @spawn sum(safeTrunc(dist, 0, Y-1, n=r_lower)))
+    # push!(tasks, @spawn sum(safeTrunc(dist, Y+1, Inf, n=r_highr)))
+
+    # # cheap scalar term stays serial
+    # total = Y * r_equal
+
+    # # collect parallel results
+    # total += sum(fetch.(tasks))
+
+    # return total
 end
 
 function logprobY2(Y,D,j,dist,numY)

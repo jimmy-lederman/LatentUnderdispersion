@@ -49,7 +49,7 @@ function sample_likelihood(model::covid1, mu,D,n=1)
 end
 
 function sample_prior(model::covid1,info=nothing,constantinit=nothing)
-    U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
+    U_NK = rand(Dirichlet(ones(model.N)), model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
 
     D = 2*rand(Binomial(Int((model.Dmax - 1)/2), .5)) .+ 1
@@ -148,12 +148,9 @@ function backward_sample(model::covid1, data, state, mask=nothing; skipupdate=no
     # C2_NK = D * sum(V_KM, dim = 2)
     # U_NK = rand.(Gamma.(model.a .+ Y_NK, 1 ./(model.b .+ C2_NK)))
 
-    @views for n in 1:model.N
-        @views for k in 1:model.K
-            post_shape = model.a + sum(Y_NMKplus2[n, :, k])
-            post_rate = model.b + D*sum(V_KM[k, :])
-            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
-        end
+    Y_NK = dropdims(sum(Y_NMKplus2, dims = 2), dims = 2)
+    @views for k in 1:model.K
+         U_NK[:, k] = rand(Dirichlet(ones(model.N) .+ Y_NK[:,k]))
     end
 
     @views for m in 1:model.M
@@ -165,9 +162,9 @@ function backward_sample(model::covid1, data, state, mask=nothing; skipupdate=no
     end
     
     #Polya-gamma augmentation to update D
-    if isnothing(skipupdate) || !("D" in skipupdate)
-        D = update_Dall(model, Y0_N, Y_NM, U_NK * V_KM, .5)
-    end
+    # if isnothing(skipupdate) || !("D" in skipupdate)
+    #     D = update_Dall(model, Y0_N, Y_NM, U_NK * V_KM, .5)
+    # end
 
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "D" => D, "Y0_N"=>Y0_N,)
     return data, state
