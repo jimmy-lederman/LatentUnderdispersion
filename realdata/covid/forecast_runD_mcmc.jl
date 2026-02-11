@@ -31,7 +31,7 @@ chainSeed = parse(Int, ARGS[2])
 D = parse(Int, ARGS[3])
 Q = parse(Int, ARGS[4])
 K = parse(Int, ARGS[5])
-MFtype = parse(Int, ARGS[6])
+covidType = parse(Int, ARGS[6])
 
 #make mask (forecast)
 endlength = 10
@@ -61,28 +61,35 @@ nburnin = 2000
 nthin = 1
 
 
-if D == 0
-    if MFtype == 1
-        include("/home/jlederman/DiscreteOrderStatistics/models/other_models/PoissonMF.jl")
-        model = PoissonMF(N,M,K,a,b,c,d)
+if covidType == 1
+    if D == 0
+        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/covid1Poisson.jl")
+        model = covid1Poisson(N,M,K,a,b,c,d)
         @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
-    elseif MFtype == 2
-        include("/home/jlederman/DiscreteOrderStatistics/models/other_models/PoissonMF2.jl")
-        model = PoissonMF2(N,M,K,a,b,c,d)
-        @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
-    elseif MFtype == 3
-        include("/home/jlederman/DiscreteOrderStatistics/models/other_models/PoissonMF3.jl")
-        model = PoissonMF3(N,M,K,a,b,c,d)
-        @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
+    else
+        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/covid1.jl")
+        model = covid1(N,M,K,D,a,b,c,d)
+        @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM,
+         initseed=chainSeed,verbose=true,info=info,constantinit=Dict("D"=>D))
     end
+
+    # elseif MFtype == 2
+    #     include("/home/jlederman/DiscreteOrderStatistics/models/other_models/PoissonMF2.jl")
+    #     model = PoissonMF2(N,M,K,a,b,c,d)
+    #     @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
+    # elseif MFtype == 3
+    #     include("/home/jlederman/DiscreteOrderStatistics/models/other_models/PoissonMF3.jl")
+    #     model = PoissonMF3(N,M,K,a,b,c,d)
+    #     @time samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
+    # end
 else
     @assert 1 == 2
 end
 
 
 #inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
-params = [K,Q,D,maskSeed,chainSeed,MFtype]
+params = [K,Q,D,maskSeed,chainSeed,covidType]
 
 # samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/MFsamples/"
-save(folder*"/MFtype$(MFtype)sample_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples/"
+save(folder*"/covidType$(covidType)sample_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
