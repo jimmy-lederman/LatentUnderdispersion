@@ -1,16 +1,15 @@
-include("../helper/MatrixMF.jl")
-include("../helper/PoissonMaxFunctions.jl")
+include("../../helper/MatrixMF.jl")
+include("../../helper/OrderStatsSampling.jl")
+include("../../helper/NegBinPMF.jl")
 using Distributions
 
-function sampleCRT(Y,R)
-    if Y == 0
-        return 0
-    elseif Y == 1
-        probs = [1]
-    else
-        probs = vcat([1],[R/(R+i-1) for i in 2:Y])
+function sampleCRT(Y, R)
+    Y <= 1 && return Y
+    out = 1
+    @inbounds for i in 2:Y
+        out += rand() < R / (R + i - 1)
     end
-    return sum(rand.(Bernoulli.(probs)))
+    return out
 end
 
 struct NegBinUnivariate <: MatrixMF

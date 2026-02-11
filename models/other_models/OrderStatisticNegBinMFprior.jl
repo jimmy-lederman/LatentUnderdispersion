@@ -20,15 +20,13 @@ struct OrderStatisticNegBinMF <: MatrixMF
     beta::Float64
 end
 
-function sampleCRT(Y,R)
-    if Y == 0
-        return 0
-    elseif Y == 1
-        return 1
-    else
-        probs = vcat([R/(R+i-1) for i in 2:Y])
+function sampleCRT(Y, R)
+    Y <= 1 && return Y
+    out = 1
+    @inbounds for i in 2:Y
+        out += rand() < R / (R + i - 1)
     end
-    return 1 + sum(rand.(Bernoulli.(probs)))
+    return out
 end
 
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
@@ -87,7 +85,7 @@ function evalulateLogLikelihood(model::OrderStatisticNegBinMF, state, data, info
 end
 
 function sample_prior(model::OrderStatisticNegBinMF,info=nothing)
-    U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
+    U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     if model.type == 2
         D = 2*rand(Binomial(Int((model.Dmax - 1)/2), model.p)) + 1
@@ -121,18 +119,14 @@ function forward_sample(model::OrderStatisticNegBinMF; state=nothing, info=nothi
     return data, state 
 end
 
-function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothing)
+function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothing; skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
     D = copy(state["D"])
     p = copy(state["p"])
-
-
-    Mu_NM = U_NK * V_KM
-    #last, infer D
-    D = update_D(model, Y_NM, Mu_NM, p)
+    
     if model.type == 1
         j = 1
     elseif model.type == 2
@@ -141,53 +135,64 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
         j = D
     end
 
-    Z_NM = zeros(Int, model.N, model.M)
-    Z_NMK = zeros(Int, model.N, model.M, model.K)
-    #Z_NMK = copy(state["Z_NMK"])
-    
+    nt = Threads.nthreads()
+    Z_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
+    Z_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
+    P_K_thr = [zeros(Float64, model.K) for _ in 1:nt]
+    z_sum_thr = zeros(Int, nt)   # <-- NEW
     #Loop over the non-zeros in Y_DV and allocate
     @views @threads for idx in 1:(model.N * model.M)
+        tid = Threads.threadid()
         n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1    
+        m = mod(idx - 1, model.M) + 1  
+        P_K = P_K_thr[tid]
+        @inbounds for k in 1:model.K
+            P_K[k] = U_NK[n, k] * V_KM[k, m]
+        end  
         if !isnothing(mask)
             if mask[n,m] == 1
-                Y_NM[n,m] = rand(OrderStatistic(NegativeBinomial(Mu_NM[n,m], 1-p), D, j))
+                Y_NM[n,m] = rand(OrderStatistic(NegativeBinomial(sum(P_K), 1-p), D, j))
             end
         end
-        # println(D)
-        # println(j)
-        # println(Poisson(Mu_NM[n, m]))
-        # println(Y_NM[n, m])
-        # println(sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, Poisson(Mu_NM[n, m])))
-        # println(Mu_NM[n, m])
-        Z_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, NegativeBinomial(Mu_NM[n, m], 1-p))
-        if Z_NM[n, m] > 0
-            temp = sampleCRT(Z_NM[n,m],D*Mu_NM[n,m])
-            P_K = U_NK[n, :] .* V_KM[:, m]
-            Z_NMK[n, m, :] = rand(Multinomial(temp, P_K / sum(P_K)))
+        z = sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, NegativeBinomial(sum(P_K), 1-p))
+        z_sum_thr[tid] += z   # <-- track z
+        if z > 0
+            z2 = sampleCRT(z,D*sum(P_K))
+            z_k = rand(Multinomial(z2, P_K / sum(P_K)))
+            @inbounds for k in 1:model.K
+                Z_NK_thr[tid][n, k] += z_k[k]
+                Z_MK_thr[tid][m, k] += z_k[k]
+            end
         end
     end
+    Z_NK  = sum(Z_NK_thr)  
+    Z_MK  = sum(Z_MK_thr)  
+    Zsum = sum(z_sum_thr)
 
-    @views for n in 1:model.N
-        @views for k in 1:model.K
-            post_shape = model.a + sum(Z_NMK[n, :, k])
-            post_rate = model.b + D*log(1/(1-p))*sum(V_KM[k, :])
-            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
-        end
+    Mu_NM = U_NK * V_KM
+
+    # post_alpha = model.alpha + Zsum
+    # post_beta = model.beta + D*sum(Mu_NM)
+    # p = rand(Beta(post_alpha,post_beta))
+
+    A_K = fill(model.a, model.N)
+    @views for k in 1:model.K
+        U_NK[:, k] = rand(Dirichlet(A_K .+ Z_NK[:,k]))
     end
-
+    
     @views for m in 1:model.M
         @views for k in 1:model.K
-            post_shape = model.c + sum(Z_NMK[:, m, k])
-            post_rate = model.d + D*log(1/(1-p))*sum(U_NK[:, k])
+            post_shape = model.c + Z_MK[m, k]
+            post_rate = model.d + D*log(1/(1-p))
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
-    Mu_NM = U_NK * V_KM
 
-    post_alpha = model.alpha + sum(Z_NM) 
-    post_beta = model.beta + D*sum(Mu_NM)
-    p = rand(Beta(post_alpha,post_beta))
+
+    if isnothing(skipupdate) || !("D" in skipupdate)
+        Mu_NM = U_NK * V_KM
+        D = update_D(model, Y_NM, Mu_NM, p)
+    end
 
 
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "D"=>D, "p"=>p)

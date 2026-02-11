@@ -3,7 +3,7 @@ using Distributions
 using LinearAlgebra
 using Base.Threads
 
-struct covid1Poisson2 <: MatrixMF
+struct covid3Poisson <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
@@ -40,7 +40,7 @@ function sampleCRTlecam(Y,R,tol=.4)
     end
 end
 
-function evalulateLogLikelihood(model::covid1Poisson2, state, data, info, row, col)
+function evalulateLogLikelihood(model::covid3Poisson, state, data, info, row, col)
     @assert !isnothing(info)
         if col == 1
         Ylast = info["Y0_N"][row]
@@ -59,7 +59,7 @@ function evalulateLogLikelihood(model::covid1Poisson2, state, data, info, row, c
     return logpdf(Poisson(rate), Y)
 end
 
-function sample_prior(model::covid1Poisson2,info=nothing,constantinit=nothing)
+function sample_prior(model::covid3Poisson,info=nothing,constantinit=nothing)
     pass = false
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
     if !isnothing(constantinit)
@@ -87,7 +87,7 @@ function sample_prior(model::covid1Poisson2,info=nothing,constantinit=nothing)
     return state
 end
 
-function forward_sample(model::covid1Poisson2; state=nothing, info=nothing)
+function forward_sample(model::covid3Poisson; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model,info)
     end
@@ -97,7 +97,7 @@ function forward_sample(model::covid1Poisson2; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::covid1Poisson2, data, state, mask=nothing)
+function backward_sample(model::covid3Poisson, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -156,8 +156,8 @@ function backward_sample(model::covid1Poisson2, data, state, mask=nothing)
     q_KM = zeros(model.K,model.M+1)
     
     #backward pass
-    @views for m in model.M:-1:2
-        @views for k in 1:model.K
+    @views for k in 1:model.K
+        @views for m in model.M:-1:2
             q_KM[k,m] = log(1 + (C1_KM[k,m]/model.c) + q_KM[k,m+1])
             
             temp = sampleCRTlecam(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)

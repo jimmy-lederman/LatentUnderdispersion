@@ -16,7 +16,8 @@ end
 
 abstract type MatrixMF end
 
-function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing,firstiter=false)
+function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,
+    skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing,firstiter=false,keep_all=false,skipupdatealways=nothing)
     #some checks
     # Y_NM = data["Y_NM"]
     # @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
@@ -40,47 +41,74 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         end
     end
     if !isnothing(annealStrat)
-        anneal = 1
+        annealstart = 1000
+        annealtimes = 10
+        anneal = annealstart
+        annealcount = 1
     else
         anneal = nothing 
     end
-    
-    S = nburnin + nthin*nsamples
+    if griddy
+        S_griddy = 1000
+        S = nburnin + nthin*nsamples + S_griddy
+    else
+        S = nburnin + nthin*nsamples
+    end
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
+    
     for s in 1:S
         # if s == 1 || s == 2
         #     println(state)
         # end
+        
         if s == 1 && firstiter
             ~, state = backward_sample(model, data, state, mask, firstiter=true)
         end
-
+        
         if s < nburnin/2 && !isnothing(skipupdate)
             ~, state = backward_sample(model, data, state, mask, skipupdate=skipupdate)
-        elseif s < nburnin && !isnothing(annealStrat)#need to change to just nburnin later
-            if s > nburnin/4 + anneal*(3*nburnin/4)/(model.D)
-                anneal += 1
-                println(anneal, " ", s)
+        elseif s < nburnin/2 && !isnothing(annealStrat)#need to change to just nburnin later
+            if s > nburnin*annealcount/((annealtimes)*2)
+                anneal -= annealstart/annealtimes
+                annealcount += 1
             end
-            @assert anneal <= model.D
-            if s < nburnin/2 && griddy
+                # println(anneal)
+                # println(nburnin*annealcount/(annealstart))
+            #@assert anneal <= model.D
+            if griddy && s < S_griddy
                 ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
             else
                 ~, state = backward_sample(model, data, state, mask,annealStrat=annealStrat,anneal=anneal)
             end
         else
-            if s < nburnin/2 && griddy
+            if griddy && s < S_griddy 
                 ~, state = backward_sample(model, data, state, mask, griddy=true)
-            else
+            elseif !isnothing(skipupdatealways)
                 #@time ~, state = backward_sample(model, data, state, mask)
+                ~, state = backward_sample(model, data, state, mask,skipupdatealways=skipupdatealways)
+            else
                 ~, state = backward_sample(model, data, state, mask)
             end
         end
-        if s > nburnin && mod(s,nthin) == 0
-            push!(samplelist, state)
+
+        if keep_all
+            #if mod(s,nthin) == 0 #KEEPING BURNIN
+                push!(samplelist, state)
+            #end
+        else
+            if griddy
+                if s > nburnin + S_griddy && mod(s,nthin) == 0
+                    push!(samplelist, state)
+                end
+            else
+                if s > nburnin && mod(s,nthin) == 0
+                    push!(samplelist, state)
+                end
+            end
         end
+
         # if mod(s,100) == 0
         #     println(s)
         # end
@@ -391,7 +419,7 @@ function evaluateInfoRateSplit3(model::MatrixMF, data, samples; info=nothing, ma
     return [inforatetotal1/I1, inforatetotal2/I2, inforatetotal3/I3]
 end
 
-function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true,sparse=true)
+function logAverageHeldoutProbs(model::MatrixMF, data, samples; info=nothing, mask=nothing, verbose=true,sparse=false)
     S = size(samples)[1]
     heldoutprobs = []
     total = 0
