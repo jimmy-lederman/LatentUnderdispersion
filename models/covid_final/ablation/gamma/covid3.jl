@@ -12,6 +12,7 @@ struct covid3 <: MatrixMF
     K::Int64
     D::Int64
     a::Float64
+    b::Float64
     c::Float64
     d::Float64
     g::Float64
