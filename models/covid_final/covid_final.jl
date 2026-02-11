@@ -8,26 +8,13 @@ using LinearAlgebra
 using SpecialFunctions
 using Base.Threads
 
-function sampleCRT(Y,R)
-    if Y == 0
-        return 0
-    elseif Y == 1
-        return 1
-    else
-        probs =[R/(R+i-1) for i in 2:Y]
-        return 1 + sum(rand.(Bernoulli.(probs)))
+function sampleCRT(Y, R)
+    Y <= 1 && return Y
+    out = 1
+    @inbounds for i in 2:Y
+        out += rand() < R / (R + i - 1)
     end
-end
-
-function sampleCRTlecam(Y,R,tol=.4)
-    Y_max = R * (1/tol - 1)
-    if Y <= Y_max || Y <= 100
-        return sampleCRT(Y, R)
-    else
-        out = sampleCRT(Y_max, R)
-        mu = R * (polygamma(0, R + Y) - polygamma(0, R + Y_max))
-        return out + rand(Poisson(mu))
-    end
+    return out
 end
 
 
@@ -257,7 +244,7 @@ function backward_sample(model::covidfulltime, data, state, mask=nothing; skipup
         @views for k in 1:model.K
             q_KM[k,m] = log(1 + (C1_KM[k,m]/model.c) + q_KM[k,m+1])
             
-            temp = sampleCRTlecam(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
+            temp = sampleCRT(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
             
             l_KM[k,m] = rand(Binomial(temp, model.c*V_KM[k,m-1]/(model.c*V_KM[k,m-1] + model.d)))
         end 

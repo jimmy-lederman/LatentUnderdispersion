@@ -252,3 +252,81 @@ function lognumericalProbs(Y,j,D,dist,numUnder,numY,numOver)
         end
     end
 end
+
+function sampleAllGivenOrderStatistic(Y,D,j,dist)
+    if D == 1
+        return [Y] 
+    end
+    if Y == 0
+        if D == j 
+            return zeros(D)
+        end
+        # else
+        #     start = j 
+        # end
+    end
+    # if pdf(dist,Y) < 1e-100
+    #     return Y*D
+    # end
+
+    @assert D >= j
+    r_lower = 0
+    r_highr = 0
+    r_equal = 0
+    r_higheq = 0
+    r_loweq = 0
+    r_any = 0
+    if Y == 0
+        if D == j 
+            return 0
+        end
+        # else
+        #     start = j 
+        # end
+    end
+    @assert D >= j    
+    @views for k in 1:D
+        # println(k, " ", j, " ", r_lower, D, " ", r_highr)
+        @assert (j - r_lower) >= 1
+        @assert (D - r_highr) >= j
+        if r_equal == 0 && r_lower + r_highr == D - 1
+            r_equal = 1
+            break
+        end
+        if r_equal >= 1 && j - r_lower == 1
+            r_higheq = D - k + 1
+            break
+        elseif r_equal >= 1 && D - r_highr == j
+            r_loweq = D - k + 1
+            break
+        elseif r_equal >= j - r_lower && r_equal >= D - r_highr - j + 1
+            r_any = D - k + 1
+            break
+        end
+        logprobs = logprobVec2(Y,j,D,dist,r_lower,r_equal,r_highr)
+        c = argmax(rand(Gumbel(0,1),3) .+ logprobs)
+        if c == 1
+            r_lower += 1
+        elseif c == 2
+            r_equal += 1
+        else #c == 3
+            r_highr += 1
+        end
+    end
+    @assert r_lower + r_highr + r_equal + r_higheq + r_loweq + r_any == D
+
+    out = Int64[]   # or Vector{eltype(dist)}()
+
+    if r_any != 0
+        append!(out, saferand(dist, r_any, Y))
+    else
+        r_loweq  != 0 && append!(out, safeTrunc(dist, 0, Y;   n = r_loweq))
+        r_higheq != 0 && append!(out, safeTrunc(dist, Y, Inf; n = r_higheq))
+    end
+
+    r_equal != 0 && append!(out, fill(Y, r_equal))
+    r_lower != 0 && append!(out, safeTrunc(dist, 0, Y-1; n = r_lower))
+    r_highr != 0 && append!(out, safeTrunc(dist, Y+1, Inf; n = r_highr))
+
+    return out
+end

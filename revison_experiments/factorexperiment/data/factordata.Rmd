@@ -17,40 +17,58 @@ var(x)/mean(x)
 set.seed(123)
 
 # Dimensions
-J <- 10   # variables
-I <- 10   # observations
+J <- 20   # variables
+I <- 20   # observations
 K <- 3    # factors
 
 # Block size settings (for demonstration; can adjust)
-block_vars <- list(1:4, 5:7, 8:10)        # rows per factor
-block_obs  <- list(1:3, 4:6, 7:10)       # columns per factor
+# Helper: split 1:n into K contiguous groups (as evenly as possible)
+make_blocks <- function(n, K) {
+  split(1:n, cut(1:n, breaks = K, labels = FALSE))
+}
+
+# Automatically generated contiguous blocks
+block_vars <- make_blocks(J, K)   # rows
+block_obs  <- make_blocks(I, K)   # columns
 
 # Base Gamma parameters for non-dominant entries
-shape_base <- .25
-rate_base  <- 1
+shape_base_theta <- 1
+rate_base_theta  <- 1
+
+shape_base_phi <- 20
+rate_base_phi  <- 1
 
 # Boost Gamma parameters for dominant blocks
 shape_boost <- 20
 rate_boost  <- 1
 
+shape_boost_phi <- 1000
+rate_boost_phi  <-1
+
 # Initialize Phi (J x K) and Theta (K x I) with small random values
-Phi <- matrix(rgamma(J*K, shape = shape_base, rate = rate_base), nrow = J, ncol = K)
-Theta <- matrix(rgamma(K*I, shape = shape_base, rate = rate_base), nrow = K, ncol = I)
+Phi <- matrix(rgamma(J*K, shape = shape_base_phi, rate = rate_base_phi), nrow = J, ncol = K)
+#Phi <- matrix(100, nrow = J, ncol = K)
+Theta <- matrix(rgamma(K*I, shape = shape_base_theta, rate = rate_base_theta), nrow = K, ncol = I)
 
 # Fill in blocky dominant entries
 for (k in 1:K) {
-  Phi[block_vars[[k]], k] <- rgamma(length(block_vars[[k]]), shape = shape_boost, rate = rate_boost)
+  Phi[block_vars[[k]], k] <- rgamma(length(block_vars[[k]]), shape = shape_boost_phi, rate = rate_boost_phi)
   Theta[k, block_obs[[k]]] <- rgamma(length(block_obs[[k]]), shape = shape_boost, rate = rate_boost)
+  #normalize to be Dirichlet
+  Theta[k,] <- Theta[k,] / sum(Theta[k,])
 }
 
+
+
 # Compute Poisson means
-Lambda <- Phi %*% Theta
+Lambda <-  Phi %*% Theta
 
 # Generate Poisson observations
 Y <- matrix(0, nrow = J, ncol = I)
 for(i in 1:I){
   for(j in 1:J){
-    Y[i,j] <- rcmp(1, Lambda[i,j], nu = 5)
+    Y[i,j] <- rcmp(1, Lambda[i,j], nu = 2)
+    #Y[i,j] <- rpois(1, Lambda[i,j])
   }
 }
 #Y <- matrix(rcmp(J*I, 10*Lambda, nu = 5), nrow = J, ncol = I)
@@ -67,15 +85,16 @@ pheatmap(Y_ordered, cluster_rows = FALSE, cluster_cols = FALSE,
          color = colorRampPalette(c("white","red"))(100),
          main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
 write.csv(Y, "CMPfactor.csv")
-
+pheatmap(Theta, cluster_rows = FALSE, cluster_cols = FALSE,
+         color = colorRampPalette(c("white","red"))(100),
+         main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
 ```
-```{r}
-Phi
-```
+
 
 
 ```{r}
-write.csv(Phi, "CMPU_NK.csv")
+x <- rcmp(10000,  Lambda[1,1], nu = 5)
+ var(x)/mean(x)
 ```
 
 
@@ -86,20 +105,29 @@ write.csv(Phi, "CMPU_NK.csv")
 set.seed(123)
 
 # Dimensions
-J <- 10   # variables
-I <- 10   # observations
+J <- 20   # variables
+I <- 20   # observations
 K <- 3    # factors
 
 # Block size settings (for demonstration; can adjust)
-block_vars <- list(1:4, 5:7, 8:10)        # rows per factor
-block_obs  <- list(1:3, 4:6, 7:9)       # columns per factor
+# Helper: split 1:n into K contiguous groups (as evenly as possible)
+make_blocks <- function(n, K) {
+  split(1:n, cut(1:n, breaks = K, labels = FALSE))
+}
+
+# Automatically generated contiguous blocks
+block_vars <- make_blocks(J, K)   # rows
+block_obs  <- make_blocks(I, K)   # columns
 
 # Base Gamma parameters for non-dominant entries
-shape_base <- .5
+shape_base <- 10
 rate_base  <- 1
 
 # Boost Gamma parameters for dominant blocks
-shape_boost <- 3
+shape_boost <- 100
+rate_boost  <- 1
+
+shape_boost2 <- 100
 rate_boost  <- 1
 
 # Initialize Phi (J x K) and Theta (K x I) with small random values
@@ -110,6 +138,7 @@ Theta <- matrix(rgamma(K*I, shape = shape_base, rate = rate_base), nrow = K, nco
 for (k in 1:K) {
   Phi[block_vars[[k]], k] <- rgamma(length(block_vars[[k]]), shape = shape_boost, rate = rate_boost)
   Theta[k, block_obs[[k]]] <- rgamma(length(block_obs[[k]]), shape = shape_boost, rate = rate_boost)
+  Theta[k,] <- Theta[k,] / sum(Theta[k,])
 }
 
 # Compute Poisson means
@@ -130,6 +159,9 @@ pheatmap(Y_ordered, cluster_rows = FALSE, cluster_cols = FALSE,
          color = colorRampPalette(c("white","red"))(100),
          main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
 write.csv(Y, "Poisfactor.csv")
+pheatmap(Theta, cluster_rows = FALSE, cluster_cols = FALSE,
+         color = colorRampPalette(c("white","red"))(100),
+         main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
 ```
 
 
@@ -138,20 +170,26 @@ write.csv(Y, "Poisfactor.csv")
 set.seed(123)
 
 # Dimensions
-J <- 10   # variables
-I <- 10   # observations
+J <- 20   # variables
+I <- 20   # observations
 K <- 3    # factors
 
 # Block size settings (for demonstration; can adjust)
-block_vars <- list(1:4, 5:7, 8:10)        # rows per factor
-block_obs  <- list(1:3, 4:6, 7:9)       # columns per factor
+# Helper: split 1:n into K contiguous groups (as evenly as possible)
+make_blocks <- function(n, K) {
+  split(1:n, cut(1:n, breaks = K, labels = FALSE))
+}
+
+# Automatically generated contiguous blocks
+block_vars <- make_blocks(J, K)   # rows
+block_obs  <- make_blocks(I, K)   # columns
 
 # Base Gamma parameters for non-dominant entries
-shape_base <- .5
+shape_base <- 10
 rate_base  <- 1
 
 # Boost Gamma parameters for dominant blocks
-shape_boost <- 3
+shape_boost <- 100
 rate_boost  <- 1
 
 # Initialize Phi (J x K) and Theta (K x I) with small random values
@@ -162,13 +200,14 @@ Theta <- matrix(rgamma(K*I, shape = shape_base, rate = rate_base), nrow = K, nco
 for (k in 1:K) {
   Phi[block_vars[[k]], k] <- rgamma(length(block_vars[[k]]), shape = shape_boost, rate = rate_boost)
   Theta[k, block_obs[[k]]] <- rgamma(length(block_obs[[k]]), shape = shape_boost, rate = rate_boost)
+  Theta[k,] <- Theta[k,] / sum(Theta[k,])
 }
 
 # Compute Poisson means
 Lambda <- Phi %*% Theta
 
 # Generate Poisson observations
-Y <- matrix(rnbinom(J*I, Lambda, .5), nrow = J, ncol = I)
+Y <- matrix(rnbinom(J*I, size=as.vector(Lambda), prob= .6), nrow = J, ncol = I)
 Y <- t(Y)  # rows = observations
 
 # Optional: reorder by dominant factor for clearer heatmap
@@ -185,9 +224,17 @@ write.csv(Y, "NBfactor.csv")
 ```
 
 ```{r}
+x <- rnbinom(1000, 100, .75)
+var(x)/mean(x)
+```
+
+
+
+```{r}
 rgc <- function(alpha, beta, B){
   x <- rep(0,B)
   for(b in 1:B){
+      n <- 100
       tau_n <- rgamma(n, alpha,beta)
       v_n <- cumsum(tau_n)
       x[b] <- sum(v_n <= 1)
@@ -202,20 +249,26 @@ rgc <- function(alpha, beta, B){
 set.seed(123)
 
 # Dimensions
-J <- 10   # variables
-I <- 10   # observations
+J <- 20   # variables
+I <- 20   # observations
 K <- 3    # factors
 
 # Block size settings (for demonstration; can adjust)
-block_vars <- list(1:4, 5:7, 8:10)        # rows per factor
-block_obs  <- list(1:3, 4:6, 7:9)       # columns per factor
+# Helper: split 1:n into K contiguous groups (as evenly as possible)
+make_blocks <- function(n, K) {
+  split(1:n, cut(1:n, breaks = K, labels = FALSE))
+}
+
+# Automatically generated contiguous blocks
+block_vars <- make_blocks(J, K)   # rows
+block_obs  <- make_blocks(I, K)   # columns
 
 # Base Gamma parameters for non-dominant entries
-shape_base <- .5
+shape_base <- 10
 rate_base  <- 1
 
 # Boost Gamma parameters for dominant blocks
-shape_boost <- 3
+shape_boost <- 100
 rate_boost  <- 1
 
 # Initialize Phi (J x K) and Theta (K x I) with small random values
@@ -226,6 +279,7 @@ Theta <- matrix(rgamma(K*I, shape = shape_base, rate = rate_base), nrow = K, nco
 for (k in 1:K) {
   Phi[block_vars[[k]], k] <- rgamma(length(block_vars[[k]]), shape = shape_boost, rate = rate_boost)
   Theta[k, block_obs[[k]]] <- rgamma(length(block_obs[[k]]), shape = shape_boost, rate = rate_boost)
+  Theta[k,] <- Theta[k,] / sum(Theta[k,])
 }
 
 # Compute Poisson means
@@ -234,7 +288,7 @@ Lambda <- Phi %*% Theta
 # Generate Poisson observations
 for(i in 1:I){
   for(j in 1:J){
-    Y[i,j] <- rgc(2, 2*Lambda[i,j],1)
+    Y[i,j] <- rgc(2, Lambda[i,j],1)
   }
 }
 
@@ -254,7 +308,10 @@ write.csv(Y, "GCfactor.csv")
 ```
 
 ```{r}
-x <- rgc(2, 2*5,1000)
+x <- rgc(2, Lambda[1,1],1000)
 var(x)/mean(x)
+```
+```{r}
+x <- rgc(3, 3*Lambda[1,1],100000)
 ```
 

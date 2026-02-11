@@ -107,26 +107,23 @@ function backward_sample(model::flightsDshared, data, state, mask=nothing; skipu
     post_shape_R = fill(model.a, model.R)
     post_rate_R = fill(model.b, model.R)
 
-    post_shape1_T = fill(model.c, model.T)
-    post_shape2_T = fill(model.c, model.T)
-    post_rate1_T = fill(model.d, model.T)
-    post_rate2_T = fill(model.d, model.T)
-
-    Z1_NM = zeros(Int, model.N,1)
-    Z2_NM = zeros(Int, model.N,1)
-    Z_TTnew = zeros(Int, model.T, model.T)
-
     #unfortunately, to impute the held out data points and
     #sample poissons from maximum, we must loop over N
+    nt = Threads.nthreads()
+    Z_R_nt = [zeros(Int, model.R) for _ in 1:nt]
     @views @threads for n in 1:model.N   
-        mu = U_R[routes_N[n]]
+        tid = Threads.threadid()
+        r =  routes_N[n]
+        mu = U_R[r]
         if !isnothing(mask) && mask[n,1] == 1
             Y_NM[n,1] = sample_likelihood(model,mu,D)
         end
         #if Y_NM[n, 1] > 0
-        Z1_NM[n,1] = sampleSumGivenOrderStatistic(Y_NM[n, 1], D, div(D,2)+1, Poisson(mu))
+        z = sampleSumGivenOrderStatistic(Y_NM[n, 1], D, div(D,2)+1, Poisson(mu))
+        Z_R_nt[tid][r] += z
         #end
     end
+    Z_R  = sum(Z_R_nt)  
 
 
     #now that we have latent Poissons, additivity allows us to
@@ -136,30 +133,61 @@ function backward_sample(model::flightsDshared, data, state, mask=nothing; skipu
     @views for r in 1:R
         indices = routes_R4[r,3]
         numflights = length(indices)
-        post_shape_R[r] += sum(Z1_NM[indices,1])
-        post_rate_R[r] += D*numflights
+        post_shape_R = Z_R[r]
+        post_rate_R= D*numflights
+        U_R[r] = rand(Gamma.(post_shape_R, 1 ./post_rate_R))
     end
 
-    U_R = rand.(Gamma.(post_shape_R, 1 ./post_rate_R))
 
+    # if isnothing(skipupdate) || !("D_R" in skipupdate)
+    #     logprobs = [logbinomial(Int((model.Dmax-1)/2),Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
+    #     for d in 1:2:model.Dmax
+    #         @threads for f in 1:model.N
+    #             Y = Y_NM[f, 1]
+    #             mu = U_R[routes_N[f]]
+    #             try
+    #                 logprobs[div(d,2)+1] += logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1)
+    #             catch ex
+    #                 println(Y," ", mu, " ", d," ", div(d,2)+1)
+    #                 @assert 1 == 2
+    #             end
+    #         end
+    #     end
+    #         D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
+    #     p = rand(Beta(model.alpha + (D- 1)/2, model.beta + (model.Dmax - D)/2))
+    # end
 
     if isnothing(skipupdate) || !("D_R" in skipupdate)
-        logprobs = [logbinomial(Int((model.Dmax-1)/2),Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
+        # prior part (no threading needed)
+        logprobs = [
+            logbinomial(Int((model.Dmax - 1) ÷ 2), Int((d - 1) ÷ 2)) +
+            (d - 1) * log(p) / 2 +
+            (model.Dmax - d) * log(1 - p) / 2
+            for d in 1:2:model.Dmax
+        ]
         for d in 1:2:model.Dmax
+            didx = (d ÷ 2) + 1
+
+            # thread-local accumulator
+            acc = zeros(Float64, nt)
+
             @threads for f in 1:model.N
+                tid = Threads.threadid()
                 Y = Y_NM[f, 1]
                 mu = U_R[routes_N[f]]
-                try
-                    logprobs[div(d,2)+1] += logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1)
-                catch ex
-                    println(Y," ", mu, " ", d," ", div(d,2)+1)
-                    @assert 1 == 2
-                end
+                acc[tid] += logpmfOrderStatPoisson(
+                    Y, mu, d, didx
+                )
             end
+
+            logprobs[didx] += sum(acc)
         end
-            D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
+        # Gumbel-max trick
+        D = 2 * argmax(rand(Gumbel(0, 1), length(logprobs)) .+ logprobs) - 1
         p = rand(Beta(model.alpha + (D- 1)/2, model.beta + (model.Dmax - D)/2))
+
     end
+
 
     state = Dict("U_R" => U_R,
                 "p"=>p,

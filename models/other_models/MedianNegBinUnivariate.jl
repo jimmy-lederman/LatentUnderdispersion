@@ -82,13 +82,3 @@ function backward_sample(model::MedianNegBinUnivariate, data, state, mask=nothin
     return data, state
 end
 
-# N = 100
-# M = 100
-# K = 2
-# a = b = c = d = 1
-# D = 10
-# model = maxPoissonMF(N,M,K,a,b,c,d,D)
-# data, state = forward_sample(model)
-# posteriorsamples = fit(model, data, nsamples=100,nburnin=100,nthin=1)
-# print(evaluateInfoRate(model, data, posteriorsamples))
-#fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)

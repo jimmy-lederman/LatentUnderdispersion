@@ -4,26 +4,68 @@ output: html_document
 date: "2026-01-21"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+library(brms)
+library(COMPoissonReg)
 ```
 
-## R Markdown
+```{r}
+datafile = "/Users/jimmy/Desktop/OrderStats/data/flights_data/flights_final.csv"
+df <- read.csv(datafile)
+y <- df$AIR_TIME
+home_N <- df$origin
+away_N <- df$dest
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+routes_R4 <- list()
+airports <- 99
+for (t1 in 1:airports) {
+  for (t2 in 1:airports) {
+    bitvector <- (home_N == t1) & (away_N == t2)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+    if (sum(bitvector) != 0) {
+      indices <- which(bitvector)
 
-```{r cars}
-summary(cars)
+      routes_R4[[length(routes_R4) + 1]] <-
+        list(t1, t2)
+    }
+  }
+}
+
+routes_R4 <- do.call(rbind, lapply(routes_R4, function(x) {
+  data.frame(
+    t1 = x[[1]],
+    t2 = x[[2]]
+  )
+}))
+routes_R4$route <- 1:nrow(routes_R4)
+
+routes <- with(
+  df,
+  routes_R4$route[
+    match(
+      paste(origin, dest),
+      paste(routes_R4$t1, routes_R4$t2)
+    )
+  ]
+)
+df$route <- as.factor(routes)
 ```
 
-## Including Plots
+```{r}
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+#df_small <- df[1:10000,]
+brm(
+  AIR_TIME ~ route,
+  data = df,
+  family = brmsfamily("com_poisson"),
+  chains = 1,
+  iter = 10,
+  warmup = 5
+)
+```
+

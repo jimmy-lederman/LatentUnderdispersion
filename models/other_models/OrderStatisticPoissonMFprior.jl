@@ -26,33 +26,96 @@ function update_D(model::OrderStatisticPoissonMF, Y_NM, mu_NM)
     else
         logprobs = [logbinomial(model.Dmax-1, d-1) + (d-1)*log(model.p) + (model.Dmax - d)*log(1-model.p) for d in 1:model.Dmax]
     end
-    @views for n in 1:model.N
-        @views for m in 1:model.M
-            Y = Y_NM[n,m]
-            mu = mu_NM[n,m]
-            @views for d in 1:model.Dmax
-                if model.type == 2 && d % 2 == 0
-                    continue
-                end
-                if model.type == 1
-                    j = 1
-                    logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
-                elseif model.type == 2
-                    j = div(d,2) + 1
-                    logprobs[Int(div(d,2)+1)] += logpmfOrderStatPoisson(Y, mu, d, j)
-                else
-                    j = d
-                    logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
-                end
-
+    @views for idx in 1:(model.N * model.M)
+        tid = Threads.threadid()
+        n = div(idx - 1, model.M) + 1
+        m = mod(idx - 1, model.M) + 1
+        Y = Y_NM[n,m]
+        mu = mu_NM[n,m]
+        @views for d in 1:model.Dmax
+            if model.type == 2 && d % 2 == 0
+                continue
             end
+            if model.type == 1
+                j = 1
+                logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+            elseif model.type == 2
+                j = div(d,2) + 1
+                logprobs[Int(div(d,2)+1)] += logpmfOrderStatPoisson(Y, mu, d, j)
+            else
+                j = d
+                logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+            end
+
         end
     end
+
     if model.type == 2
         D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
     else
         D = argmax(rand(Gumbel(0,1), model.Dmax) .+ logprobs)
     end
+    return D
+end
+
+function update_D_faster(model::OrderStatisticPoissonMF, Y_NM, mu_NM)
+    # Compute prior contribution once
+    if model.type == 2
+        base_logprobs = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) +
+                         (d-1)*log(model.p)/2 + (model.Dmax - d)*log(1-model.p)/2
+                         for d in 1:2:model.Dmax]
+        logprobs_len = length(base_logprobs)
+    else
+        base_logprobs = [logbinomial(model.Dmax-1, d-1) +
+                         (d-1)*log(model.p) + (model.Dmax - d)*log(1-model.p)
+                         for d in 1:model.Dmax]
+        logprobs_len = model.Dmax
+    end
+
+    # Allocate per-thread accumulator arrays (initialized to zero)
+    nt = Threads.nthreads()
+    logprobs_thr = [zeros(Float64, logprobs_len) for _ in 1:nt]
+
+    # Threaded loop over all entries
+    @threads for idx in 1:(model.N * model.M)
+        tid = Threads.threadid()
+        n = div(idx - 1, model.M) + 1
+        m = mod(idx - 1, model.M) + 1
+        Y = Y_NM[n,m]
+        mu = mu_NM[n,m]
+        lp = logprobs_thr[tid]
+
+        @inbounds for d in 1:model.Dmax
+            # Skip even d for type 2
+            if model.type == 2 && d % 2 == 0
+                continue
+            end
+
+            if model.type == 1
+                j = 1
+                lp[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+            elseif model.type == 2
+                j = div(d,2) + 1
+                lp[Int(div(d,2)+1)] += logpmfOrderStatPoisson(Y, mu, d, j)
+            else
+                j = d
+                lp[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+            end
+        end
+    end
+
+    # Sum threads and add prior contribution
+    logprobs = reduce(+, logprobs_thr)
+    logprobs .+= base_logprobs  # add prior once
+
+    # Sample D using Gumbel-max trick
+    if model.type == 2
+        D_idx = argmax(rand(Gumbel(0,1), logprobs_len) .+ logprobs)
+        D = 2*D_idx - 1
+    else
+        D = argmax(rand(Gumbel(0,1), model.Dmax) .+ logprobs)
+    end
+
     return D
 end
 
@@ -72,7 +135,8 @@ function evalulateLogLikelihood(model::OrderStatisticPoissonMF, state, data, inf
 end
 
 function sample_prior(model::OrderStatisticPoissonMF,info=nothing)
-    U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
+    #U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
+    U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     if model.type == 2
         D = 2*rand(Binomial(Int((model.Dmax - 1)/2), model.p)) + 1
@@ -99,7 +163,7 @@ function forward_sample(model::OrderStatisticPoissonMF; state=nothing, info=noth
         j = D
     end
     Y_NM = rand.(OrderStatistic.(Poisson.(Mu_NM), D, j))
-    Z_NMK = zeros(Int, model.N, model.M, model.K)
+    #Z_NMK = zeros(Int, model.N, model.M, model.K)
     # for n in 1:model.N
     #     for m in 1:model.M
     #         for k in 1:model.K
@@ -111,7 +175,7 @@ function forward_sample(model::OrderStatisticPoissonMF; state=nothing, info=noth
     return data, state 
 end
 
-function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothing)
+function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothing;skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -124,64 +188,54 @@ function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothi
     else
         j = D
     end
-
-    Z_NM = zeros(Int, model.N, model.M)
-    Z_NMK = zeros(Int, model.N, model.M, model.K)
-    #Z_NMK = copy(state["Z_NMK"])
-    Mu_NM = U_NK * V_KM
+    nt = Threads.nthreads()
+    Z_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
+    Z_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
+    P_K_thr = [zeros(Float64, model.K) for _ in 1:nt]
     #Loop over the non-zeros in Y_DV and allocate
     @views @threads for idx in 1:(model.N * model.M)
+        tid = Threads.threadid()
         n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1    
+        m = mod(idx - 1, model.M) + 1
+        P_K = P_K_thr[tid]
+        @inbounds for k in 1:model.K
+            P_K[k] = U_NK[n, k] * V_KM[k, m]
+        end
         if !isnothing(mask)
             if mask[n,m] == 1
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Mu_NM[n,m]), D, j))
+                Y_NM[n,m] = rand(OrderStatistic(Poisson(sum(P_K)), D, j))
             end
         end
-        # println(D)
-        # println(j)
-        # println(Poisson(Mu_NM[n, m]))
-        # println(Y_NM[n, m])
-        # println(sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, Poisson(Mu_NM[n, m])))
-        # println(Mu_NM[n, m])
-        Z_NM[n, m] = sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, Poisson(Mu_NM[n, m]))
-        if Z_NM[n, m] > 0
-            P_K = U_NK[n, :] .* V_KM[:, m]
-            Z_NMK[n, m, :] = rand(Multinomial(Z_NM[n, m], P_K / sum(P_K)))
+        z = sampleSumGivenOrderStatistic(Y_NM[n, m], D, j, Poisson(sum(P_K)))
+        if z > 0
+            z_k = rand(Multinomial(z, P_K / sum(P_K)))
+            @inbounds for k in 1:model.K
+                Z_NK_thr[tid][n, k] += z_k[k]
+                Z_MK_thr[tid][m, k] += z_k[k]
+            end
         end
     end
+    Z_NK  = sum(Z_NK_thr)  
+    Z_MK  = sum(Z_MK_thr)  
 
-    @views for n in 1:model.N
-        @views for k in 1:model.K
-            post_shape = model.a + sum(Z_NMK[n, :, k])
-            post_rate = model.b + D*sum(V_KM[k, :])
-            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))[1]
-        end
+    A_K = fill(model.a, model.N)
+    @views for k in 1:model.K
+        U_NK[:, k] = rand(Dirichlet(A_K .+ Z_NK[:,k]))
     end
-
+    
     @views for m in 1:model.M
         @views for k in 1:model.K
-            post_shape = model.c + sum(Z_NMK[:, m, k])
-            post_rate = model.d + D*sum(U_NK[:, k])
+            post_shape = model.c + Z_MK[m,k]
+            post_rate = model.d + D
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
-    Mu_NM = U_NK * V_KM
 
-    #last, infer D
-    D = update_D(model, Y_NM, Mu_NM)
+    if isnothing(skipupdate) || !("D" in skipupdate)
+        Mu_NM = U_NK * V_KM
+        D = update_D_faster(model, Y_NM, Mu_NM)
+    end
 
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "D"=>D)
     return data, state
 end
-
-# N = 100
-# M = 100
-# K = 2
-# a = b = c = d = 1
-# D = 10
-# model = maxPoissonMF(N,M,K,a,b,c,d,D)
-# data, state = forward_sample(model)
-# posteriorsamples = fit(model, data, nsamples=100,nburnin=100,nthin=1)
-# print(evaluateInfoRate(model, data, posteriorsamples))
-#fsamples, bsamples = gewekeTest(model, ["U_NK", "V_KM"], nsamples=1000, nburnin=100, nthin=1)

@@ -87,27 +87,6 @@ function forward_sample(model::covid1; state=nothing, info=nothing)
     return data, state 
 end
 
-logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
-
-
-function update_Dall(model::covid1, Y0_N, Y_NM, mu_NM, p)
-    logprobs = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
-    @views @threads for n in 1:model.N
-        @views for m in 1:model.M
-            if m == 1
-                mu = Y0_N[n] + mu_NM[n,m]
-            else
-                mu = Y_NM[n,m] + mu_NM[n,m]
-            end
-            Y = Y_NM[n,m]
-            logprobs += [logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1,compute=false) for d in 1:2:model.Dmax]
-        end
-    end
-    D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
-    @assert D >= 1 && D <= model.Dmax
-    return D
-end
-
 function backward_sample(model::covid1, data, state, mask=nothing; skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])

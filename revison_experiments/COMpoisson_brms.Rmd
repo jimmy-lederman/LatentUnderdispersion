@@ -10,7 +10,6 @@ true_pmf <- readRDS("revision1_pmf.rds")
 
 
 ```{r}
-
 Y_Nseeds <- read.csv("revision1.csv")
 ```
 
