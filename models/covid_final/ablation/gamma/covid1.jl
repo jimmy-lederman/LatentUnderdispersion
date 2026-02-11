@@ -13,7 +13,7 @@ struct covid1gamma <: MatrixMF
     d::Float64
 end
 
-function evalulateLogLikelihood(model::covid1gamma, state, data, info, row, col)
+function evalulateLogLikelihood(model::covid1, state, data, info, row, col)
         @assert !isnothing(info)
     if col == 1
         Ylast = info["Y0_N"][row]
@@ -25,14 +25,14 @@ function evalulateLogLikelihood(model::covid1gamma, state, data, info, row, col)
     return logpdf(Poisson(mu), Y)
 end
 
-function sample_prior(model::covid1gamma,info=nothing,constantinit=nothing)
-    U_NK = rand(Gamma(model.a, 1/model.b), model.K)
+function sample_prior(model::covid1,info=nothing,constantinit=nothing)
+    U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
     state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Y0_N"=>info["Y0_N"])
     return state
 end
 
-function forward_sample(model::covid1gamma; state=nothing, info=nothing)
+function forward_sample(model::covid1; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model,info)
     end
@@ -53,7 +53,7 @@ function forward_sample(model::covid1gamma; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::covid1gamma, data, state, mask=nothing)
+function backward_sample(model::covid1, data, state, mask=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
@@ -107,7 +107,10 @@ function backward_sample(model::covid1gamma, data, state, mask=nothing)
     Y_NK  = sum(Y_NK_thr)  
     Y_MK  = sum(Y_MK_thr) 
     
-
+    #Y_NK = dropdims(sum(Y_NMK, dims = 2), dims = 2)
+    # @views for k in 1:model.K
+    #      U_NK[:, k] = rand(Dirichlet(ones(model.N) .+ Y_NK[:,k]))
+    # end
     @views for k in 1:model.K
         post_rate = model.d + sum(V_KM[k, :])
         @views for n in 1:model.N
