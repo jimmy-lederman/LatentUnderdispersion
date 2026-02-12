@@ -92,13 +92,13 @@ elseif type1 == 2
     end
 end
 
-time = @elapsed samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
+time_result = @elapsed samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
 
 params = [maskSeed, chainSeed, type1, type2, K, D, Q]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples/"
 if type1 == 1
     save(folder*"/covid$(type2)dirichlet_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
 elseif type2 == 2
-    save(folder*"/covid$(type2)gamma_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
+    save(folder*"/covid$(type2)gamma_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 end
 
