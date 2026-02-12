@@ -139,7 +139,7 @@ function backward_sample(model::covid2, data, state, mask=nothing;skipupdate=not
             end
         end
         if Y_NM[n, m] > 0
-            if mask[n,m] == 0
+            if isnothing(mask) || mask[n,m] == 0
                 P_K = P_K_thr[tid]
                 @inbounds begin
                     @simd for k in 1:model.K
@@ -149,6 +149,7 @@ function backward_sample(model::covid2, data, state, mask=nothing;skipupdate=not
                     P_K[model.K+2] = eps
                 end
             end
+
             y_k = rand(Multinomial(Y_NM[n, m],  P_K / sum(P_K)))
             @inbounds begin
                 sum_noise_thr[tid]  += y_k[model.K+2]
@@ -176,10 +177,10 @@ function backward_sample(model::covid2, data, state, mask=nothing;skipupdate=not
     eps = rand(Gamma(post_shape, 1/post_rate))
     
     @views for k in 1:model.K
-        post_rate = model.d + sum(V_KM[k, :])
+        post_rate = model.a + sum(V_KM[k, :])
         @views for n in 1:model.N
-            post_shape = model.c + Y_NK[n,k]
-            U_NK[k, m] = rand(Gamma(post_shape, 1/post_rate))
+            post_shape = model.b + Y_NK[n,k]
+            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
 

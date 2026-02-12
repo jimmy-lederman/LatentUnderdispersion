@@ -1,5 +1,5 @@
 include("../../../../helper/MatrixMF.jl")
-include("../../../../helper/OrderStatsSampling_fast.jl")
+include("../../../../helper/OrderStatsSampling.jl")
 include("../../../../helper/PoissonOrderPMF.jl")
 using Distributions
 using LinearAlgebra
@@ -55,7 +55,7 @@ end
 
 function sample_prior(model::covid3, info=nothing,constantinit=nothing)
     pass = false
-    U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
+    U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     if !isnothing(constantinit)
         pass = ("V_KM" in keys(constantinit))
     end
@@ -96,10 +96,10 @@ function forward_sample(model::covid3; state=nothing, info=nothing)
         for n in 1:model.N
             if m == 1
                 #Y_NM[n,m] = rand(Poisson(Y0_N[n] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y0_N[n] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m] )), model.D, div(model.D, 2) + 1))
+                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y0_N[n] + eps + sum(U_NK[n,:] .* V_KM[:,m] )), model.D, div(model.D, 2) + 1))
             else
                 #Y_NM[n,m] = rand(Poisson(Y_NM[n,m-1] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y_NM[n,m-1] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m])), model.D, div(model.D, 2) + 1))
+                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y_NM[n,m-1] + eps + sum(U_NK[n,:] .* V_KM[:,m])), model.D, div(model.D, 2) + 1))
             end
         end 
     end
@@ -144,10 +144,10 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
         mu = sum(P_K) 
         if !isnothing(mask)
             if mask[n,m] == 1   
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), D, div(D, 2) + 1))
+                Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), model.D, div(model.D, 2) + 1))
             end
         end
-        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], D, div(D,2)+1, Poisson(mu))
+        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, div(model.D,2)+1, Poisson(mu))
         if Z > 0
             y_k = rand(Multinomial(Z,  P_K / sum(P_K)))
             @inbounds begin
@@ -170,10 +170,10 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
     eps = rand(Gamma(post_shape, 1/post_rate))
     
     @views for k in 1:model.K
-        post_rate = model.d + model.D*sum(V_KM[k, :])
+        post_rate = model.a + model.D*sum(V_KM[k, :])
         @views for n in 1:model.N
-            post_shape = model.c + Y_NK[n,k]
-            U_NK[k, m] = rand(Gamma(post_shape, 1/post_rate))
+            post_shape = model.b + Y_NK[n,k]
+            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
 

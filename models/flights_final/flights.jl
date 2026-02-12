@@ -18,15 +18,23 @@ end
 function evalulateLogLikelihood(model::flights, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
     @assert size(data["Y_NM"])[2] == 1
-    route = info["routes_N"][row]
+    route = data["routes_N"][row]
     mu = state["U_R"][route]
     D = state["D_R"][route]
     
     if D == 1
-        return logpdf(Poisson(mu), Y)
+        x = logpdf(Poisson(mu), Y)
+
+        if !isfinite(x)
+            println(x)
+            println(mu)
+            println(route)
+            @assert 1 == 2
+        end
+        return x
     else
-        #return logpmfOrderStatPoisson(Y,mu,D,div(D,2)+1)
-        return logpdf(OrderStatistic(Poisson(mu),D,div(D,2)+1), Y)
+        return logpmfOrderStatPoisson(Y,mu,D,div(D,2)+1)
+        #return logpdf(OrderStatistic(Poisson(mu),D,div(D,2)+1), Y)
     end
 end
 
@@ -151,7 +159,8 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
             for d in 1:2:model.Dmax
         ]
         @views @threads for r in 1:model.R
-            Ys = routes_R2[r, 1]
+            indices = routes_R2[r, 1]
+            Ys = Y_NM[indices,1] 
             mu = U_R[r]
 
             # initialize logprobs from prior

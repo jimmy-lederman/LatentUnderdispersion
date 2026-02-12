@@ -138,7 +138,7 @@ function backward_sample(model::covid2, data, state, mask=nothing;skipupdate=not
             end
         end
         if Y_NM[n, m] > 0
-            if mask[n,m] == 0
+            if isnothing(mask) || mask[n,m] == 0
                 P_K = P_K_thr[tid]
                 @inbounds begin
                     @simd for k in 1:model.K

@@ -33,11 +33,28 @@ function evalulateLogLikelihood(model::OrderStatisticNegBinMF, state, data, info
     Y = data["Y_NM"][row,col]
     mu = dot(state["U_NK"][row,:], state["V_KM"][:,col])
     p = state["p"]
-    if model.D == 1
-        return logpdf(NegativeBinomial(mu, p), Y)
-    else
-        return logpdf(OrderStatistic(NegativeBinomial(mu, p), model.D, model.j), Y)
+    x = 0
+    try
+        if model.D == 1
+            x = logpdf(NegativeBinomial(mu, p), Y)
+        else
+            x = logpdf(OrderStatistic(NegativeBinomial(mu, p), model.D, model.j), Y)
+        end
+    catch ex
+        println(Y)
+        println(mu)
+        println(p)
+        @assert 1 == 2
     end
+    if !isfinite(x) || x ==0 
+        println(Y)
+        println(mu)
+        println(p)
+        println(x)
+        @assert 1 == 2
+    end
+    return x
+
 end
 
 function sample_prior(model::OrderStatisticNegBinMF)
@@ -66,7 +83,7 @@ function forward_sample(model::OrderStatisticNegBinMF; state=nothing, info=nothi
     return data, state 
 end
 
-function griddy_gibbs(model::OrderStatisticNegBinMF, U_NK, Z_MK, Z_NM, plist=.01:.01:.99)#plist=[.49,.5,.51,.52,.53,.55,.6]))
+function griddy_gibbs(model::OrderStatisticNegBinMF, U_NK, Z_MK, Z_NM, plist=.01:.005:.99)#plist=[.49,.5,.51,.52,.53,.55,.6]))
     rlist = zeros(length(plist),model.K, model.M)
     logprobs = zeros(length(plist))
     for (i,p) in enumerate(plist)
@@ -144,23 +161,24 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
         @views for k in 1:model.K
             U_NK[:, k] = rand(Dirichlet(A_K .+ Z_NK[:,k]))
         end
-        if p <= .025
-            plist = .001:.001:(p+.025)
-        elseif p >= .975
-            plist = (p-.025):.001:.999
-        else
-            plist = (p-.025):.001:(p+.025)
-        end
-        (p, V_KM) = griddy_gibbs(model, U_NK, Z_MK, Z_NM, plist)
+        # if p <= .025
+        #     plist = .001:.001:(p+.025)
+        # elseif p >= .975
+        #     plist = (p-.025):.001:.999
+        # else
+        #     plist = (p-.025):.001:(p+.025)
+        # end
+        (p, V_KM) = griddy_gibbs(model, U_NK, Z_MK, Z_NM)
     else
        
         Z_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
         Z_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
+        Z_MK = zeros(Int, model.M, model.K)
         z1_thr = [0 for _ in 1:nt]
         P_K_thr = [zeros(Float64, model.K) for _ in 1:nt]
-
+        Z_NM = zeros(Int, model.N, model.M)
+        Z2_NM = zeros(Int, model.N, model.M)
         @views for idx in 1:(model.N * model.M)
-           
             tid = Threads.threadid()
             n = div(idx - 1, model.M) + 1
             m = mod(idx - 1, model.M) + 1  
@@ -170,15 +188,19 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
                     y = rand(OrderStatistic(NegativeBinomial(Mu_NM[n,m], p), model.D, model.j))
                 end
             end
-            z1 = sampleSumGivenOrderStatistic(y, model.D, model.j, NegativeBinomial(Mu_NM[n,m],p))
-            z1_thr[tid] += z1
-            if z1 > 0
-                P_K = P_K_thr[tid]
-                @inbounds for k in 1:model.K
-                    P_K[k] = U_NK[n, k] * V_KM[k, m]
-                end
+            Z_D = sampleAllGivenOrderStatistic(y, model.D, model.j, NegativeBinomial(Mu_NM[n,m],p))
+            z1_thr[tid] += sum(Z_D)
+            #Z_NM[n,m] = z1
+            #if z1 > 0
+            P_K = P_K_thr[tid]
+            @inbounds for k in 1:model.K
+                P_K[k] = U_NK[n, k] * V_KM[k, m]
+            end
                 #sample CRT
-                z = sampleCRT(z1, model.D*Mu_NM[n,m])
+            for d in 1:model.D
+                z1 = Z_D[d]
+                z = sampleCRT(z1, Mu_NM[n,m])
+                #Z2_NM[n,m] = z
                 #now Z is a (certain kind of) Poisson so we can thin it
                 z_k = rand(Multinomial(z, P_K / sum(P_K)))
                 @inbounds for k in 1:model.K
@@ -186,27 +208,46 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
                     Z_MK_thr[tid][m, k] += z_k[k]
                 end
             end
+            #end
         end
-        # println(z1_thr)
+        
 
         Z_NK  = sum(Z_NK_thr)  
         Z_MK  = sum(Z_MK_thr)  
         z1sum = sum(z1_thr)
-        # println(z1sum)
+        #mu_sum = sum(U_NK * V_KM)
 
-    #     # mu = sum(U_NK * V_KM)
-    #     # p = rand(Beta(model.alpha + model.D*mu, model.beta + z1sum))
-
+        # U_NK_new = copy(U_NK)
+        # V_KM_new = copy(V_KM)
 
         A_K = fill(model.a, model.N)
         @views for k in 1:model.K
             U_NK[:, k] = rand(Dirichlet(A_K .+ Z_NK[:,k]))
         end
 
+        # Z_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
+        # Z_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
+
+        # @views for idx in 1:(model.N * model.M)
+        #     tid = Threads.threadid()
+        #     n = div(idx - 1, model.M) + 1
+        #     m = mod(idx - 1, model.M) + 1  
+
+        #     P_K = P_K_thr[tid]
+        #     @inbounds for k in 1:model.K
+        #         P_K[k] = U_NK[n, k] * V_KM[k, m]
+        #     end
+        #     #sample CRT
+        #     z = Z2_NM[n,m]
+        #     #now Z is a (certain kind of) Poisson so we can thin it
+        #     z_k = rand(Multinomial(z, P_K / sum(P_K)))
+        #     @inbounds for k in 1:model.K
+        #         Z_NK_thr[tid][n, k] += z_k[k]
+        #         Z_MK_thr[tid][m, k] += z_k[k]
+        #     end
+        # end
+        # Z_MK  = sum(Z_MK_thr)  
         mu_sum = sum(U_NK * V_KM)
-        # println(z1sum)
-        # println(model.D*mu_sum)
-        @assert model.D == 3
         p = rand(Beta(model.alpha + model.D*mu_sum, model.beta + z1sum))
 
         post_rate = model.d + model.D*log(1/p)
@@ -216,7 +257,14 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
                 V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
             end
         end
-        #p = rand(Beta(model.alpha + z1sum, model.beta + model.D*mu_sum ))
+
+        
+
+        mu_sum = sum(U_NK * V_KM)
+        p = rand(Beta(model.alpha + model.D*mu_sum, model.beta + z1sum))
+
+
+ 
         
     #     # p = .675
     end
