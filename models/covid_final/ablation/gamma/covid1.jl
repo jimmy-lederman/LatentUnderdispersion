@@ -3,7 +3,7 @@ using Distributions
 using LinearAlgebra
 using Base.Threads
 
-struct covid1gamma <: MatrixMF
+struct covid1 <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
@@ -87,7 +87,7 @@ function backward_sample(model::covid1, data, state, mask=nothing)
             end
         end
         if Y_NM[n, m] > 0
-            if mask[n,m] == 0
+            if isnothing(mask) || mask[n,m] == 0
                 P_K = P_K_thr[tid]
                 @inbounds begin
                     @simd for k in 1:model.K
@@ -112,10 +112,10 @@ function backward_sample(model::covid1, data, state, mask=nothing)
     #      U_NK[:, k] = rand(Dirichlet(ones(model.N) .+ Y_NK[:,k]))
     # end
     @views for k in 1:model.K
-        post_rate = model.d + sum(V_KM[k, :])
+        post_rate = model.a + sum(V_KM[k, :])
         @views for n in 1:model.N
-            post_shape = model.c + Y_NK[n,k]
-            U_NK[k, m] = rand(Gamma(post_shape, 1/post_rate))
+            post_shape = model.b + Y_NK[n,k]
+            U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
     

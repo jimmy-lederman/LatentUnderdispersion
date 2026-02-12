@@ -45,7 +45,7 @@ end
 function evalulateLogLikelihood(model::flights_STAR, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
     @assert size(data["Y_NM"])[2] == 1
-    route = info["routes_N"][row]
+    route = data["routes_N"][row]
     mu = state["U_R"][route]
     sigma2 = state["sigma2_R"][route]
     x =  STARlogpmf(model,Y,mu,sigma2)

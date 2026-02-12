@@ -58,8 +58,8 @@ df$route <- as.factor(routes)
 
 
 ```{r}
-#df_small <- df[1:10000,]
-brm(
+df_small <- df[1:100,]
+model <- brm(
   AIR_TIME ~ route,
   data = df,
   family = brmsfamily("com_poisson"),
