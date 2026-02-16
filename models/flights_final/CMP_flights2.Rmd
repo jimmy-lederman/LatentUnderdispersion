@@ -1,0 +1,236 @@
+---
+title: "CMP_flights"
+output: html_document
+date: "2026-02-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# download.file(
+#   "https://github.com/cchanialidis/combayes/archive/refs/heads/master.zip",
+#   "combayes.zip"
+# )
+```
+
+```{r}
+ remove.packages("combayes")
+setwd("/Users/jimmy/Desktop/OrderStats/models/flights_final/combayes-master")
+install.packages(".", repos = NULL, type = "source")
+```
+
+```{r}
+library(combayes)
+
+```
+
+
+
+```{r}
+# Set random seed for reproducibility
+set.seed(84)
+# Sample size
+n <- 200 
+# Sampling from an underdispersed COM-Poisson distribution
+comp_under <- rcmpois(mu=c(10,20),nu=1,n=n)
+# Sampling from a COM-Poisson distribution where nu=1 (i.e. Poisson distribution)
+comp_equi <- rcmpois(mu=10,nu=1,n=n)
+# Sampling from an overdispersed COM-Poisson distribution
+comp_over <- rcmpois(mu=10,nu=0.5,n=n)
+# Save samples in a data frame
+distributions <- data.frame(comp_under,comp_equi,comp_over)
+```
+
+
+
+
+
+```{r}
+# Load data from library Rchoice
+# Load data from library Rchoice
+library(Rchoice)
+data(Articles)
+# Focusing only on the students with at least one publication
+phdpublish <- subset(Articles, art>0)
+phdpublish <- transform(phdpublish, art=art-1)
+# Standardise all non-binary covariates
+phdpublish <- cbind(phdpublish[,c(1,2,3)],scale(phdpublish[,-c(1,2,3)],center=TRUE,scale=TRUE))
+result <- cmpoisreg(y=phdpublish$art, X=phdpublish[,2:6], num_samples=1e4, burnin=1e3,
+                    prior_var_beta=diag(6),
+                    prior_var_delta = diag(1),
+                    prior_mean_delta = rep(0,1))
+colMeans(result$posterior_beta)
+colMeans(result$posterior_delta)
+mcmc_beta  <- mcmc(result$posterior_beta)
+mcmc_delta <- mcmc(result$posterior_delta)
+colnames(mcmc_beta) <- c("intercept","female","married","kids","phd","mentor")
+colnames(mcmc_delta) <- colnames(mcmc_beta)
+# Plot traceplots of regression coefficients
+plot(mcmc_beta)
+plot(mcmc_delta)
+# Plot caterplots of regression coefficients
+caterplot(mcmc_beta,style="plain",bty="n",collapse=FALSE)
+abline(v=0,lty=2)
+title("Regression coefficients for"~ mu)
+caterplot(mcmc_delta,style="plain",bty="n",collapse=FALSE)
+abline(v=0,lty=2)
+title("Regression coefficients for"~ nu)
+```
+
+```{r}
+phdpublish[1:nrow(X_new),2:3]
+```
+
+
+
+
+```{r}
+library(coda)
+colMeans(result$posterior_beta)
+colMeans(result$posterior_delta)
+mcmc_beta  <- mcmc(result$posterior_beta)
+mcmc_delta <- mcmc(result$posterior_delta)
+colnames(mcmc_beta) <- c("intercept","female","married","kids","phd","mentor")
+colnames(mcmc_delta) <- colnames(mcmc_beta)
+# Plot traceplots of regression coefficients
+plot(mcmc_beta)
+plot(mcmc_delta)
+# Plot caterplots of regression coefficients
+# caterplot(mcmc_beta,style="plain",bty="n",collapse=FALSE)
+# abline(v=0,lty=2)
+# title("Regression coefficients for"~ mu)
+# caterplot(mcmc_delta,style="plain",bty="n",collapse=FALSE)
+# abline(v=0,lty=2)
+# title("Regression coefficients for"~ nu)
+```
+```{r}
+set.seed(123)   # optional, for reproducibility
+datafile = "/Users/jimmy/Desktop/OrderStats/data/flights_data/flights_final.csv"
+df <- read.csv(datafile)
+y <- df$AIR_TIME
+home_N <- df$origin
+away_N <- df$dest
+
+routes_R4 <- list()
+airports <- 99
+for (t1 in 1:airports) {
+  for (t2 in 1:airports) {
+    bitvector <- (home_N == t1) & (away_N == t2)
+
+    if (sum(bitvector) != 0) {
+      indices <- which(bitvector)
+
+      routes_R4[[length(routes_R4) + 1]] <-
+        list(t1, t2)
+    }
+  }
+}
+
+routes_R4 <- do.call(rbind, lapply(routes_R4, function(x) {
+  data.frame(
+    t1 = x[[1]],
+    t2 = x[[2]]
+  )
+}))
+routes_R4$route <- 1:nrow(routes_R4)
+
+routes <- with(
+  df,
+  routes_R4$route[
+    match(
+      paste(origin, dest),
+      paste(routes_R4$t1, routes_R4$t2)
+    )
+  ]
+)
+df$route <- as.factor(routes)
+required_routes <- unique(df$route)
+
+masks <- 1:5
+nsub <- 5000
+for(m in masks){
+  mask1 <- as.matrix(read.csv(paste("/Users/jimmy/Desktop/OrderStats/models/flights_final/revisionmasks/mask_",m,".csv",sep="")))[,1]
+  dftrain <- df[mask1 == 0, ]
+  dftest <- df[mask1 == 1,]
+  train_required <- dftrain[dftrain$route %in% required_routes, ]
+  forced_rows <- do.call(
+  rbind,
+  lapply(split(train_required, train_required$route), function(x) x[sample(nrow(x), 1), ])
+  )
+  stopifnot(length(setdiff(required_routes, unique(dftrain$route))) == 0)
+  remaining_n <- nsub - nrow(forced_rows)
+  
+  remaining_pool <- dftrain[!(rownames(dftrain) %in% rownames(forced_rows)), ]
+  
+  random_rows <- remaining_pool[sample(nrow(remaining_pool), remaining_n), ]
+  
+  dftrain_subset <- rbind(forced_rows,random_rows)
+  dftrain_subset$route <- droplevels(dftrain_subset$route)
+  X_new <- as.data.frame(model.matrix(~ route - 1, data=dftrain_subset) ) 
+  result <- cmpoisreg(y=dftrain_subset$AIR_TIME, X=X_new[,-1],
+                      num_samples=500,
+                      burnin=1000,
+                      prior_var_beta=diag(ncol(X_new)),
+                      prior_var_delta=diag(ncol(X_new)))
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+# Check number of levels
+dftrainsub <- dftrain[which(dftrain$route %in% 1:200),]
+#nlevels(dftrainsub$route)  # should be 583
+
+# Create dummy variables (one-hot encoding)
+library(stats)  # model.matrix is in base R
+dftrain_subset$route <- droplevels(dftrain_subset$route)
+X_new <- as.data.frame(model.matrix(~ route - 1, data=dftrain_subset) ) 
+# "-1" removes the intercept, giving one column per level
+
+# Now combine with other covariates if needed
+# Suppose df[,2:6] are other numeric covariates
+# X_full <- cbind(df[, 2:6], X_new)
+```
+
+
+```{r}
+dim(X_new)
+dim(dftrain_subset)
+```
+
+```{r}
+dftrain_subset
+```
+
+
+```{r}
+dim(X_new)
+# X_check <- cbind(1, X_new)
+result <- cmpoisreg(y=dftrain_subset$AIR_TIME, X=X_new[,-1], num_samples=500, burnin=1000,prior_var_beta=diag(ncol(X_new)),prior_var_delta=diag(ncol(X_new)))
+```
+
+```{r}
+
+hist(rcmpois(mu=exp(sum(result$posterior_beta[500,c(1,7)])),nu=exp(sum(result$posterior_delta[500,c(1,7)])),n=100))
+```
+

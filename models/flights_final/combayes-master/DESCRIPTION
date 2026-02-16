@@ -1,0 +1,12 @@
+Package: combayes
+Title: Bayesian Regression for COM-Poisson data
+Version: 0.0.1
+Authors@R: c(person("Charalampos", "Chanialidis", email = "charalampos.chanialidis@glasgow.ac.uk", role = c("aut", "cre")), person("Ludger", "Evers", email = "ludger.evers@glasgow.ac.uk", role = c("aut")))
+Description: This function implement exact Bayesian inference for COM-Poisson-distributed data. It also provides functions for exact sampling from the COM-Poisson distribution and for calculating exact bounds for the normalisation constant.
+Depends: 
+    R (>= 3.3.1)
+License: GPL (>=3)
+LazyData: true
+RoxygenNote: 5.0.0
+URL: https://github.com/cchanialidis/combayes
+BugReports: https://github.com/cchanialidis/combayes/issues

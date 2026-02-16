@@ -49,7 +49,7 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         anneal = nothing 
     end
     if griddy
-        S_griddy = 1000
+        S_griddy = 250
         S = nburnin + nthin*nsamples + S_griddy
     else
         S = nburnin + nthin*nsamples
