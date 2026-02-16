@@ -35,14 +35,14 @@ block_obs  <- make_blocks(I, K)   # columns
 shape_base_theta <- 1
 rate_base_theta  <- 1
 
-shape_base_phi <- 20
+shape_base_phi <- 10
 rate_base_phi  <- 1
 
 # Boost Gamma parameters for dominant blocks
-shape_boost <- 20
+shape_boost <- 100
 rate_boost  <- 1
 
-shape_boost_phi <- 1000
+shape_boost_phi <- 100
 rate_boost_phi  <-1
 
 # Initialize Phi (J x K) and Theta (K x I) with small random values
@@ -88,6 +88,7 @@ write.csv(Y, "CMPfactor.csv")
 pheatmap(Theta, cluster_rows = FALSE, cluster_cols = FALSE,
          color = colorRampPalette(c("white","red"))(100),
          main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
+write.csv(Theta, "CMPU_NK2.csv")
 ```
 
 
@@ -207,7 +208,7 @@ for (k in 1:K) {
 Lambda <- Phi %*% Theta
 
 # Generate Poisson observations
-Y <- matrix(rnbinom(J*I, size=as.vector(Lambda), prob= .6), nrow = J, ncol = I)
+Y <- matrix(rnbinom(J*I, size=as.vector(Lambda), prob= .25), nrow = J, ncol = I)
 Y <- t(Y)  # rows = observations
 
 # Optional: reorder by dominant factor for clearer heatmap

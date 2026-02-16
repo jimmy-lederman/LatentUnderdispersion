@@ -4,10 +4,20 @@ output: html_document
 date: "2026-01-21"
 ---
 
+
+
 ```{r}
 library(brms)
 library(COMPoissonReg)
 ```
+
+```{r}
+#load in masks
+mask1 <- as.matrix(read.csv("/Users/jimmy/Desktop/OrderStats/models/flights_final/revisionmasks/mask_1.csv"))[,1]
+```
+
+
+
 
 ```{r}
 datafile = "/Users/jimmy/Desktop/OrderStats/data/flights_data/flights_final.csv"
@@ -52,20 +62,104 @@ df$route <- as.factor(routes)
 ```
 
 ```{r}
+nsub <- 584
+dftrain <- df[mask1 == 0, ]
+dftest <- df[mask1 == 1,]
+set.seed(123)   # optional, for reproducibility
+required_routes <- unique(df$route)
+train_required <- dftrain[dftrain$route %in% required_routes, ]
+forced_rows <- do.call(
+  rbind,
+  lapply(split(train_required, train_required$route), function(x) x[sample(nrow(x), 1), ])
+)
+stopifnot(length(setdiff(required_routes, unique(dftrain$route))) == 0)
+remaining_n <- nsub - nrow(forced_rows)
 
+remaining_pool <- dftrain[!(rownames(dftrain) %in% rownames(forced_rows)), ]
+
+random_rows <- remaining_pool[sample(nrow(remaining_pool), remaining_n), ]
+
+dftrain_subset <- rbind(forced_rows, random_rows)
 ```
 
 
 
 ```{r}
-df_small <- df[1:100,]
 model <- brm(
   AIR_TIME ~ route,
-  data = df,
-  family = brmsfamily("com_poisson"),
+  data = dftrain_subset,
+  family = brmsfamily("com_poisson", link = "log"),
   chains = 1,
-  iter = 10,
-  warmup = 5
+  iter = 1500,
+  warmup = 1000
 )
+```
+
+
+
+```{r}
+library(brms)
+set.seed(123)
+
+# Simulate data
+n <- 50
+df <- data.frame(
+  route = factor(sample(c("A-B", "B-C"), n, replace = TRUE))
+)
+
+# True parameters
+beta0 <- 5       # intercept (log scale)
+beta1 <- 0.5     # effect of route "B-C"
+nu <- 1          # dispersion (Poisson-like)
+
+# Linear predictor
+eta <- beta0 + beta1 * (df$route == "B-C")
+
+# Lambda for COM-Poisson
+lambda <- exp(eta)
+
+# Simulate AIR_TIME from COM-Poisson (approximate via rpois for demo)
+# brms will handle COM-Poisson properly; we just simulate something reasonable
+df$AIR_TIME <- rpois(n, lambda)
+
+# Fit COM-Poisson model
+fit <- brm(
+  AIR_TIME ~ route,
+  data = df,
+  family =  brmsfamily("com_poisson", link = "log"),
+  chains = 2,
+  iter = 500,
+  warmup = 250
+)
+# 
+# # Inspect coefficients
+# summary(fit)
+# 
+# # Fitted values (posterior mean)
+# fitted(fit)
+# 
+# # Posterior predictive draws
+# yhat <- posterior_predict(fit)
+# head(yhat)
+
+```
+
+```{r}
+posterior <- as.data.frame(fit)
+draw <- as.numeric(posterior[500,])
+mu <- draw[1] + draw[2]
+shape <- draw[3]
+```
+
+
+
+```{r}
+setwd("/Users/jimmy/Desktop/OrderStats/models/flights_final/combayes-master")
+install.packages(".", repos = NULL, type = "source")
+library(combayes)
+
+```
+```{r}
+hist(rcmpois(mu=exp(mu-1),nu=shape,n=100))
 ```
 

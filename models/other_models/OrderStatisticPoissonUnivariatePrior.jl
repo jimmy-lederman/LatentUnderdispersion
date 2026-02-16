@@ -13,18 +13,26 @@ struct OrderStatisticPoissonUnivariatePrior <: MatrixMF
     b::Float64
     Dmax::Int64
     type::Int64
-    p::Float64
+    alpha::Float64
+    beta::Float64
 end
 
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
-function update_D(model::OrderStatisticPoissonUnivariatePrior, Y_NM, mu)
+function update_D(model::OrderStatisticPoissonUnivariatePrior, Y_NM, mu, p)
+    nt = Threads.nthreads()
     if model.type == 2
-        logprobs = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(model.p)/2 + (model.Dmax - d)*log(1-model.p)/2 for d in 1:2:model.Dmax]
+        logprobs = [[logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax] for i in 1:nt]
+
+        #logprobs = [[0.0 for d in 1:2:model.Dmax] for i in 1:nt]
     else
-        logprobs = [logbinomial(model.Dmax-1, d-1) + (d-1)*log(model.p) + (model.Dmax - d)*log(1-model.p) for d in 1:model.Dmax]
+        logprobs = [[logbinomial(model.Dmax-1, d-1) + (d-1)*log(p) + (model.Dmax - d)*log(1-p) for d in 1:model.Dmax] for i in 1:nt]
+        #logprobs = [[0.0 for d in 1:model.Dmax] for i in 1:nt]
     end
-    @views for n in 1:model.N
+    
+    
+    @views @threads for n in 1:model.N
+        tid = Threads.threadid()
         Y = Y_NM[n,1]
         @views for d in 1:model.Dmax
             if model.type == 2 && d % 2 == 0
@@ -32,16 +40,22 @@ function update_D(model::OrderStatisticPoissonUnivariatePrior, Y_NM, mu)
             end
             if model.type == 1
                 j = 1
-                logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+                x = logpmfOrderStatPoisson(Y, mu, d, j)
+                logprobs[tid][d] += x
+
             elseif model.type == 2
                 j = div(d,2) + 1
-                logprobs[Int(div(d,2)+1)] += logpmfOrderStatPoisson(Y, mu, d, j)
+                x = logpmfOrderStatPoisson(Y, mu, d, j)
+                
+                logprobs[tid][Int(div(d,2)+1)] += x
             else
                 j = d
-                logprobs[d] += logpmfOrderStatPoisson(Y, mu, d, j)
+                x = logpmfOrderStatPoisson(Y, mu, d, j)
+                logprobs[tid][d] += x
             end
         end
     end
+    logprobs = sum(logprobs)
 
     if model.type == 2
         D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
@@ -67,12 +81,13 @@ end
 
 function sample_prior(model::OrderStatisticPoissonUnivariatePrior, info=nothing)
     mu = rand(Gamma(model.a, 1/model.b))
+    p = rand(Beta(model.alpha, model.beta))
     if model.type == 2
-        D = 2*rand(Binomial(Int((model.Dmax - 1)/2), model.p)) + 1
+        D = 2*rand(Binomial(Int((model.Dmax - 1)/2), p)) + 1
     else
-        D = rand(Binomial(model.Dmax - 1, model.p)) + 1
+        D = rand(Binomial(model.Dmax - 1, p)) + 1
     end
-    state = Dict("mu" => mu, "D"=>D)
+    state = Dict("mu" => mu, "D"=>D,"p"=>p)
     return state
 end
 
@@ -84,9 +99,9 @@ function griddy_gibbs(model::OrderStatisticPoissonUnivariatePrior, Y_NM,  mu)#pl
     end
     mulist = zeros(length(Dlist))
     if model.type == 2
-        logprobs = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(model.p)/2 + (model.Dmax - d)*log(1-model.p)/2 for d in 1:2:model.Dmax]
+        logprobs = [logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
     else
-        logprobs = [logbinomial(model.Dmax-1, d-1) + (d-1)*log(model.p) + (model.Dmax - d)*log(1-model.p) for d in 1:model.Dmax]
+        logprobs = [logbinomial(model.Dmax-1, d-1) + (d-1)*log(p) + (model.Dmax - d)*log(1-p) for d in 1:model.Dmax]
     end
     for (i,D) in enumerate(Dlist)
         Z_N = zeros(model.N)
@@ -122,6 +137,7 @@ function forward_sample(model::OrderStatisticPoissonUnivariatePrior; state=nothi
     end
     mu = state["mu"]
     D = state["D"]
+    p = state["p"]
     if model.type == 1
         j = 1
     elseif model.type == 2
@@ -142,6 +158,8 @@ function backward_sample(model::OrderStatisticPoissonUnivariatePrior, data, stat
     Y_NM = data["Y_NM"]
     mu = copy(state["mu"])
     D = copy(state["D"])
+    p = copy(state["p"])
+
     
     if model.type == 1
         j = 1
@@ -154,23 +172,31 @@ function backward_sample(model::OrderStatisticPoissonUnivariatePrior, data, stat
     if griddy
         (D,mu) = griddy_gibbs(model, Y_NM, mu)
     else
-        Z_N = zeros(model.N)
+        nt = Threads.nthreads()
+        Z_thr = [0 for _ in 1:nt]
         @views @threads for n in 1:model.N
-            Z_N[n] = sampleSumGivenOrderStatistic(Y_NM[n,1], D, j, Poisson(mu))
+            tid = Threads.threadid()
+            Z_thr[tid] += sampleSumGivenOrderStatistic(Y_NM[n,1], D, j, Poisson(mu))
         end
+        Z = sum(Z_thr)
 
         #update mu
-        post_shape = model.a + sum(Z_N)
+        post_shape = model.a + Z
         post_rate = model.b + D*model.N
         mu = rand(Gamma(post_shape, 1/post_rate))
 
         #update D
         if isnothing(skipupdate) || !("D" in skipupdate)
-            D = update_D(model, Y_NM, mu)
+            D = update_D(model, Y_NM, mu, p)
+            if model.type == 2
+                p = rand(Beta(model.alpha + (D-1)/2, model.beta + (model.Dmax - D)/2))
+            else
+                p = rand(Beta(model.alpha + (D-1), model.beta + (model.Dmax - D)))
+            end
         end
     end
     
 
-    state = Dict("mu" => mu, "D"=>D)
+    state = Dict("mu" => mu, "D"=>D, "p"=>p)
     return data, state
 end

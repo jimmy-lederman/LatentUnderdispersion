@@ -178,7 +178,7 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
         P_K_thr = [zeros(Float64, model.K) for _ in 1:nt]
         Z_NM = zeros(Int, model.N, model.M)
         Z2_NM = zeros(Int, model.N, model.M)
-        @views for idx in 1:(model.N * model.M)
+        @views @threads for idx in 1:(model.N * model.M)
             tid = Threads.threadid()
             n = div(idx - 1, model.M) + 1
             m = mod(idx - 1, model.M) + 1  
@@ -225,6 +225,14 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
             U_NK[:, k] = rand(Dirichlet(A_K .+ Z_NK[:,k]))
         end
 
+        #         @views for k in 1:model.K
+        #     post_rate = model.b + model.D*log(1/p)*sum(V_KM[k,:])
+        #     @views for n in 1:model.N
+        #         post_shape = model.a + Z_NK[n,k]
+        #         U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
+        #     end
+        # end
+
         # Z_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
         # Z_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
 
@@ -247,8 +255,6 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
         #     end
         # end
         # Z_MK  = sum(Z_MK_thr)  
-        mu_sum = sum(U_NK * V_KM)
-        p = rand(Beta(model.alpha + model.D*mu_sum, model.beta + z1sum))
 
         post_rate = model.d + model.D*log(1/p)
         @views for k in 1:model.K
