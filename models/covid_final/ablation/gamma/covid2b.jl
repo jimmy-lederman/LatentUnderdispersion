@@ -1,24 +1,21 @@
 include("../../../../helper/MatrixMF.jl")
-include("../../../../helper/OrderStatsSampling.jl")
-include("../../../../helper/PoissonOrderPMF.jl")
 using Distributions
 using LinearAlgebra
 using Base.Threads
 using SpecialFunctions
 
-struct covid3 <: MatrixMF
+struct covid2b <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
-    D::Int64
     a::Float64
     b::Float64
     c::Float64
     d::Float64
     g::Float64
     h::Float64
-    # i::Float64
-    # j::Float64
+    scale_shape::Float64
+    scale_rate::Float64
     start_V1::Float64
     start_V2::Float64
 end
@@ -32,7 +29,7 @@ function sampleCRT(Y, R)
     return out
 end
 
-function evalulateLogLikelihood(model::covid3, state, data, info, row, col)
+function evalulateLogLikelihood(model::covid2b, state, data, info, row, col)
     @assert !isnothing(info)
         if col == 1
         Ylast = info["Y0_N"][row]
@@ -42,18 +39,15 @@ function evalulateLogLikelihood(model::covid3, state, data, info, row, col)
     Y = data["Y_NM"][row,col]
 
     eps = state["eps"]
+    lambda_K = state["lambda_K"]
     U_NK = state["U_NK"]
     V_KM = state["V_KM"]
-    mu = sum(U_NK[row,:] .* V_KM[:,col])
+    mu = sum(U_NK[row,:] .* lambda_K .* V_KM[:,col])
     rate = Ylast+mu+eps
-    if model.D == 1
-        return logpdf(Poisson(rate), Y)
-    else
-        return logpmfOrderStatPoisson(Y,rate,model.D,div(model.D,2)+1)
-    end
+    return logpdf(Poisson(rate), Y)
 end
 
-function sample_prior(model::covid3, info=nothing,constantinit=nothing)
+function sample_prior(model::covid2b, info=nothing,constantinit=nothing)
     pass = false
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     if !isnothing(constantinit)
@@ -72,34 +66,36 @@ function sample_prior(model::covid3, info=nothing,constantinit=nothing)
             end
         end
     end
-    #lambda_K = rand(Gamma(model.i, 1/model.j), model.K)
+    lambda_K = rand(Gamma(model.scale_shape, 1/model.scale_rate), model.K)
     eps = rand(Gamma(model.g, 1/model.h))
+
     
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, #"lambda_K" =>lambda_K,
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "lambda_K" =>lambda_K,
                 "eps"=>eps, 
     "Y0_N"=>info["Y0_N"])
     return state
 end
 
-function forward_sample(model::covid3; state=nothing, info=nothing)
+function forward_sample(model::covid2b; state=nothing, info=nothing)
     if isnothing(state)
         state = sample_prior(model, info)
     end
     Y0_N = state["Y0_N"]
     eps = state["eps"]
+    #alpha = state["alpha"]
     U_NK = state["U_NK"]
-    #lambda_K = state["lambda_K"]
+    lambda_K = state["lambda_K"]
     V_KM = state["V_KM"]
 
     Y_NM = zeros(Int, model.N, model.M)
     for m in 1:model.M
         for n in 1:model.N
             if m == 1
-                #Y_NM[n,m] = rand(Poisson(Y0_N[n] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y0_N[n] + eps + sum(U_NK[n,:] .* V_KM[:,m] )), model.D, div(model.D, 2) + 1))
+                Y_NM[n,m] = rand(Poisson(Y0_N[n] + eps + sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
+                #Y_NM[n,m] = rand(Poisson(Y0_N[n] + eps +*sum(U_NK[n,:] .* V_KM[:,m] )))
             else
-                #Y_NM[n,m] = rand(Poisson(Y_NM[n,m-1] + pop_N[n]*eps + pop_N[n]*sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(Y_NM[n,m-1] + eps + sum(U_NK[n,:] .* V_KM[:,m])), model.D, div(model.D, 2) + 1))
+                Y_NM[n,m] = rand(Poisson(Y_NM[n,m-1] + eps + sum(U_NK[n,:] .* V_KM[:,m] .* lambda_K)))
+                #Y_NM[n,m] = rand(Poisson(Y_NM[n,m-1] + eps + alpha*sum(U_NK[n,:] .* V_KM[:,m])))
             end
         end 
     end
@@ -107,15 +103,15 @@ function forward_sample(model::covid3; state=nothing, info=nothing)
     return data, state 
 end
 
-function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=nothing)
+function backward_sample(model::covid2b, data, state, mask=nothing;skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
-    #lambda_K = copy(state["lambda_K"])
+    lambda_K = copy(state["lambda_K"])
     Y0_N = copy(state["Y0_N"])
     eps = copy(state["eps"])
-
+    #lph = copy(state["alpha"])
     #Y_NMKplus2 = zeros(model.N, model.M, model.K + 2)
     # Loop over the non-zeros in Y_NM and allocate
     nt = Threads.nthreads()
@@ -133,25 +129,35 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
         else
             Ylast = Y_NM[n,m-1]
         end
-        P_K = P_K_thr[tid]
-        @inbounds begin
-            @simd for k in 1:model.K
-                P_K[k] =  U_NK[n,k] * V_KM[k,m]
-            end
-            P_K[model.K+1] = Ylast
-            P_K[model.K+2] = eps
-        end
-        mu = sum(P_K) 
         if !isnothing(mask)
-            if mask[n,m] == 1   
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), model.D, div(model.D, 2) + 1))
+            if mask[n,m] == 1
+                P_K = P_K_thr[tid]
+                @inbounds begin
+                    @simd for k in 1:model.K
+                        P_K[k] =  lambda_K[k] * U_NK[n,k] * V_KM[k,m]
+                    end
+                    P_K[model.K+1] = Ylast
+                    P_K[model.K+2] = eps
+                end
+                Y_NM[n,m] = rand(Poisson(sum(P_K)))
             end
         end
-        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, div(model.D,2)+1, Poisson(mu))
-        if Z > 0
-            y_k = rand(Multinomial(Z,  P_K / sum(P_K)))
+        if Y_NM[n, m] > 0
+            if isnothing(mask) || mask[n,m] == 0
+                P_K = P_K_thr[tid]
+                @inbounds begin
+                    @simd for k in 1:model.K
+                        P_K[k] = lambda_K[k] * U_NK[n,k] * V_KM[k,m]
+                    end
+                    P_K[model.K+1] = Ylast
+                    P_K[model.K+2] = eps
+                end
+            end
+
+            y_k = rand(Multinomial(Y_NM[n, m],  P_K / sum(P_K)))
             @inbounds begin
                 sum_noise_thr[tid]  += y_k[model.K+2]
+                
             end
             @inbounds for k in 1:model.K
                 Y_NK_thr[tid][n, k] += y_k[k]
@@ -159,25 +165,38 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
             end
         end
     end
-
+    # try
+    #     @assert sum(Y_NMKplus2) == sum(Y_NM)
+    # catch ex
+    #     println(sum(Y_NMKplus2))
+    #     println(sum(Y_NM))
+    #     @assert sum(Y_NMKplus2) == sum(Y_NM)
+    # end
+    #sum_alpha = sum(sum_alpha_thr)
     sum_noise  = sum(sum_noise_thr)
     Y_NK  = sum(Y_NK_thr)  
-    Y_MK  = sum(Y_MK_thr)  
+    Y_MK  = sum(Y_MK_thr) 
+    
+    #update alpha (scale)
+    # post_shape = model.scaleshape + sum_alpha
+    # post_rate = model.scalerate + sum(U_NK * V_KM)
+    # alpha = rand(Gamma(post_shape, 1/post_rate))
 
-    #update noise term
+    # # # #update noise term
     post_shape = model.g + sum_noise
-    post_rate = model.h + model.D*model.M*model.N
+    post_rate = model.h + model.M*model.N
     eps = rand(Gamma(post_shape, 1/post_rate))
     
     @views for k in 1:model.K
-        post_rate = model.b + model.D*sum(V_KM[k, :])
+        post_rate = model.b + lambda_K[k]*sum(V_KM[k, :])
         @views for n in 1:model.N
             post_shape = model.a + Y_NK[n,k]
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
 
-    C_K = model.D*dropdims(sum(U_NK, dims=1),dims=1)
+    C_K = dropdims(sum(U_NK, dims=1),dims=1)
+    C1_K = C_K .* lambda_K
     if !isnothing(skipupdate) && ("V_KM" in skipupdate)
         #do regular update during part of burn-in
         
@@ -195,7 +214,7 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
         #backward pass
         @views @threads for k in 1:model.K
             @views for m in model.M:-1:2
-                q_KM[k,m] = log(1 + (C_K[k]/model.c) + q_KM[k,m+1])
+                q_KM[k,m] = log(1 + (C1_K[k]/model.c) + q_KM[k,m+1])
                 
                 temp = sampleCRT(Y_MK[m,k] + l_KM[k,m+1], model.c*V_KM[k,m-1] + model.d)
                 
@@ -208,22 +227,22 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
         @views for m in 1:model.M
             @views for k in 1:model.K
                 if m == 1
-                    V_KM[k,m] = rand(Gamma(model.start_V1 + Y_MK[m,k] + l_KM[k,m+1], 1/(model.start_V2 + C_K[k] + model.c*q_KM[k,m+1])))
+                    V_KM[k,m] = rand(Gamma(model.start_V1 + Y_MK[m,k] + l_KM[k,m+1], 1/(model.start_V2 + C1_K[k] + model.c*q_KM[k,m+1])))
                 else
-                    V_KM[k,m] = rand(Gamma(model.d + model.c*V_KM[k,m-1] + Y_MK[m,k] + l_KM[k,m+1], 1/(model.c + C_K[k] + model.c*q_KM[k,m+1])))
+                    V_KM[k,m] = rand(Gamma(model.d + model.c*V_KM[k,m-1] + Y_MK[m,k] + l_KM[k,m+1], 1/(model.c + C1_K[k] + model.c*q_KM[k,m+1])))
                 end 
             end 
         end 
     end
 
 
-    # @views for k in 1:model.K
-    #     shape_post = model.i + sum(Y_MK[:,k])
-    #     rate_post  = model.j + C_K[k] * sum(V_KM[k,:])
-    #     lambda_K[k] = rand(Gamma(shape_post, 1 / rate_post))
-    # end
+    @views for k in 1:model.K
+        shape_post = model.scale_shape + sum(Y_MK[:,k])
+        rate_post  = model.scale_rate + C_K[k] * sum(V_KM[k,:])
+        lambda_K[k] = rand(Gamma(shape_post, 1 / rate_post))
+    end
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "eps"=>eps,# "lambda_K"=>lambda_K,
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "eps"=>eps, "lambda_K"=>lambda_K,
     "Y0_N"=>info["Y0_N"])
     return data, state
 end

@@ -112,9 +112,9 @@ function backward_sample(model::covid1, data, state, mask=nothing)
     #      U_NK[:, k] = rand(Dirichlet(ones(model.N) .+ Y_NK[:,k]))
     # end
     @views for k in 1:model.K
-        post_rate = model.a + sum(V_KM[k, :])
+        post_rate = model.b + sum(V_KM[k, :])
         @views for n in 1:model.N
-            post_shape = model.b + Y_NK[n,k]
+            post_shape = model.a + Y_NK[n,k]
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
