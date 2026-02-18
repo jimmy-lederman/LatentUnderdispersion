@@ -54,7 +54,7 @@ mask_NM = make_forecasting_mask(endlength,county_pct,maskSeed,N,M)
 
 a = 1
 b = 1
-c = 100 #inconsistent?
+
 d = .01
 g = .5
 h = 2
@@ -85,17 +85,21 @@ if type1 == 1
     end
 elseif type1 == 2
     if type2 == 1
+        c = 1
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid1.jl")
         model = covid1(N,M,K,a,b,c,d)
     elseif type2 == 2
+        c = 100
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid2.jl")
         model = covid2(N,M,K,a,b,c,d,g,h,v1,v2)
     elseif type2 == 3
+        c = 100
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid3.jl")
         model = covid3(N,M,K,D,a,b,c,d,g,h,v1,v2)
     elseif type2 == 4
+        c = 100
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid4.jl")
-        model = covid3(N,M,K,Q,D,a,b,c,d,g,h,v1,v2,alpha,beta,tauc,taud,start_tau)
+        model = covid4(N,M,K,Q,D,a,b,c,d,g,h,v1,v2,alpha,beta,tauc,taud,start_tau)
     end
 end
 
