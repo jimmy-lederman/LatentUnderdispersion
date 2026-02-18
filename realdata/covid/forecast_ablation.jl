@@ -54,16 +54,20 @@ mask_NM = make_forecasting_mask(endlength,county_pct,maskSeed,N,M)
 
 a = 1
 b = 1
-c = 1
+c = 100 #inconsistent?
 d = .01
 g = .5
 h = 2
 v1 = 1
 v2 = 1
-
-Nsamples = 500
+alpha = 1
+beta = 1
+start_tau = 0
+tauc = 1
+taud = 0
+Nsamples = 100
 nburnin = 2000
-nthin = 1
+nthin = 20
 constantinit = nothing
 
 if type1 == 1
@@ -89,6 +93,9 @@ elseif type1 == 2
     elseif type2 == 3
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid3.jl")
         model = covid3(N,M,K,D,a,b,c,d,g,h,v1,v2)
+    elseif type2 == 4
+        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid4.jl")
+        model = covid3(N,M,K,Q,D,a,b,c,d,g,h,v1,v2,alpha,beta,tauc,taud,start_tau)
     end
 end
 
@@ -98,7 +105,7 @@ params = [maskSeed, chainSeed, type1, type2, K, D, Q]
 folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples/"
 if type1 == 1
     save(folder*"/covid$(type2)dirichlet_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
-elseif type2 == 2
+elseif type1 == 2
     save(folder*"/covid$(type2)gamma_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 end
 
