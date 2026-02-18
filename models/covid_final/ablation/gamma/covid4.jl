@@ -231,8 +231,8 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
     #update county factors
     @views for k in 1:model.K
         @views for n in 1:model.N
-            post_rate = model.a + sum(D_NM[n,:] .* V_KM[k, :])
-            post_shape = model.b + Y_NK[n,k]
+            post_rate = model.b + sum(D_NM[n,:] .* V_KM[k, :])
+            post_shape = model.a + Y_NK[n,k]
             U_NK[n, k] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
