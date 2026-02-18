@@ -77,10 +77,11 @@ Dmax = 9
 alpha = 1
 beta = 1
 start_tau = 0
-start_V1 = .01
-start_V2 = 1
 tauc = 1
 taud = 0
+start_V1 = .01
+start_V2 = 1
+
 
 
 
