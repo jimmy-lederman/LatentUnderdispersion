@@ -81,9 +81,19 @@ Y_ordered <- Y[obs_order, var_order]
 
 # Plot heatmap
 library(pheatmap)
-pheatmap(Y_ordered, cluster_rows = FALSE, cluster_cols = FALSE,
-         color = colorRampPalette(c("white","red"))(100),
-         main = paste0("Structured Poisson Factor Data Heatmap, K=", K))
+pdf("structured_poisson_heatmap.pdf", width = 8, height = 6)
+
+pheatmap(
+  Y_ordered,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  color = colorRampPalette(c("white", "red"))(100),
+  legend = TRUE,
+  fontsize = 40,        # affects legend text
+  main = 
+)
+
+dev.off()
 write.csv(Y, "CMPfactor.csv")
 pheatmap(Theta, cluster_rows = FALSE, cluster_cols = FALSE,
          color = colorRampPalette(c("white","red"))(100),
@@ -94,7 +104,7 @@ write.csv(Theta, "CMPU_NK2.csv")
 
 
 ```{r}
-x <- rcmp(10000,  Lambda[1,1], nu = 5)
+x <- rcmp(10000,  Lambda[1,1], nu = 2)
  var(x)/mean(x)
 ```
 
@@ -289,7 +299,7 @@ Lambda <- Phi %*% Theta
 # Generate Poisson observations
 for(i in 1:I){
   for(j in 1:J){
-    Y[i,j] <- rgc(2, Lambda[i,j],1)
+    Y[i,j] <- rgc(4, Lambda[i,j],1)
   }
 }
 
@@ -309,7 +319,7 @@ write.csv(Y, "GCfactor.csv")
 ```
 
 ```{r}
-x <- rgc(2, Lambda[1,1],1000)
+x <- rgc(4, Lambda[1,1],100000)
 var(x)/mean(x)
 ```
 ```{r}
