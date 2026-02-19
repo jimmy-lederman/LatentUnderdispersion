@@ -53,11 +53,11 @@ end
 mask_NM = make_forecasting_mask(endlength,county_pct,maskSeed,N,M)
 
 a = 1
-b = 1
+b = .01
 
 d = .01
-g = .5
-h = 2
+g = 1
+h = 1
 v1 = 1
 v2 = 1
 alpha = 1
@@ -85,7 +85,7 @@ if type1 == 1
     end
 elseif type1 == 2
     if type2 == 1
-        c = 1
+        c = .01
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid1.jl")
         model = covid1(N,M,K,a,b,c,d)
     elseif type2 == 2
