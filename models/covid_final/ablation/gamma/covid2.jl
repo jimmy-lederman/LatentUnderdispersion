@@ -116,47 +116,51 @@ function backward_sample(model::covid2, data, state, mask=nothing;skipupdate=not
     Y_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
     P_K_thr = [zeros(Float64, model.K + 2) for _ in 1:nt]
     
-    @views @threads for idx in 1:(model.N * model.M)
+    @views @threads for n in 1:model.N
         tid = Threads.threadid()
-        n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1 
-        if m == 1
-            Ylast = Y0_N[n]
-        else
-            Ylast = Y_NM[n,m-1]
-        end
-        if !isnothing(mask)
-            if mask[n,m] == 1
-                P_K = P_K_thr[tid]
-                @inbounds begin
-                    @simd for k in 1:model.K
-                        P_K[k] =  U_NK[n,k] * V_KM[k,m]
-                    end
-                    P_K[model.K+1] = Ylast
-                    P_K[model.K+2] = eps
-                end
-                Y_NM[n,m] = rand(Poisson(sum(P_K)))
+        @views for m in 1:model.M
+    #for idx in 1:(model.N * model.M)
+        
+        # n = div(idx - 1, model.M) + 1
+        # m = mod(idx - 1, model.M) + 1 
+            if m == 1
+                Ylast = Y0_N[n]
+            else
+                Ylast = Y_NM[n,m-1]
             end
-        end
-        if Y_NM[n, m] > 0
-            if isnothing(mask) || mask[n,m] == 0
-                P_K = P_K_thr[tid]
-                @inbounds begin
-                    @simd for k in 1:model.K
-                        P_K[k] = U_NK[n,k] * V_KM[k,m]
+            if !isnothing(mask)
+                if mask[n,m] == 1
+                    P_K = P_K_thr[tid]
+                    @inbounds begin
+                        @simd for k in 1:model.K
+                            P_K[k] =  U_NK[n,k] * V_KM[k,m]
+                        end
+                        P_K[model.K+1] = Ylast
+                        P_K[model.K+2] = eps
                     end
-                    P_K[model.K+1] = Ylast
-                    P_K[model.K+2] = eps
+                    Y_NM[n,m] = rand(Poisson(sum(P_K)))
                 end
             end
+            if Y_NM[n, m] > 0
+                if isnothing(mask) || mask[n,m] == 0
+                    P_K = P_K_thr[tid]
+                    @inbounds begin
+                        @simd for k in 1:model.K
+                            P_K[k] = U_NK[n,k] * V_KM[k,m]
+                        end
+                        P_K[model.K+1] = Ylast
+                        P_K[model.K+2] = eps
+                    end
+                end
 
-            y_k = rand(Multinomial(Y_NM[n, m],  P_K / sum(P_K)))
-            @inbounds begin
-                sum_noise_thr[tid]  += y_k[model.K+2]
-            end
-            @inbounds for k in 1:model.K
-                Y_NK_thr[tid][n, k] += y_k[k]
-                Y_MK_thr[tid][m, k] += y_k[k]
+                y_k = rand(Multinomial(Y_NM[n, m],  P_K / sum(P_K)))
+                @inbounds begin
+                    sum_noise_thr[tid]  += y_k[model.K+2]
+                end
+                @inbounds for k in 1:model.K
+                    Y_NK_thr[tid][n, k] += y_k[k]
+                    Y_MK_thr[tid][m, k] += y_k[k]
+                end
             end
         end
     end

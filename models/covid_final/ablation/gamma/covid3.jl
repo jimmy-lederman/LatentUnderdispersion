@@ -124,38 +124,41 @@ function backward_sample(model::covid3, data, state, mask=nothing;skipupdate=not
     Y_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
     P_K_thr = [zeros(Float64, model.K + 2) for _ in 1:nt]
     
-    @views @threads for idx in 1:(model.N * model.M)
+    #@views @threads for idx in 1:(model.N * model.M)
+    @views @threads for n in 1:model.N
         tid = Threads.threadid()
-        n = div(idx - 1, model.M) + 1
-        m = mod(idx - 1, model.M) + 1 
-        if m == 1
-            Ylast = Y0_N[n]
-        else
-            Ylast = Y_NM[n,m-1]
-        end
-        P_K = P_K_thr[tid]
-        @inbounds begin
-            @simd for k in 1:model.K
-                P_K[k] =  U_NK[n,k] * V_KM[k,m]
+        @views for m in 1:model.M      
+        # n = div(idx - 1, model.M) + 1
+        # m = mod(idx - 1, model.M) + 1 
+            if m == 1
+                Ylast = Y0_N[n]
+            else
+                Ylast = Y_NM[n,m-1]
             end
-            P_K[model.K+1] = Ylast
-            P_K[model.K+2] = eps
-        end
-        mu = sum(P_K) 
-        if !isnothing(mask)
-            if mask[n,m] == 1   
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), model.D, div(model.D, 2) + 1))
-            end
-        end
-        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, div(model.D,2)+1, Poisson(mu))
-        if Z > 0
-            y_k = rand(Multinomial(Z,  P_K / sum(P_K)))
+            P_K = P_K_thr[tid]
             @inbounds begin
-                sum_noise_thr[tid]  += y_k[model.K+2]
+                @simd for k in 1:model.K
+                    P_K[k] =  U_NK[n,k] * V_KM[k,m]
+                end
+                P_K[model.K+1] = Ylast
+                P_K[model.K+2] = eps
             end
-            @inbounds for k in 1:model.K
-                Y_NK_thr[tid][n, k] += y_k[k]
-                Y_MK_thr[tid][m, k] += y_k[k]
+            mu = sum(P_K) 
+            if !isnothing(mask)
+                if mask[n,m] == 1   
+                    Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), model.D, div(model.D, 2) + 1))
+                end
+            end
+            Z = sampleSumGivenOrderStatistic(Y_NM[n, m], model.D, div(model.D,2)+1, Poisson(mu))
+            if Z > 0
+                y_k = rand(Multinomial(Z,  P_K / sum(P_K)))
+                @inbounds begin
+                    sum_noise_thr[tid]  += y_k[model.K+2]
+                end
+                @inbounds for k in 1:model.K
+                    Y_NK_thr[tid][n, k] += y_k[k]
+                    Y_MK_thr[tid][m, k] += y_k[k]
+                end
             end
         end
     end
