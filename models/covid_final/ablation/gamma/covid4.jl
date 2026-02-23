@@ -1,7 +1,7 @@
 include("../../../../helper/MatrixMF.jl")
 include("../../../../helper/OrderStatsSampling.jl")
 include("../../../../helper/PoissonOrderPMF.jl")
-include("../../../genes_polya/PolyaGammaHybridSamplers.jl/src/pghybrid.jl")
+include("../../../genes_final/genes_polya/PolyaGammaHybridSamplers.jl/src/pghybrid.jl")
 using Distributions
 using LogExpFunctions
 using LinearAlgebra
@@ -96,18 +96,24 @@ function sample_prior(model::covid4,info=nothing,constantinit=nothing)
     #sigma_M = rand(InverseGamma(model.alpha0, model.beta0), model.M)
     sigma2_beta = rand(InverseGamma(model.alpha0, model.beta0))
     sigma2_tau = rand(InverseGamma(model.alpha0, model.beta0))
+    # sigma2_beta = 1
+    # sigma2_tau = 1
 
     Beta_NQ = rand(Normal(0,sqrt(sigma2_beta)),model.N,model.Q)
+    #Beta_NQ = rand(Normal(0,.01),model.N,model.Q)
     Tau_QM = zeros(model.Q, model.M)
     @views for m in 1:model.M
         @views for q in 1:model.Q
             if m == 1
                 Tau_QM[q,m] = rand(Normal(model.tauc*model.start_tau+model.taud,sqrt(sigma2_tau)))
+                #Tau_QM[q,m] = rand(Normal(model.tauc*model.start_tau+model.taud,.01))
             else
                 Tau_QM[q,m] = rand(Normal(model.tauc*Tau_QM[q,m-1]+model.taud,sqrt(sigma2_tau)))
+                #Tau_QM[q,m] = rand(Normal(model.tauc*model.start_tau+model.taud,.01))
             end
         end
     end
+
     D_NM = 2*rand.(Binomial.(Int((model.Dmax - 1)/2), logistic.(Beta_NQ * Tau_QM))) .+ 1
 
 
@@ -161,10 +167,66 @@ end
 
 function update_D(model::covid4, Y, mu, p)
     logprobs = [logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1,compute=false) + logbinomial(Int((model.Dmax-1)/2), Int((d-1)/2)) + (d-1)*log(p)/2 + (model.Dmax - d)*log(1-p)/2 for d in 1:2:model.Dmax]
+    #println(logprobs)
+    # try
+    #     @assert sum(isinf.(logprobs)) == 0
+    # catch ex
+    #     println(logprobs)
+    #     @assert sum(isinf.(logprobs)) == 0
+    # end
     D = 2*argmax(rand(Gumbel(0,1), length(logprobs)) .+ logprobs) - 1
     @assert D >= 1 && D <= model.Dmax
     return D
 end
+
+function update_D_fast(model::covid4, Y, mu, p)
+    Dmax = model.Dmax
+    half = (Dmax - 1) ÷ 2
+
+    logp = log(p)
+    log1mp = log1p(-p)   # faster & more stable than log(1-p)
+
+    best_val = -Inf
+    best_d = 1
+
+    k = 0
+    @inbounds for d in 1:2:Dmax
+        # k = (d-1)/2
+        # avoid recomputing division
+        # since d = 2k+1
+        if d > 1
+            lp =
+                logpmfOrderStatPoisson(Y, mu, d, k+1, compute=false) +
+                logbinomial(half, k) +
+                (d-1)*logp/2 +
+                (Dmax - d)*log1mp/2
+        else 
+            lp =
+                logpdf(Poisson(mu), Y) +
+                logbinomial(half, k) +
+                (d-1)*logp/2 +
+                (Dmax - d)*log1mp/2
+        end
+               # draw inline
+        #println(lp)
+        # try
+        #     @assert !isinf(lp)
+        # catch ex
+        #     println(Y, " ", mu, " ", p, " ", d)
+        #     @assert !isinf(lp)
+        # end
+        lp += rand(Gumbel(0,1))
+        if lp > best_val
+            best_val = lp
+            best_d = d
+        end
+       
+        k += 1
+    end
+
+    return best_d
+end
+
 
 function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=nothing)
     #some housekeeping
@@ -173,7 +235,7 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
     V_KM = copy(state["V_KM"])
     Beta_NQ = copy(state["Beta_NQ"])
     Tau_QM = copy(state["Tau_QM"])
-    D_NM = copy(state["D_NM"])
+    D_NM = Int.(copy(state["D_NM"]))
     sigma2_beta = copy(state["sigma2_beta"])
     sigma2_tau = copy(state["sigma2_tau"])
 
@@ -188,38 +250,40 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
     Y_NK_thr = [zeros(Int, model.N, model.K) for _ in 1:nt]
     Y_MK_thr = [zeros(Int, model.M, model.K) for _ in 1:nt]
     P_K_thr = [zeros(Float64, model.K + 2) for _ in 1:nt]
-    @views @threads for idx in 1:(model.N * model.M)
-        tid = Threads.threadid()
-        m = div(idx - 1, model.N) + 1
-        n = mod(idx - 1, model.N) + 1
-        if m == 1
-            Ylast = Y0_N[n]
-        else
-            Ylast = Y_NM[n,m-1]
-        end
-        P_K = P_K_thr[tid]
-        @inbounds begin
-            @simd for k in 1:model.K
-                P_K[k] =  U_NK[n,k] * V_KM[k,m]
+    @views @threads for n in 1:model.N
+        @views for m in 1:model.M
+            tid = Threads.threadid()
+            # m = div(idx - 1, model.N) + 1
+            # n = mod(idx - 1, model.N) + 1
+            if m == 1
+                Ylast = Y0_N[n]
+            else
+                Ylast = Y_NM[n,m-1]
             end
-            P_K[model.K+1] = Ylast
-            P_K[model.K+2] = eps
-        end
-        mu = sum(P_K) 
-        if !isnothing(mask)
-            if mask[n,m] == 1   
-                Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), D_NM[n,m], div(D_NM[n,m], 2) + 1))
-            end
-        end
-        Z = sampleSumGivenOrderStatistic(Y_NM[n, m], D_NM[n,m], div(D_NM[n,m],2)+1, Poisson(mu))
-        if Z > 0 
-            y_k = rand(Multinomial(Z, P_K / sum(P_K)))
+            P_K = P_K_thr[tid]
             @inbounds begin
-                sum_noise_thr[tid]  += y_k[model.K+2]
+                @simd for k in 1:model.K
+                    P_K[k] =  U_NK[n,k] * V_KM[k,m]
+                end
+                P_K[model.K+1] = Ylast
+                P_K[model.K+2] = eps
             end
-            @inbounds for k in 1:model.K
-                Y_NK_thr[tid][n, k] += y_k[k]
-                Y_MK_thr[tid][m, k] += y_k[k]
+            mu = sum(P_K) 
+            if !isnothing(mask)
+                if mask[n,m] == 1   
+                    Y_NM[n,m] = rand(OrderStatistic(Poisson(mu), D_NM[n,m], div(D_NM[n,m], 2) + 1))
+                end
+            end
+            Z = sampleSumGivenOrderStatistic(Y_NM[n, m], D_NM[n,m], div(D_NM[n,m],2)+1, Poisson(mu))
+            if Z > 0 
+                y_k = rand(Multinomial(Z, P_K / sum(P_K)))
+                @inbounds begin
+                    sum_noise_thr[tid]  += y_k[model.K+2]
+                end
+                @inbounds for k in 1:model.K
+                    Y_NK_thr[tid][n, k] += y_k[k]
+                    Y_MK_thr[tid][m, k] += y_k[k]
+                end
             end
         end
     end
@@ -272,6 +336,7 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
     end 
     
     #Polya-gamma augmentation to update D, Beta and Tau
+    mu_NM = U_NK * V_KM
     if isnothing(skipupdate) || !("D_NM" in skipupdate)
         F_NM = Beta_NQ * Tau_QM
         W_NM = zeros(Float64, model.N, model.M)
@@ -284,7 +349,7 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
             else
                 Ylast = Y_NM[n,m-1]
             end
-            mu = Ylast + eps + sum(U_NK[n,:] .* V_KM[:,m]) 
+            mu = Ylast + eps + mu_NM[n,m]
 
             D_NM[n,m] = update_D(model, Y_NM[n,m], mu, p_NM[n,m])
             pg = PolyaGammaHybridSampler((model.Dmax - 1)/2, F_NM[n,m])
@@ -292,30 +357,78 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
         end
 
 
-        Ident = Matrix{Int}(I, model.Q, model.Q)
+            # weights
         @views @threads for m in 1:model.M
             W = Diagonal(W_NM[:,m])
+            BW = Beta_NQ .* W_NM[:,m]
             if m == M
-                V = inv(Beta_NQ' * W * Beta_NQ + (1/sigma2_tau)*Ident)
+                V = inv(BW' * Beta_NQ + (1/sigma2_tau)*I)
             else
-                V = inv(Beta_NQ' * W * Beta_NQ + (1/sigma2_tau + model.tauc^2 / sigma2_tau)*Ident)
+                V = inv(BW' * Beta_NQ + (1/sigma2_tau + model.tauc^2 / sigma2_tau)*I)
             end
             V = .5(V + V')
             k = (D_NM[:,m] .- 1)/2 .- (model.Dmax - 1)/4
             if m == 1
-                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*Ident*(model.taud .+ model.tauc*fill(model.start_tau,model.Q)) + (model.tauc/sigma2_tau)*Ident*(Tau_QM[:,m+1] .- model.taud)))
+                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*I*(model.taud .+ model.tauc*fill(model.start_tau,model.Q)) + (model.tauc/sigma2_tau)*I*(Tau_QM[:,m+1] .- model.taud)))
             elseif m == M
-                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*Ident*(model.taud .+ model.tauc*Tau_QM[:,m-1])))
+                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*I*(model.taud .+ model.tauc*Tau_QM[:,m-1])))
             else
-                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*Ident*(model.taud .+ model.tauc*Tau_QM[:,m-1]) + (model.tauc/sigma2_tau)*Ident*(Tau_QM[:,m+1] .- model.taud)))
+                mvec = Float64.(V*(Beta_NQ' * k + (1/sigma2_tau)*I*(model.taud .+ model.tauc*Tau_QM[:,m-1]) + (model.tauc/sigma2_tau)*I*(Tau_QM[:,m+1] .- model.taud)))
             end
             Tau_QM[:,m] = rand(MvNormal(mvec,V))
-            #update variance
-            # if m == 1
-            #     sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum((Tau_QM[:,m] .- model.taud .- model.tauc*fill(model.start_tau,model.Q)).^2)/2))
+
+            # w = W_NM[:,m]
+
+            # # Compute B' W B efficiently (no Diagonal)
+            # BW = Beta_NQ .* w        # N×Q
+            # A = BW' * Beta_NQ        # Q×Q
+
+            # # add ridge term
+            # if m == M
+            #     λ = 1/sigma2_tau
             # else
-            #     sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum((Tau_QM[:,m] .- model.taud .- model.tauc*Tau_QM[:,m-1]).^2)/2))
+            #     λ = 1/sigma2_tau + model.tauc^2 / sigma2_tau
             # end
+
+            # @inbounds for q in 1:model.Q
+            #     A[q,q] += λ
+            # end
+
+            # # Cholesky factor
+            # F = cholesky(Symmetric(A))
+
+            # # build k without allocation
+            # k = similar(w)
+            # c0 = (model.Dmax - 1)/4
+            # @inbounds for i in eachindex(k)
+            #     k[i] = (D_NM[i,m] - 1)/2 - c0
+            # end
+
+            # # compute RHS
+            # rhs = Beta_NQ' * k
+
+            # if m == 1
+            #     rhs .+= (1/sigma2_tau) * (model.taud .+ model.tauc*fill(model.start_tau,model.Q))
+            #     rhs .+= (model.tauc/sigma2_tau) * (Tau_QM[:,m+1] .- model.taud)
+            # elseif m == M
+            #     rhs .+= (1/sigma2_tau) * (model.taud .+ model.tauc*Tau_QM[:,m-1])
+            # else
+            #     rhs .+= (1/sigma2_tau) * (model.taud .+ model.tauc*Tau_QM[:,m-1])
+            #     rhs .+= (model.tauc/sigma2_tau) * (Tau_QM[:,m+1] .- model.taud)
+            # end
+
+            # # solve for mean
+            # mvec = F \ rhs
+
+            # # sample without forming V
+            # Tau_QM[:,m] = mvec + F.U \ randn(model.Q)
+
+        #     #update variance
+        #     # if m == 1
+        #     #     sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum((Tau_QM[:,m] .- model.taud .- model.tauc*fill(model.start_tau,model.Q)).^2)/2))
+        #     # else
+        #     #     sigma_M[m] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum((Tau_QM[:,m] .- model.taud .- model.tauc*Tau_QM[:,m-1]).^2)/2))
+        #     # end
         end
 
         @views @threads for n in 1:model.N
@@ -330,12 +443,52 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
             #sigma_N[n] = rand(InverseGamma(model.alpha0 + model.Q/2, model.beta0 + sum(Beta_NQ[n,:].^2)/2))
         end
 
-        # Update tied variances once per iteration
+        # @views @threads for n in 1:model.N
+        #     w = W_NM[n,:]               # vector of weights
+        #     kvec = (D_NM[n,:] .- 1)/2 .- (model.Dmax - 1)/4
+
+        #     # Form A = Tau * diag(w) * Tau' + lambda * I
+        #     A = Tau_QM * Diagonal(w) * Tau_QM'   # Q×Q
+        #     λ = 1/sigma2_beta
+        #     @inbounds for q in 1:model.Q
+        #         A[q,q] += λ
+        #     end
+
+        #     # Ensure symmetry
+        #     A = Symmetric(A)
+
+        #     # Cholesky factor with tiny jitter for robustness
+        #     F = cholesky(A)
+
+        #     # Solve for mean without forming V
+        #     mvec = F \ (Tau_QM * kvec)
+
+        #     z = randn(Q)
+        #     Beta_NQ[n,:] = mvec + F.U \ z
+        # end
+
+
+
+        #Update tied variances once per iteration
+        # sigma2_tau = rand(InverseGamma(
+        #     model.alpha0 + (model.Q*model.M)/2,
+        #     model.beta0 + sum((Tau_QM[:,1] .- model.taud .- model.tauc*fill(model.start_tau, model.Q)).^2)/2 +
+        #                 sum([sum((Tau_QM[:,m] .- model.taud .- model.tauc*Tau_QM[:,m-1]).^2)/2 for m in 2:model.M])
+        # ))
+
+        mu1 = model.tauc*model.start_tau + model.taud
+        sse = sum((Tau_QM[:,1] .- mu1).^2)
+
+        for m in 2:model.M
+            sse += sum((Tau_QM[:,m] .- model.taud .-
+                        model.tauc*Tau_QM[:,m-1]).^2)
+        end
+
         sigma2_tau = rand(InverseGamma(
-            model.alpha0 + (model.Q*model.M)/2,
-            model.beta0 + sum((Tau_QM[:,1] .- model.taud .- model.tauc*fill(model.start_tau, model.Q)).^2)/2 +
-                        sum([sum((Tau_QM[:,m] .- model.taud .- model.tauc*Tau_QM[:,m-1]).^2)/2 for m in 2:model.M])
+            model.alpha0 + model.Q*model.M/2,
+            model.beta0 + sse/2
         ))
+
 
         sigma2_beta = rand(InverseGamma(
             model.alpha0 + (model.Q*model.N)/2,
