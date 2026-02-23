@@ -66,9 +66,7 @@ function sample_prior(model::flights, info=nothing, constantint=nothing)
     @assert mod(model.Dmax, 2) == 1
     D_R = 2 * rand(Binomial((model.Dmax - 1)/2, p), model.R) .+ 1
 
-    state = Dict("U_R" => U_R, "p"=>p, "D_R"=>D_R,
-                "routes_R2"=>info["routes_R2"],
-                "routes_N"=>info["routes_N"]
+    state = Dict("U_R" => U_R, "p"=>p, "D_R"=>D_R
                 )
     return state
 end
@@ -96,15 +94,14 @@ end
 
 logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
 
-function backward_sample(model::flights, data, state, mask=nothing; skipupdatealways=nothing)
+function backward_sample(model::flights, data, state, mask=nothing; skipupdatealways=nothing, skipupdate=nothing)
     #some housekeeping
     Y_NM = copy(data["Y_NM"])
     routes_N = data["routes_N"]
     routes_R2 = data["routes_R2"]
     U_R = copy(state["U_R"])
-    D_R = copy(state["D_R"])
+    D_R = Int.(copy(state["D_R"]))
     p = copy(state["p"])
-
 
 
     @assert model.M == 1
@@ -132,7 +129,15 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
             end
         end
         #if Y_NM[n, 1] > 0
-        z = sampleSumGivenOrderStatistic(Y_NM[n, 1], D, div(D,2)+1, Poisson(mu))
+        z = 0
+        try
+            z = sampleSumGivenOrderStatistic(Y_NM[n, 1], D, div(D,2)+1, Poisson(mu))
+        catch ex
+            println(D)
+            println(j)
+            @assert 1 == 2
+        end
+
         Z_R_nt[tid][r] += z
         #end
     end
@@ -145,12 +150,36 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
         #indices = routes_R4[r,3]
         # println(indices)
         numflights =  routes_R2[r,2]
+        # println(numflights)
+        # println(Z_R[r])
+        # println(D_R[r])
+
+        
         post_shape = model.a + Z_R[r]
         post_rate = model.b + D_R[r]*numflights
+        # println(post_rate)
+        # println(post_shape)
         U_R[r] = rand(Gamma(post_shape, 1 / post_rate))
+        # println(U_R[r])
+        indices = routes_R2[r, 1]
+        Ys = Y_NM[indices,1] 
+        # println(Ys)
+        #@assert U_R[r] < 6
+    end
+    go = true
+    if !isnothing(skipupdatealways)
+        if "D_R" in skipupdatealways 
+            go = false
+        end
+    end
+    if !isnothing(skipupdate)
+        if "D_R" in skipupdate 
+            go = false
+        end
     end
 
-    if isnothing(skipupdatealways) || !("D_R" in skipupdatealways)
+    if go
+        
         # prior part (no threading needed)
         logprobs_prior = [
             logbinomial(Int((model.Dmax - 1) ÷ 2), Int((d - 1) ÷ 2)) +
@@ -158,11 +187,12 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
             (model.Dmax - d) * log(1 - p) / 2
             for d in 1:2:model.Dmax
         ]
+
         @views @threads for r in 1:model.R
             indices = routes_R2[r, 1]
             Ys = Y_NM[indices,1] 
             mu = U_R[r]
-
+            #println(mu)
             # initialize logprobs from prior
             logprobs = copy(logprobs_prior)
 
@@ -171,11 +201,25 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
                 j = (d ÷ 2) + 1
                 if d == 1
                     dist = Poisson(mu)
+                    
                 else
                     dist = OrderStatistic(Poisson(mu),d,j)
+                    
+                    # if isinf(logprobs[j])
+                    #     println(dist)
+                    #     println(d)
+                    #     println(j)
+                    #     println(logpdf.(dist,Ys))
+                    #     println(Ys)
+                    #     @assert 1 == 2
+                    # end
+                    # for Y in Ys
+                    #     logprobs[j] += logpmfOrderStatPoisson(Y,mu,d,div(d,2)+1)
+                    # end
                 end
-                 
                 logprobs[j] += sum(logpdf.(dist,Ys))
+                
+                
                 # if (d == 1 || d== 3) && r == 474
 
                 #      println(logpdf.(dist,Ys))
@@ -190,6 +234,7 @@ function backward_sample(model::flights, data, state, mask=nothing; skipupdateal
             #     println(logprobs)
             # end
             # Gumbel-max trick
+
             D_R[r] = 2 * argmax(rand(Gumbel(0, 1), length(logprobs)) .+ logprobs) - 1
         end
         p = rand(Beta(model.alpha + (sum(D_R)- model.R)/2, model.beta + (model.Dmax*model.R - sum(D_R))/2))
