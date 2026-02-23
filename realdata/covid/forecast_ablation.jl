@@ -86,10 +86,12 @@ if type1 == 1
 elseif type1 == 2
     if type2 == 1
         c = .01
+        println("c: ", c)
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid1.jl")
         model = covid1(N,M,K,a,b,c,d)
     elseif type2 == 2
         c = 100
+        println("c: ", c)
         include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid2.jl")
         model = covid2(N,M,K,a,b,c,d,g,h,v1,v2)
     elseif type2 == 3
@@ -106,9 +108,9 @@ end
 time_result = @elapsed samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
 
 params = [maskSeed, chainSeed, type1, type2, K, D, Q]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples/"
+folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples2/"
 if type1 == 1
-    save(folder*"/covid$(type2)dirichlet_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM)
+    save(folder*"/covid$(type2)dirichlet_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 elseif type1 == 2
     save(folder*"/covid$(type2)gamma_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 end
