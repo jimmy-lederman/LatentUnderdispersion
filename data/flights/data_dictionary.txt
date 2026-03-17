@@ -1,0 +1,26 @@
+Data Dictionary: Frontier Airlines Flight Data
+===============================================
+
+Source: US Department of Transportation flight records for Frontier Airlines.
+
+Files:
+------
+
+1. flights_final.csv
+   - Dimensions: 42773 rows (individual flights) x 4 columns
+   - First column: row index
+   - Columns:
+     - AIR_TIME: actual air time of the flight (minutes)
+     - DISTANCE: distance between origin and destination airports (miles)
+     - origin: origin airport code
+     - dest: destination airport code
+
+2. airportdata.csv
+   - Dimensions: 99 rows (airports) x 6 columns
+   - Columns:
+     - iso_region: ISO region code (e.g., US-CO)
+     - municipality: city name
+     - local_code: airport code (e.g., DEN, ATL)
+     - coordinates: longitude,latitude string
+     - lats: latitude (numeric)
+     - lons: longitude (numeric)

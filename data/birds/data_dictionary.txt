@@ -1,0 +1,45 @@
+Data Dictionary: Finnish Bird Abundance Data
+=============================================
+
+Source: Finnish bird monitoring survey data.
+
+Files:
+------
+
+1. birds_final_counts.csv
+   - Dimensions: 2826 rows (survey sites) x 137 columns (species)
+   - Each column is a bird species (scientific name, e.g., "Anthus trivialis", "Fringilla coelebs")
+   - Values: integer abundance counts observed at each site
+   - First column: row index
+
+2. birds_final_covariates.csv
+   - Dimensions: 2826 rows (survey sites) x 21 columns (covariates)
+   - First column: row index
+   - Columns:
+     - (Intercept): intercept term (all 1s)
+     - Mixed_Forest: proportion of mixed forest land cover
+     - Deciduous_Forest: proportion of deciduous forest land cover
+     - Shrubs: proportion of shrub land cover
+     - Grasslands_Wetlands: proportion of grasslands/wetlands land cover
+     - Acricultural_Land: proportion of agricultural land cover
+     - Barren: proportion of barren land cover
+     - Urban: proportion of urban land cover
+     - Water_Bodies: proportion of water body land cover
+     - Coastal: coastal indicator
+     - Stand_Age: forest stand age
+     - Pine_Volume: pine tree volume
+     - Spruce_Volume: spruce tree volume
+     - Birch_Volume: birch tree volume
+     - Other_Deciduous_Volume: other deciduous tree volume
+     - VMI_PC1: first principal component of VMI (Finnish forest inventory) variables
+     - duration: survey duration
+     - linelength: survey transect line length
+     - polyAprMay1: polynomial basis for April-May timing
+     - polyDecFeb1: polynomial basis for December-February timing
+     - polyJunJul1: polynomial basis for June-July timing
+
+3. birds_final_names.csv
+   - Dimensions: 137 rows (species) x 2 columns
+   - Columns:
+     - index: integer index for each species
+     - species: scientific name of the species

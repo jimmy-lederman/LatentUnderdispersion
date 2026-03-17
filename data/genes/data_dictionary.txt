@@ -1,0 +1,14 @@
+Data Dictionary: RNA-Sequencing Gene Expression Data
+====================================================
+
+Source: TCGA (The Cancer Genome Atlas) RNA-sequencing dataset.
+
+Files:
+------
+
+1. cancer_small_final.csv
+   - Dimensions: 1000 rows (tissue samples) x 309 columns (genes)
+   - Columns: x1, x2, ..., x309 — each represents a different gene
+   - Values: integer RNA-sequencing read counts (gene expression levels)
+   - This is a curated subset of the full TCGA dataset, selected for
+     modeling discrete count data with potential underdispersion

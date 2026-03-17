@@ -1,0 +1,63 @@
+# ============================================================
+# Whitelist approach: ignore everything, then selectively allow
+# ============================================================
+
+# Ignore everything by default
+*
+
+# Allow core folders
+!analysis/
+!analysis/**
+!models/
+!models/**
+!helper/
+!helper/**
+!data/
+!data/**
+
+# Allow top-level files
+!README.md
+!.gitignore
+
+# ============================================================
+# Binary and temporary files (ignore globally)
+# ============================================================
+*.ipynb
+*.jld
+*.jld2
+*.DS_Store
+*.key
+*.RData
+*.Rhistory
+
+# ============================================================
+# Analysis: ignore "older*" subfolders
+# ============================================================
+analysis/**/older*/
+analysis/**/older*/**
+
+# ============================================================
+# Models: only keep birds, covid, flights, genes top-level code
+# ============================================================
+# Ignore non-case-study model folders
+models/STARmodels/
+models/other_models/
+models/genes_polya/
+
+# Ignore old/internal subfolders within case studies
+models/birds/birds_old/
+models/covid/covid_old/
+models/flights/flights_old/
+models/genes/genes/
+models/genes/genes_polya/
+models/genes/genes_polyaD/
+
+# ============================================================
+# Data: ignore other_data
+# ============================================================
+data/other_data/
+
+# ============================================================
+# Helper: ignore old helper code
+# ============================================================
+helper/old_helper/
