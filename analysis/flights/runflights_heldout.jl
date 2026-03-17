@@ -12,9 +12,10 @@ type = parse(Int, ARGS[3])
 D = parse(Int, ARGS[4])
 g = parse(Int, ARGS[5])
 T = 99 #because running on full
-#thread = Bool(parse(Int, ARGS[1]))
 
-datafile = "/home/jlederman/DiscreteOrderStatistics/data/flights_data/flights_final.csv"
+ROOTDIR = joinpath(@__DIR__, "../..")
+
+datafile = joinpath(ROOTDIR, "data/flights/flights_final.csv")
 df = CSV.read(datafile, DataFrame)
 df = select(df, Not(1))
 Y_NM = convert(Matrix{Int}, Matrix(select(df, 1)))
@@ -42,9 +43,8 @@ for t1 in 1:T
     end
 end
 routes_R4 = Matrix(hcat(routes_R4...)')
-#println(routes_R4)
 routes_N = zeros(Int, N)
-for n in 1:N 
+for n in 1:N
     t1 = home_N[n]
     t2 = away_N[n]
     routes_N[n] = findfirst(r -> r[1] == t1 && r[2] == t2, eachrow(routes_R4))
@@ -58,8 +58,6 @@ N = size(Y_NM)[1]
 M = size(Y_NM)[2]
 a =1
 b =.01
-# c =10
-# d=1
 alpha = beta = 1 #not used
 tau2 = 50^2
 gforwards = [x -> x, sqrt]
@@ -78,7 +76,6 @@ Ntest = sum(mask_NM)
 Ntrain = N - Ntest
 routes_R2 = routes_R4[:,3:6]
 datatrain = Dict("Y_NM"=>reshape(data["Y_NM"][mask_NM .== 0],:,1), "routes_R2"=>routes_R2, "routes_N"=>routes_N[mask_NM[:,1] .== 0])
-#datatest = Dict("Y_NM"=>reshape(data["Y_NM"][mask_NM .== 1],:,1), "routes_R2"=>routes_R2, "routes_N"=>routes_N[mask_NM[:,1] .== 1])
 routes_R2train = copy(routes_R2)
 for r in 1:R
     routes_R2train[r,1] = findall(datatrain["routes_N"] .== r)
@@ -88,7 +85,7 @@ datatrain = Dict("Y_NM"=>reshape(data["Y_NM"][mask_NM .== 0],:,1), "routes_R2"=>
 info = Dict("routes_R2"=>routes_R2, "routes_N"=>routes_N[mask_NM[:,1] .== 0])
 if type == 1
     Dmax = 9
-    include("/home/jlederman/DiscreteOrderStatistics/models/flights_final/flights.jl")
+    include(joinpath(ROOTDIR, "models/flights/flights.jl"))
     model = flights(Ntrain, M, R, Dmax, a, b, alpha, beta)
     if D == 0
         t = @elapsed samples = fit(model, datatrain, nsamples = Nsamples, nburnin=nbunrin, nthin=nthin, mask=nothing, info=info, initseed=chainSeed,
@@ -102,7 +99,7 @@ if type == 1
 elseif type == 2
     gforward = gforwards[g]
     gbakward = gbakwards[g]
-    include("/home/jlederman/DiscreteOrderStatistics/models/flights_final/flights_STAR.jl")
+    include(joinpath(ROOTDIR, "models/flights/flights_STAR.jl"))
     model = flights_STAR(Ntrain, M, R, alpha, beta, tau2, gforward, gbakward)
     t = @elapsed samples = fit(model, datatrain, nsamples = Nsamples, nburnin=nbunrin, nthin=nthin, mask=nothing, info=info, initseed=chainSeed,
     verbose =true)
@@ -110,7 +107,8 @@ elseif type == 2
 end
 
 params = [maskSeed,chainSeed,type,D,g]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/flights/"
+folder = joinpath(ROOTDIR, "output/flights/")
+mkpath(folder)
 if type == 1
     save(folder*"revisionsamples/MedPoissonD$(D)mask$(maskSeed)chain$(chainSeed).jld", "params", params, "samples", samplesnew, "mask", mask_NM, "time", t)
 elseif type == 2

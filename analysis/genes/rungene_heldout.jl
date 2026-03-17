@@ -4,8 +4,9 @@ using DataFrames
 using Random
 using JLD
 
+ROOTDIR = joinpath(@__DIR__, "../..")
 
-include("/home/jlederman/DiscreteOrderStatistics/models/genes_polya/genes.jl")
+include(joinpath(ROOTDIR, "models/genes/genes_final.jl"))
 println("imported packages")
 println(Threads.nthreads())
 flush(stdout)
@@ -35,20 +36,11 @@ Q = parse(Int, ARGS[5])
 nburnin = parse(Int, ARGS[6])
 j = parse(Int, ARGS[7])
 
-file_path = "/home/jlederman/DiscreteOrderStatistics/data/cancer_small.csv"
+file_path = joinpath(ROOTDIR, "data/genes/cancer_small_final.csv")
 df = CSV.read(file_path, DataFrame)
-# df = select(df, Not(1))
-# Y_NM = transpose(Matrix(df));
 Y_NM = Matrix(df)
 N = size(Y_NM, 1)
 M = size(Y_NM, 2)
-
-# seed = 101
-# Random.seed!(seed)
-# nlil = 1000
-# random_indices = randperm(N)[1:nlil]  # Generate random indices
-# Y_NMsmall = Y_NM[random_indices,:]
-# N = nlil
 
 Random.seed!(maskSeed)
 mask_NM = rand(N, M) .< .001
@@ -66,9 +58,8 @@ model = genes(N,M,K,Q,a,b,c,d,D,j)
 
 
 @time samples = fit(model, data, nsamples = 100, nburnin=nburnin, nthin=10, initseed = chainSeed, mask=mask_NM)
-#inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=true)
 results = [K,Q,D,maskSeed,chainSeed,nburnin,NaN]
 
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/genes_polya/heldoutsamples_subset/"
+folder = joinpath(ROOTDIR, "output/genes/heldoutsamples/")
+mkpath(folder)
 save(folder*"/sample_seed1_$(maskSeed)seed2_$(chainSeed)D$(D)j$(j)K$(K)Q$(Q)Burnin$(nburnin).jld", "results", results, "samples", samples)
-#println(inforate)

@@ -1,7 +1,5 @@
 println("opened file")
 flush(stdout)
-# using Pkg
-# Pkg.activate(".")
 using Dates
 using CSV
 using DataFrames
@@ -9,11 +7,12 @@ using Random
 using JLD
 println(Threads.nthreads())
 println("imported packages")
-#include("/home/jlederman/DiscreteOrderStatistics/revison_experiments/mcmc_stuff.jl");
 flush(stdout)
 
+ROOTDIR = joinpath(@__DIR__, "../..")
+
 #get data
-cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/covid_data/usafull_final.csv",DataFrame))
+cumdf = Matrix(CSV.read(joinpath(ROOTDIR, "data/covid/usafull_final.csv"),DataFrame))
 days = cumdf[1,4:end]
 state = cumdf[2:end,1]
 fips = cumdf[2:end,2]
@@ -42,9 +41,6 @@ function make_forecasting_mask(endlength,county_pct,seed,N,M)
     missing_counties = rand(N) .< county_pct
 
     mask_NM = zeros(N, M)
-    # for i in 0:(middlelength-1)
-    #     mask_NM[:,middlestart + i] = missing_counties
-    # end
     for i in (M-endlength+1):M
         mask_NM[:,i] = missing_counties
     end
@@ -72,35 +68,35 @@ constantinit = nothing
 
 if type1 == 1
     if type2 == 1
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/dirichlet/covid1.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid1.jl"))
         model = covid1(N,M,K,a,c,d)
 
     elseif type2 == 2
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/dirichlet/covid2.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid2.jl"))
         model = covid2(N,M,K,a,c,d,g,h,v1,v2)
 
     elseif type2 == 3
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/dirichlet/covid3.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid3.jl"))
         model = covid3(N,M,K,D,a,c,d,g,h,v1,v2)
     end
 elseif type1 == 2
     if type2 == 1
         c = .01
         println("c: ", c)
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid1.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid1.jl"))
         model = covid1(N,M,K,a,b,c,d)
     elseif type2 == 2
         c = 100
         println("c: ", c)
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid2.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid2.jl"))
         model = covid2(N,M,K,a,b,c,d,g,h,v1,v2)
     elseif type2 == 3
         c = 100
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid3.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid3.jl"))
         model = covid3(N,M,K,D,a,b,c,d,g,h,v1,v2)
     elseif type2 == 4
         c = 100
-        include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid4.jl")
+        include(joinpath(ROOTDIR, "models/covid/ablation/covid3.jl"))
         model = covid4(N,M,K,Q,D,a,b,c,d,g,h,v1,v2,alpha,beta,tauc,taud,start_tau)
     end
 end
@@ -108,10 +104,10 @@ end
 time_result = @elapsed samples = fit(model, data, nsamples=Nsamples, nburnin=nburnin, nthin=nthin, mask=mask_NM, initseed=chainSeed,verbose=true,info=info)
 
 params = [maskSeed, chainSeed, type1, type2, K, D, Q]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/samples2/"
+folder = joinpath(ROOTDIR, "output/covid/ablation/samples/")
+mkpath(folder)
 if type1 == 1
     save(folder*"/covid$(type2)dirichlet_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 elseif type1 == 2
     save(folder*"/covid$(type2)gamma_maskSeed$(maskSeed)chainSeed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples, "mask", mask_NM, "time_result", time_result)
 end
-

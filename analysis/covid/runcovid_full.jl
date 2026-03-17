@@ -1,11 +1,8 @@
-println("opended file")
+println("opened file")
 flush(stdout)
-# using Pkg
-# Pkg.instantiate()
-# Pkg.status()
-# using Pkg
-# Pkg.precompile()
-include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
+
+ROOTDIR = joinpath(@__DIR__, "../..")
+include(joinpath(ROOTDIR, "models/covid/covid_final.jl"))
 using Dates
 using CSV
 using DataFrames
@@ -15,9 +12,7 @@ println(Threads.nthreads())
 println("imported packages")
 flush(stdout)
 
-#cumdf = Matrix(CSV.read("/Users/jimmy/Desktop/OrderStats/data/CTFL.csv",DataFrame))
-#cumdf = Matrix(CSV.read("../data/CTFL.csv",DataFrame))
-cumdf = Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/usafull.csv",DataFrame))
+cumdf = Matrix(CSV.read(joinpath(ROOTDIR, "data/covid/usafull_final.csv"),DataFrame))
 days = cumdf[1,4:end]
 state = cumdf[2:end,1]
 fips = cumdf[2:end,2]
@@ -38,8 +33,6 @@ a = 1
 b = 1
 c = 100
 d = .1
-# starta = .01
-# startb = 1
 g = .5
 h = 1
 scale_shape = 2
@@ -57,29 +50,13 @@ nsamples = 1
 nburnin = 2000
 nthin = 1
 
-include("/home/jlederman/DiscreteOrderStatistics/models/covid_final/ablation/gamma/covid4.jl")
+include(joinpath(ROOTDIR, "models/covid/covid_final.jl"))
 model = covid4(N,M,K,Q,Dmax,a,b,c,d,g,h,start_V1,start_V2,alpha,beta,tauc,taud,start_tau)
 @time samples = fit(model, data, initseed=seed, nsamples = nsamples, nburnin=nburnin, nthin=nthin,
     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
 
-# if D == 0
-#     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidfulltimeD.jl")
-#     model = covidsimple(N,M,K,Q,Dmax,a,b,c,d,g,h,scale_shape,scale_rate,start_V1,start_V2,alpha,beta,tauc,taud,start_tau)
-#     @time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=20,
-#      info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
-# else
-#     include("/home/jlederman/DiscreteOrderStatistics/models/covid/covidsimple.jl")
-#     j = div(D,2)+1
-#     model = covidsimplebase(N,M,K,a,b,c,d,g,h,scale_shape,scale_rate,starta,startb,D,j)
-#     @time samples = fit(model, data, initseed=seed, nsamples = 100, nburnin=4000, nthin=20,
-#     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),))
-# end
-
-
-# @time samples = fit(model, data, initseed=seed, nsamples = 1, nburnin=4000, nthin=1,info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M)))
-# inforate = evaluateInfoRate(model,data,samples,mask=mask_NM, verbose=false,info=info)
 params = [K,Q,D,seed]
 
-# samples = [Dict("eps"=>sample["eps"], "alpha"=>sample["alpha"], "V_KM"=>sample["V_KM"], "U_NK"=>sample["U_NK"]) for sample in samples]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/covid/ablation/full_samples/"
+folder = joinpath(ROOTDIR, "output/covid/full_samples/")
+mkpath(folder)
 save(folder*"/fullsample_seed$(seed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples)

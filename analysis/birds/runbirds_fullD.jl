@@ -13,7 +13,8 @@ chainSeed = parse(Int, ARGS[4])
 
 using CSV, DataFrames
 
-data = Dict("Y_NM" => Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/birds/birds_dunson.csv", DataFrame))[:,2:end]);
+ROOTDIR = joinpath(@__DIR__, "../..")
+data = Dict("Y_NM" => Matrix(CSV.read(joinpath(ROOTDIR, "data/birds/birds_final_counts.csv"), DataFrame))[:,2:end]);
 N, M = size(data["Y_NM"])
 
 
@@ -24,20 +25,21 @@ d = 1
 
 if D == 0
     Dmax = 5
-    include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds_simple2.jl")
+    include(joinpath(ROOTDIR, "models/birds/birds_final_nocovariates.jl"))
     model = birds(N, M, K, P, Dmax, a, b, c, d)
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,
     skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 elseif D == 1
-    include("/home/jlederman/DiscreteOrderStatistics/models/PoissonMF.jl")
+    include(joinpath(ROOTDIR, "models/other_models/PoissonMF.jl"))
     model = PoissonMF(N, M, K, a, b, c, d)
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed)
 else #D > 1
-    include("/home/jlederman/DiscreteOrderStatistics/models/MaxPoissonMF.jl")
+    include(joinpath(ROOTDIR, "models/other_models/MaxPoissonMF.jl"))
     model = MaxPoissonMF(N, M, K, D, a, b, c, d)
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed)
 end
 
 params = [D,K,P,chainSeed]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/birds/"
+folder = joinpath(ROOTDIR, "output/birds/")
+mkpath(folder)
 save(folder*"fullsamplesDmore/sampleD$(D)K$(K)P$(P)seedChain$(chainSeed).jld", "params", params, "samples", samples)

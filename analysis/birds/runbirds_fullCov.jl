@@ -12,8 +12,9 @@ chainSeed = parse(Int, ARGS[2])
 
 using CSV, DataFrames
 
-data = Dict("Y_NM" => Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/birds/birds_dunson.csv", DataFrame))[:,2:end]);
-info = Dict("X_NP" => Matrix(CSV.read("/home/jlederman/DiscreteOrderStatistics/data/birds/birds_dunsonX.csv", DataFrame))[:,2:end]);
+ROOTDIR = joinpath(@__DIR__, "../..")
+data = Dict("Y_NM" => Matrix(CSV.read(joinpath(ROOTDIR, "data/birds/birds_final_counts.csv"), DataFrame))[:,2:end]);
+info = Dict("X_NP" => Matrix(CSV.read(joinpath(ROOTDIR, "data/birds/birds_final_covariates.csv"), DataFrame))[:,2:end]);
 P = size(info["X_NP"])[2]
 N, M = size(data["Y_NM"])
 
@@ -24,11 +25,12 @@ c = 1
 d = 1
 Dmax = 5
 
-include("/home/jlederman/DiscreteOrderStatistics/models/birds/birds.jl")
+include(joinpath(ROOTDIR, "models/birds/birds_final_covariate.jl"))
 model = birdsCov(N, M, K, Dmax, a, b, c, d)
 @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,info=info,
 skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 
 params = [K,chainSeed]
-folder = "/net/projects/schein-lab/jimmy/OrderStats/realdata/birds/"
+folder = joinpath(ROOTDIR, "output/birds/")
+mkpath(folder)
 save(folder*"fullsamplesCov/sampleK$(K)seedChain$(chainSeed).jld", "params", params, "samples", samples)
