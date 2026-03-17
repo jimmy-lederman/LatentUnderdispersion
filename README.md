@@ -1,6 +1,6 @@
 # Modeling Latent Underdispersion with Discrete Order Statistics
 
-Code and data accompanying the paper on discrete order statistic models for latent underdispersion.
+Code and data accompanying the paper.
 
 ## Repository Structure
 
@@ -17,8 +17,8 @@ Each subfolder in `data/` contains a `data_dictionary.txt` describing all files 
 
 | Folder | Case Study | Description |
 |--------|-----------|-------------|
-| `data/birds/` | Finnish bird abundance | 2826 survey sites × 137 species, with land-cover covariates |
-| `data/covid/` | COVID-19 case counts | 3105 US counties × 299 time periods, cumulative counts |
+| `data/birds/` | Finnish bird abundance | 2826 survey sites × 137 species, with covariates |
+| `data/covid/` | COVID-19 case counts | 3105 US counties × 296 days, cumulative counts |
 | `data/flights/` | Frontier Airlines flights | 42773 flights with air time, distance, and airport metadata |
 | `data/genes/` | RNA-seq gene expression | 1000 tissue samples × 309 genes from TCGA |
 
@@ -29,9 +29,9 @@ Each model is defined as a Julia struct extending the `MatrixMF` base class from
 | Folder | Case Study | Description |
 |--------|-----------|-------------|
 | `models/birds/` | Birds | Poisson order statistic model with and without covariates |
-| `models/covid/` | COVID-19 | Negative binomial order statistic model for cumulative counts; includes `ablation/` subfolder with ablation study variants |
+| `models/covid/` | COVID-19 | Poisson order statistic model for cumulative counts; includes `ablation/` subfolder with ablation study variants |
 | `models/flights/` | Flights | Poisson order statistic model for air travel times |
-| `models/genes/` | Genes | Negative binomial order statistic model with Polya-Gamma augmentation for RNA-seq counts |
+| `models/genes/` | Genes | Negative binomial order statistic model for RNA-seq counts |
 
 ## Helper Code
 
@@ -39,7 +39,6 @@ Each model is defined as a Julia struct extending the `MatrixMF` base class from
 |------|-------------|
 | `helper/MatrixMF.jl` | Base class for all matrix factorization models; defines the MCMC sampling interface |
 | `helper/OrderStatsSampling.jl` | Conditional order statistic sampling (Algorithm B from the paper) |
-| `helper/OrderStatsSampling_fast.jl` | Optimized version of Algorithm B |
 | `helper/PoissonOrderPMF.jl` | PMF computation for Poisson order statistics |
 | `helper/NegBinPMF.jl` | PMF computation for negative binomial order statistics |
 
