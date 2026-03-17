@@ -1,7 +1,7 @@
 Data Dictionary: RNA-Sequencing Gene Expression Data
 ====================================================
 
-Source: TCGA (The Cancer Genome Atlas) RNA-sequencing dataset.
+Source: https://portal.gdc.cancer.gov/analysis_page?app=Downloads
 
 Files:
 ------

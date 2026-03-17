@@ -1,14 +1,17 @@
 Data Dictionary: COVID-19 Cumulative Case Counts
 =================================================
 
-Source: US county-level COVID-19 cumulative case count data.
+Source: https://github.com/nytimes/covid-19-data
 
 Files:
 ------
 
 1. usafull_final.csv
-   - Dimensions: 3105 rows (US counties) x 299 columns (time periods)
-   - Columns: x1, x2, ..., x299 — each represents a successive time period
+   - Dimensions: 3105 rows (US counties) x 299 columns
+   - First column: row index
+   - Second column: county ID
+   - Third column: county population
+   - Columns 4-299: days
+   - Columns: x4, x5, ..., x299 — each represents a successive days
    - Values: integer cumulative COVID-19 case counts
-   - The data is monotonically non-decreasing across columns for each county
-     (cumulative counts)
+   - Though cumulative counts, the rows are not monotonically increasing due to reporting errors and other discrepancies.

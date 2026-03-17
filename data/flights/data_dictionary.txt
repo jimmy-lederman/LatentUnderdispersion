@@ -1,7 +1,7 @@
 Data Dictionary: Frontier Airlines Flight Data
 ===============================================
 
-Source: US Department of Transportation flight records for Frontier Airlines.
+Source: https://www.kaggle.com/datasets/akulbahl/covid19-airline-flight-delays-and-cancellations
 
 Files:
 ------
