@@ -11,6 +11,10 @@
 
 !README.md
 !.gitignore
+!Project.toml
+!Manifest.toml
+!.claude/
+!.claude/settings.json
 
 *.ipynb
 *.jld
