@@ -6,10 +6,10 @@ using Random
 using JLD
 using Base.Filesystem
 
-D = parse(Int, ARGS[1])
-K = parse(Int, ARGS[2])
-P = parse(Int, ARGS[3])
-chainSeed = parse(Int, ARGS[4])
+chainSeed = parse(Int, ARGS[1])
+D = parse(Int, ARGS[2])
+K = parse(Int, ARGS[3])
+Q = parse(Int, ARGS[4])
 
 using CSV, DataFrames
 
@@ -26,7 +26,7 @@ d = 1
 if D == 0
     Dmax = 5
     include(joinpath(ROOTDIR, "models/birds/birds_final_nocovariates.jl"))
-    model = birds(N, M, K, P, Dmax, a, b, c, d)
+    model = birds(N, M, K, Q, Dmax, a, b, c, d)
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed,
     skipupdate=["D_NM"], constantinit=Dict("D_NM"=>ones(Int, model.N, model.M)))
 elseif D == 1
@@ -39,7 +39,7 @@ else #D > 1
     @time samples = fit(model, data, nsamples = 500, nburnin=4000, nthin=20, initseed=chainSeed)
 end
 
-params = [D,K,P,chainSeed]
+params = [chainSeed,D,K,Q]
 folder = joinpath(ROOTDIR, "output/birds/")
 mkpath(folder)
-save(folder*"fullsamplesDmore/sampleD$(D)K$(K)P$(P)seedChain$(chainSeed).jld", "params", params, "samples", samples)
+save(folder*"fullsamplesDmore/sampleD$(D)K$(K)Q$(Q)seedChain$(chainSeed).jld", "params", params, "samples", samples)

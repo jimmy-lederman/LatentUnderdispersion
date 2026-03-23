@@ -1,13 +1,13 @@
 # Modeling Latent Underdispersion with Discrete Order Statistics
 
-Code and data accompanying the paper.
+We provide code for the main data augmentation algorithm as well as code and data to reproduce each case study in the paper.
 
 ## Repository Structure
 
 ```
 ├── analysis/       # Scripts to run models on each case study
-├── models/         # Model definitions (Julia)
-├── helper/         # Core sampling and PMF utilities
+├── models/         # Model definitions
+├── helper/         # Data augmentation code and utilities
 ├── data/           # Datasets for the 4 case studies
 ```
 
@@ -37,7 +37,7 @@ Each model is defined as a Julia struct extending the `MatrixMF` base class from
 
 | File | Description |
 |------|-------------|
-| `helper/MatrixMF.jl` | Base class for all matrix factorization models; defines the MCMC sampling interface |
+| `helper/MatrixMF.jl` | Base class for all models; defines the MCMC sampling interface |
 | `helper/OrderStatsSampling.jl` | Conditional order statistic sampling (Algorithm B from the paper) |
 | `helper/PoissonOrderPMF.jl` | PMF computation for Poisson order statistics |
 | `helper/NegBinPMF.jl` | PMF computation for negative binomial order statistics |
@@ -49,9 +49,28 @@ Scripts in `analysis/` run the models on full or held-out data for each case stu
 - `analysis/birds/` — full covariate model, full D model, held-out D evaluation
 - `analysis/covid/` — full model run, held-out evaluation
 - `analysis/flights/` — held-out evaluation
-- `analysis/genes/` — full model run, held-out evaluation
+- `analysis/genes/` — full model run
 
-## Requirements
+All scripts take command-line arguments in a standard order:
 
-- [Julia](https://julialang.org/) (developed with Julia 1.x)
-- Julia packages: `Distributions`, `LinearAlgebra`, `LogExpFunctions`, `SpecialFunctions`
+- **Full-data scripts:** `chainSeed D K [Q]`
+- **Held-out scripts:** `maskSeed chainSeed D K [Q] [type]`
+- **Flights held-out:** `maskSeed chainSeed D type g`
+
+`K` is the latent dimension for the mean. `Q` is the latent dimension for the order D. `type` selects the model variant (see each script for details). `g` controls which transformation to use for the STAR version (flights only).
+
+## Getting Started
+
+1. Install [Julia](https://julialang.org/) (developed with Julia 1.x).
+
+2. Install dependencies:
+   ```bash
+   julia --project=. -e 'using Pkg; Pkg.instantiate()'
+   ```
+
+3. Run an analysis script, e.g.:
+   ```bash
+   julia --project=. analysis/flights/runflights_heldout.jl 101 101 3 1 0
+   ```
+
+Output is saved to `output/`.

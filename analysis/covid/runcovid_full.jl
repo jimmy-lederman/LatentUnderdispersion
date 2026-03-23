@@ -24,10 +24,10 @@ M = size(cumdf)[2]
 Y_N1 = Int.(reshape(cumdf[:,1], :, 1))
 info = Dict("Y0_N"=>Y_N1,"pop_N"=>pops,"days_M"=>Vector(days), "state_N"=>state)
 
-seed = parse(Int, ARGS[1])
+chainSeed = parse(Int, ARGS[1])
 D = parse(Int, ARGS[2])
-Q = parse(Int, ARGS[3])
-K = parse(Int, ARGS[4])
+K = parse(Int, ARGS[3])
+Q = parse(Int, ARGS[4])
 
 a = 1
 b = 1
@@ -52,11 +52,11 @@ nthin = 1
 
 include(joinpath(ROOTDIR, "models/covid/covid_final.jl"))
 model = covid4(N,M,K,Q,Dmax,a,b,c,d,g,h,start_V1,start_V2,alpha,beta,tauc,taud,start_tau)
-@time samples = fit(model, data, initseed=seed, nsamples = nsamples, nburnin=nburnin, nthin=nthin,
+@time samples = fit(model, data, initseed=chainSeed, nsamples = nsamples, nburnin=nburnin, nthin=nthin,
     info=info,constantinit=Dict("V_KM"=>fill(1.0, K, M),"D_NM"=>ones(Int, N, M)), skipupdate=["D_NM"])
 
-params = [K,Q,D,seed]
+params = [chainSeed,D,K,Q]
 
 folder = joinpath(ROOTDIR, "output/covid/full_samples/")
 mkpath(folder)
-save(folder*"/fullsample_seed$(seed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples)
+save(folder*"/fullsample_seed$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples)

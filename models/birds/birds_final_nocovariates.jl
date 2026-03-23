@@ -10,7 +10,7 @@ struct birds <: MatrixMF
     N::Int64
     M::Int64
     K::Int64
-    P::Int64
+    Q::Int64
     Dmax::Int64
     a::Float64
     b::Float64
@@ -42,19 +42,19 @@ end
 function sample_prior(model::birds,info=nothing, constantinit=nothing)
     U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
-    # Tau_NP = rand(Normal(0,sqrt(model.sigma2)), model.N, model.P)
+    # Tau_NQ = rand(Normal(0,sqrt(model.sigma2)), model.N, model.Q)
     # Tau_N = rand(Normal(1,sqrt(model.sigma2)), model.N)
-    # Beta_PM = rand(Normal(0,sqrt(model.sigma2)), model.P, model.M) 
+    # Beta_QM = rand(Normal(0,sqrt(model.sigma2)), model.Q, model.M) 
     # Beta_M = rand(Normal(model.constant, sqrt(model.sigma2)), model.M)
-    Tau_NP = rand(Normal(0,1), model.N, model.P)
+    Tau_NQ = rand(Normal(0,1), model.N, model.Q)
     # Tau_N = rand(Normal(1,sqrt(model.sigma2)), model.N)
-    Beta_PM = rand(Normal(0,1), model.P, model.M) 
+    Beta_QM = rand(Normal(0,1), model.Q, model.M) 
     # Beta_M = rand(Normal(model.constant, sqrt(model.sigma2)), model.M)
-    # Tau_NPp1 = hcat(Tau_NP, Tau_N)
-    # Beta_Pp1M = hcat(Beta_PM', Beta_M)'
-    D_NM = rand.(Binomial.(model.Dmax - 1, logistic.(Tau_NP * Beta_PM))) .+ 1
+    # Tau_NQp1 = hcat(Tau_NQ, Tau_N)
+    # Beta_Pp1M = hcat(Beta_QM', Beta_M)'
+    D_NM = rand.(Binomial.(model.Dmax - 1, logistic.(Tau_NQ * Beta_QM))) .+ 1
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "Tau_NP"=>Tau_NP, #"Beta_M"=>Beta_M, "Tau_N"=>Tau_N, 
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_QM"=>Beta_QM, "Tau_NQ"=>Tau_NQ, #"Beta_M"=>Beta_M, "Tau_N"=>Tau_N, 
     "D_NM"=>D_NM)
     return state
 end
@@ -77,9 +77,9 @@ function backward_sample(model::birds, data, state, mask=nothing;skipupdate=noth
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
-    Beta_PM = copy(state["Beta_PM"])
+    Beta_QM = copy(state["Beta_QM"])
     # Beta_M = copy(state["Beta_M"])
-    Tau_NP = copy(state["Tau_NP"])
+    Tau_NQ = copy(state["Tau_NQ"])
     # Tau_N = copy(state["Tau_N"])
 
     Z_NM = zeros(Int, model.N, model.M)
@@ -119,7 +119,7 @@ function backward_sample(model::birds, data, state, mask=nothing;skipupdate=noth
 
     if isnothing(skipupdate) || !("D_NM" in skipupdate)
         #Polya-gamma augmentation to update Beta
-        F_NM = Tau_NP * Beta_PM
+        F_NM = Tau_NQ * Beta_QM
         p_NM = logistic.(F_NM)
         W_NM = zeros(Float64, model.N, model.M)
         Mu_NM = U_NK * V_KM
@@ -131,30 +131,30 @@ function backward_sample(model::birds, data, state, mask=nothing;skipupdate=noth
             pg = PolyaGammaHybridSampler(model.Dmax - 1, F_NM[n,m])
             W_NM[n,m] = rand(pg)
         end
-        # Tau_NPp1 = hcat(TauNP, Tau_N)
-        # Beta_Pp1M = vcat(Beta_M, Beta_PM)
-        ident =  Matrix{Int}(I, model.P, model.P)
+        # Tau_NQp1 = hcat(TauNP, Tau_N)
+        # Beta_Pp1M = vcat(Beta_M, Beta_QM)
+        ident =  Matrix{Int}(I, model.Q, model.Q)
         @views @threads for m in 1:model.M
             W = Diagonal(W_NM[:,m]) 
-            V = inv(Tau_NP' * W * Tau_NP + ident)
+            V = inv(Tau_NQ' * W * Tau_NQ + ident)
             V = .5(V + V')
             k = D_NM[:,m] .- (model.Dmax - 1)/2 .- 1
-            mvec = Float64.(V*(Tau_NP' * k))
-            Beta_PM[:,m] = rand(MvNormal(mvec,V))
+            mvec = Float64.(V*(Tau_NQ' * k))
+            Beta_QM[:,m] = rand(MvNormal(mvec,V))
         end
-        # offset = zeros(model.P+1)
+        # offset = zeros(model.Q+1)
         # offset[end] = 1/model.sigma2
         @views @threads for n in 1:model.N
             W = Diagonal(W_NM[n,:]) 
-            V = inv(Beta_PM * W * Beta_PM' + ident)
+            V = inv(Beta_QM * W * Beta_QM' + ident)
             V = .5(V + V')
             k = D_NM[n,:] .- (model.Dmax - 1)/2 .- 1
-            mvec = Float64.(V*(Beta_PM * k))
-            Tau_NP[n,:] = rand(MvNormal(mvec,V))
+            mvec = Float64.(V*(Beta_QM * k))
+            Tau_NQ[n,:] = rand(MvNormal(mvec,V))
         end
     
         
     end
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_PM"=>Beta_PM, "Tau_NP"=>Tau_NP, "D_NM"=>D_NM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "Beta_QM"=>Beta_QM, "Tau_NQ"=>Tau_NQ, "D_NM"=>D_NM)
     return data, state
 end

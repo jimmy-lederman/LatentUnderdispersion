@@ -9,8 +9,9 @@ ROOTDIR = joinpath(@__DIR__, "../..")
 include(joinpath(ROOTDIR, "models/genes/genes_final.jl"))
 
 chainSeed = parse(Int, ARGS[1])
-K = parse(Int, ARGS[2])
-Q = parse(Int, ARGS[3])
+D = parse(Int, ARGS[2])
+K = parse(Int, ARGS[3])
+Q = parse(Int, ARGS[4])
 
 file_path = joinpath(ROOTDIR, "data/genes/cancer_small_final.csv")
 df = CSV.read(file_path, DataFrame)
@@ -30,14 +31,12 @@ alpha0 = beta0 = 1
 alpha = beta = 1
 constant = -50
 sigma2 = 10
-Dmax = 9
-
-model = genes(N,M,K,Q,Dmax,a,b,c,d,alpha0,beta0,alpha,beta,constant,sigma2)
+model = genes(N,M,K,Q,D,a,b,c,d,alpha0,beta0,alpha,beta,constant,sigma2)
 
 
 @time samples = fit(model, data, nsamples =500, nburnin=4000, nthin=20, initseed = chainSeed,
 skipupdate=["D_NM"],constantinit=Dict("D_NM"=>ones(Int, N, M)))
-params = [chainSeed,K,Q]
+params = [chainSeed,D,K,Q]
 folder = joinpath(ROOTDIR, "output/genes/fullsamples/")
 mkpath(folder)
-save(folder*"/sample_seed2_$(chainSeed)K$(K)Q$(Q).jld", "params", params, "samples", samples)
+save(folder*"/sample_seed2_$(chainSeed)D$(D)K$(K)Q$(Q).jld", "params", params, "samples", samples)

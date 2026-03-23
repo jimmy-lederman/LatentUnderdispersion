@@ -8,8 +8,8 @@ using Base.Filesystem
 
 maskSeed = parse(Int, ARGS[1])
 chainSeed = parse(Int, ARGS[2])
-type = parse(Int, ARGS[3])
-D = parse(Int, ARGS[4])
+D = parse(Int, ARGS[3])
+type = parse(Int, ARGS[4])
 g = parse(Int, ARGS[5])
 T = 99 #because running on full
 
@@ -106,7 +106,7 @@ elseif type == 2
     samplesnew = [Dict("U_R"=> s["U_R"], "sigma2_R" => s["sigma2_R"]) for s in samples]
 end
 
-params = [maskSeed,chainSeed,type,D,g]
+params = [maskSeed,chainSeed,D,type,g]
 folder = joinpath(ROOTDIR, "output/flights/")
 mkpath(folder)
 if type == 1
