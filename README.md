@@ -7,7 +7,7 @@ We provide code for the main data augmentation algorithm as well as code and dat
 ```
 ├── analysis/       # Scripts to run models on each case study
 ├── models/         # Model definitions
-├── helper/         # Data augmentation code and utilities
+├── helper/         # Core sampling and data augmentation utilities
 ├── data/           # Datasets for the 4 case studies
 ```
 
