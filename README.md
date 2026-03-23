@@ -46,7 +46,7 @@ Each model is defined as a Julia struct extending the `MatrixMF` base class from
 
 Scripts in `analysis/` run the models on full or held-out data for each case study:
 
-- `analysis/birds/` — full covariate model, full D model, held-out D evaluation
+- `analysis/birds/` — full model run (covariates and no covariates), held-out evaluation (no covariates)
 - `analysis/covid/` — full model run, held-out evaluation
 - `analysis/flights/` — held-out evaluation
 - `analysis/genes/` — full model run
