@@ -1,5 +1,6 @@
 using ProgressMeter
-using Random 
+using Random
+
 
 function logsumexpvec(arr::AbstractVector{T}) where T <: Real
     m = maximum(arr)
