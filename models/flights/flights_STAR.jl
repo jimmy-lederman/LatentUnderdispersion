@@ -4,16 +4,23 @@ include("../../helper/PoissonOrderPMF.jl")
 using Distributions
 using Base.Threads
 
-struct flights_STAR <: MatrixMF
+#g/g_inv are parameterized rather than declared ::Function so that calls to them are
+#statically dispatched; an abstract field type forces a dynamic dispatch per observation.
+struct flights_STAR{F1,F2} <: MatrixMF
     N::Int64
     M::Int64
     R::Int64
     a::Float64
     b::Float64
     tau2::Float64
-    g::Function
-    g_inv::Function
+    g::F1
+    g_inv::F2
 end
+
+#a parametric struct does not get the converting default constructor a plain one does,
+#so keep accepting Int arguments for a/b/tau2 as the call sites pass them
+flights_STAR(N, M, R, a, b, tau2, g, g_inv) =
+    flights_STAR{typeof(g),typeof(g_inv)}(N, M, R, a, b, tau2, g, g_inv)
 
 function STARlogpmf(model::flights_STAR, x, mu, sigma2)
     std = sqrt(sigma2)
@@ -98,22 +105,24 @@ logbinomial(n::Integer, k::Integer) = lgamma(n + 1) - lgamma(k + 1) - lgamma(n -
 function backward_sample(model::flights_STAR, data, state, mask=nothing; skipupdate=nothing)
     #some housekeeping
     Y_NM = data["Y_NM"]
-    routes_R2 = data["routes_R2"]
+    route_idx = data["route_idx"]::Vector{Vector{Int}}
+    route_n = data["route_n"]::Vector{Int}
     routes_N = data["routes_N"]
     U_R = copy(state["U_R"])
     sigma2_R = copy(state["sigma2_R"])
     @assert model.M == 1
-    
+
     Z_NM = zeros(Float64, model.N,1)
 
+    g0 = model.g(0)  #constant across observations
 
-    @views @threads for n in 1:model.N   
+    @views @threads :static for n in 1:model.N
         r = routes_N[n]
         mu = U_R[r]
-        sigma2 = sigma2_R[r]
+        sd = sqrt(sigma2_R[r])
         if !isnothing(mask)
             if mask[n,1] == 1
-                z = rand(Normal(mu, sqrt(sigma2)))
+                z = rand(Normal(mu, sd))
                 if z < 0
                     Y_NM[n,1] = 0
                 else
@@ -121,17 +130,18 @@ function backward_sample(model::flights_STAR, data, state, mask=nothing; skipupd
                 end
             end
         end
-        if Y_NM[n,1] == 0
-            Z_NM[n,1] = rand(Truncated(Normal(mu, sqrt(sigma2)), -Inf, model.g(0)))
+        y = Y_NM[n,1]
+        if y == 0
+            Z_NM[n,1] = rand(Truncated(Normal(mu, sd), -Inf, g0))
         else
-            Z_NM[n,1] = rand(Truncated(Normal(mu, sqrt(sigma2)), model.g(Y_NM[n,1] - 1), model.g(Y_NM[n,1])))
+            Z_NM[n,1] = rand(Truncated(Normal(mu, sd), model.g(y - 1), model.g(y)))
         end
     end
 
     @views for r in 1:model.R
         #access pre-calculated route info
-        indices = routes_R2[r,1]
-        n = routes_R2[r,2]
+        indices = route_idx[r]
+        n = route_n[r]
         sigma2 =  sigma2_R[r]
         z_N = Z_NM[indices,1]
         s = sum(z_N)

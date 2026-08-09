@@ -100,9 +100,18 @@ function logpmfOrderStatPoisson(Y,mu,D,j;compute=true)
     if D == 1
         return logpdf(Poisson(mu), Y)
     end
-    llik = logpdf(OrderStatistic(Poisson(mu), D, j), Y)
-    if (isinf(llik) || isnan(llik)) && compute
-        llik = logprobOrderStatisticPoisson(Y,mu,D,j)
+    # Primary path: cancellation-free restricted-multinomial expansion. The previous
+    # route, logpdf(OrderStatistic(...)), forms a DIFFERENCE of two incomplete-beta
+    # tails and loses the result whenever the parent cdf saturates to 1.0 in Float64
+    # (small mu, moderate Y) -- there it can be wrong by a factor of ~2 in the pmf.
+    # It is retained as the first fallback, then the BigFloat path as before.
+    dist = Poisson(mu)
+    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j)
+    if isnan(llik) || isinf(llik)
+        llik = logpdf(OrderStatistic(dist, D, j), Y)
+        if (isinf(llik) || isnan(llik)) && compute
+            llik = logprobOrderStatisticPoisson(Y,mu,D,j)
+        end
     end
     return llik
 end

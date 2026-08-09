@@ -1,5 +1,6 @@
 using ProgressMeter
 using Random
+using Distributions
 
 
 function logsumexpvec(arr::AbstractVector{T}) where T <: Real
@@ -13,6 +14,37 @@ function gewekepvalue(forw, back)
     varb = mean([u^2 for u in back]) - mean(back)^2
     teststat = num/((1/length(forw))*varf+(1/length(back))*varb)^(1/2)
     return 2*(1 - cdf(Normal(0,1), abs(teststat)))
+end
+
+# Thin a count z across K components with weights P_K (need not be normalized),
+# writing the result into a preallocated buffer.
+#
+# This is the standard conditional-binomial construction of a multinomial and is
+# EXACT IN DISTRIBUTION -- identical to rand(Multinomial(z, P_K ./ sum(P_K))), which
+# Distributions implements the same way internally. It differs only in consuming the
+# RNG stream directly rather than through a freshly constructed distribution object,
+# and it avoids three allocations per call (the normalized weight vector, the
+# Multinomial object, and the output vector).
+function thin_multinomial!(buf::AbstractVector{Int}, z::Integer, P_K::AbstractVector{Float64}, K::Integer)
+    rem = Int(z)
+    s = 0.0
+    @inbounds for k in 1:K
+        s += P_K[k]
+    end
+    @inbounds for k in 1:(K-1)
+        if rem <= 0 || s <= 0
+            buf[k] = 0
+        else
+            q = P_K[k] / s
+            q = q < 0.0 ? 0.0 : (q > 1.0 ? 1.0 : q)
+            zk = rand(Binomial(rem, q))
+            buf[k] = zk
+            rem -= zk
+        end
+        s -= P_K[k]
+    end
+    @inbounds buf[K] = rem > 0 ? rem : 0
+    return buf
 end
 
 abstract type MatrixMF end
@@ -113,9 +145,12 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         # if mod(s,100) == 0
         #     println(s)
         # end
-        if verbose next!(prog) end
-        # println(s)
-        flush(stdout)
+        # flush was previously unconditional: one syscall per Gibbs sweep even when
+        # nothing is being printed.
+        if verbose
+            next!(prog)
+            flush(stdout)
+        end
     end
     if verbose finish!(prog) end
 
@@ -263,15 +298,12 @@ function evaluateInfoRate(model::MatrixMF, data, samples; info=nothing, mask=not
                         llik = evalulateLogLikelihood(model, sample, data, info, row, col)
                         llikvector[s] = llik
                     end
-                    #try
-                    @assert !isnan(logsumexpvec(llikvector))
-                    # catch ex
-                    #     println(row)
-                    #     e = evalulateLogLikelihood(model, samples[1], data, info, row, col)
-                    #     #println(llikvector)
-                    #     @assert 1 == 2
-                    # end
-                    inforatetotal += logsumexpvec(llikvector) - log(S)
+                    # logsumexpvec was previously evaluated twice per heldout cell
+                    # (@assert is enabled by default in Julia, so the assertion copy
+                    # was not free); compute once and reuse.
+                    lse = logsumexpvec(llikvector)
+                    @assert !isnan(lse)
+                    inforatetotal += lse - log(S)
                     I += 1
                     if verbose next!(prog) end
                 end
