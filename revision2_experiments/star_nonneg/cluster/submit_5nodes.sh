@@ -29,7 +29,7 @@ mkdir -p logs results/samples
 
 NODES=("$@")
 if [ ${#NODES[@]} -eq 0 ]; then
-    NODES=(g003 g004 g006 g007 g009)
+    NODES=(g003 g004 g006 g007 g008)
 fi
 NJOBS=${#NODES[@]}
 
