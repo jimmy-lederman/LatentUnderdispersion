@@ -58,10 +58,12 @@ function evalulateLogLikelihood(model::OrderStatisticNegBinMF, state, data, info
 end
 
 function sample_prior(model::OrderStatisticNegBinMF)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
+    V_KM = rand(Gamma(model.c, 1/dhyper), model.K, model.M)
     p = rand(Beta(model.alpha,model.beta))
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p"=>p)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "p"=>p)
     return state
 end
 
@@ -88,7 +90,7 @@ function griddy_gibbs(model::OrderStatisticNegBinMF, U_NK, Z_MK, Z_NM, plist=.01
     logprobs = zeros(length(plist))
     for (i,p) in enumerate(plist)
         #for each p, sample an r from its complete conditional
-        post_rate = model.d + model.D*log(1/p)
+        post_rate = dhyper + model.D*log(1/p)
         @views for k in 1:model.K
             @views for m in 1:model.M
                 post_shape = model.c + Z_MK[m,k]
@@ -121,6 +123,7 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
+    dhyper = state["d"]
     p = copy(state["p"])
     
    # if !isnothing(mask)
@@ -274,7 +277,7 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
         # end
         # Z_MK  = sum(Z_MK_thr)  
 
-        post_rate = model.d + model.D*log(1/p)
+        post_rate = dhyper + model.D*log(1/p)
         @views for k in 1:model.K
             @views for m in 1:model.M
                 post_shape = model.c + Z_MK[m,k]
@@ -294,7 +297,10 @@ function backward_sample(model::OrderStatisticNegBinMF, data, state, mask=nothin
     end
 
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p"=>p)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+
+
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "p"=>p)
     return data, state
 end
 

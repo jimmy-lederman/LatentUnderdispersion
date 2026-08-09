@@ -33,10 +33,12 @@ function evalulateLogLikelihood(model::NegBinMF, state, data, info, row, col)
 end
 
 function sample_prior(model::NegBinMF)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
+    V_KM = rand(Gamma(model.c, 1/dhyper), model.K, model.M)
     p = rand(Beta(model.alpha,model.beta))
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p"=>p)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "p"=>p)
     return state
 end
 
@@ -65,7 +67,7 @@ function griddy_gibbs(model::NegBinMF, U_NK, Z_MK, Y_NM, plist=.01:.01:.99)#plis
         #for each p, sample an r from its complete conditional
        
         @views for k in 1:model.K
-            post_rate = model.d + log(1/p)
+            post_rate = dhyper + log(1/p)
             @views for m in 1:model.M
                 post_shape = model.c + Z_MK[m,k]
                 rlist[i,k,m] = rand(Gamma(post_shape, 1/post_rate))
@@ -96,6 +98,7 @@ function backward_sample(model::NegBinMF, data, state, mask=nothing; skipupdate 
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
+    dhyper = state["d"]
     p = state["p"]
     Mu_NM = U_NK * V_KM
     nt = Threads.nthreads()
@@ -141,19 +144,26 @@ function backward_sample(model::NegBinMF, data, state, mask=nothing; skipupdate 
         (p, V_KM) = griddy_gibbs(model, U_NK, Z_MK, Y_NM)
     else
         @views for k in 1:model.K
-            post_rate = model.d + log(1/p)
+            post_rate = dhyper + log(1/p)
             @views for m in 1:model.M
                 post_shape = model.c + Z_MK[m,k]
                 V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
             end
         end
         
-        mu = sum(U_NK * V_KM)
-        y = sum(Y_NM)
-        #p = rand(Beta(model.alpha + mu, model.beta + y))
+        # conjugate dispersion update. Y ~ NB(r, p) with r = (UV) gives a
+        # likelihood p^{sum r} (1-p)^{sum y}, so with p ~ Beta(alpha, beta):
+        #     p | - ~ Beta(alpha + sum(UV), beta + sum(Y))
+        # Y_NM here has the held-out entries imputed, which is what the
+        # augmented conditional requires. This ran only inside the griddy
+        # branch before, so p was frozen after iteration 250.
+        p = rand(Beta(model.alpha + sum(U_NK * V_KM), model.beta + sum(Y_NM)))
     end
 
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "p"=>p)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+
+
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "p"=>p)
     return data, state
 end

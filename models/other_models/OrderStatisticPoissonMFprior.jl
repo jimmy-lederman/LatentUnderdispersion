@@ -163,9 +163,10 @@ function evalulateLogLikelihood(model::OrderStatisticPoissonMF, state, data, inf
 end
 
 function sample_prior(model::OrderStatisticPoissonMF,info=nothing)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     #U_NK = rand(Gamma(model.a, 1/model.b), model.N, model.K)
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
+    V_KM = rand(Gamma(model.c, 1/dhyper), model.K, model.M)
     if model.type == 2
         D = 2*rand(Binomial(Int((model.Dmax - 1)/2), model.p)) + 1
     else
@@ -173,7 +174,10 @@ function sample_prior(model::OrderStatisticPoissonMF,info=nothing)
     end
 
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "D"=>D)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+
+
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "D"=>D)
     return state
 end
 
@@ -208,6 +212,7 @@ function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothi
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
+    dhyper = state["d"]
     D = copy(state["D"])
     if model.type == 1
         j = 1
@@ -255,7 +260,7 @@ function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothi
     @views for m in 1:model.M
         @views for k in 1:model.K
             post_shape = model.c + Z_MK[m,k]
-            post_rate = model.d + D
+            post_rate = dhyper + D
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))[1]
         end
     end
@@ -265,6 +270,8 @@ function backward_sample(model::OrderStatisticPoissonMF, data, state, mask=nothi
         D = update_D_faster(model, Y_NM, Mu_NM)
     end
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "D"=>D)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper, "D"=>D)
     return data, state
 end

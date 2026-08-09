@@ -20,9 +20,11 @@ function evalulateLogLikelihood(model::PoissonMF, state, data, info, row, col)
 end
 
 function sample_prior(model::PoissonMF,info=nothing,constantinit=nothing)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1/model.d), model.K, model.M)
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM)
+    V_KM = rand(Gamma(model.c, 1/dhyper), model.K, model.M)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper)
     return state
 end
 
@@ -41,6 +43,7 @@ function backward_sample(model::PoissonMF, data, state, mask=nothing)
     Y_NM = copy(data["Y_NM"])
     U_NK = copy(state["U_NK"])
     V_KM = copy(state["V_KM"])
+    dhyper = state["d"]
     #Y_NMK = zeros(model.N, model.M, model.K)
     if !isnothing(mask)
         Mu_NM = U_NK * V_KM
@@ -83,11 +86,12 @@ function backward_sample(model::PoissonMF, data, state, mask=nothing)
     @views for m in 1:model.M
         @views for k in 1:model.K
             post_shape = model.c + Y_MK[m,k]
-            post_rate = model.d + 1
+            post_rate = dhyper + 1
             V_KM[k, m] = rand(Gamma(post_shape, 1/post_rate))
         end
     end
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "d" => dhyper)
     return data, state
 end
 

@@ -41,10 +41,11 @@ function evalulateLogLikelihood(model::STARMFNNF, state, data, info, row, col)
 end
 
 function sample_prior(model::STARMFNNF, info=nothing)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1 / model.d), model.K, model.M)
+    V_KM = rand(Gamma(model.c, 1 / dhyper), model.K, model.M)
     sigma2 = rand(InverseGamma(model.a0, model.b0))
-    return Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2)
+    return Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "d" => dhyper)
 end
 
 function ytoz_floor(model::STARMFNNF, z)
@@ -92,13 +93,15 @@ function backward_sample(model::STARMFNNF, data, state, mask=nothing)
     Mu_NM = U_NK * V_KM
     Z_NM = zeros(model.N, model.M)
 
+    dhyper = get(state, "d", model.d)
     update_Z_floor!(model, Y_NM, Z_NM, Mu_NM, sigma2, mask)
     # U/V/sigma2 conditionals depend only on (Z, Mu): reuse a shim STARMFNN
     shim = STARMFNN(model.N, model.M, model.K, model.a, model.c, model.d,
                     model.a0, model.b0, model.g, model.g_inv)
     update_U!(shim, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
-    update_V!(shim, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
+    update_V!(shim, U_NK, V_KM, Z_NM, Mu_NM, sigma2, dhyper)
     sigma2 = update_sigma2(shim, Z_NM, Mu_NM)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
 
-    return data, Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "Z_NM" => Z_NM)
+    return data, Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "Z_NM" => Z_NM, "d" => dhyper)
 end

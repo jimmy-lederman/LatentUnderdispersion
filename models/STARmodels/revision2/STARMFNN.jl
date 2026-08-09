@@ -53,10 +53,11 @@ function evalulateLogLikelihood(model::STARMFNN, state, data, info, row, col)
 end
 
 function sample_prior(model::STARMFNN, info=nothing)
+    dhyper = sample_rate_prior()   # hierarchical Gamma rate for V
     U_NK = rand(Dirichlet(fill(model.a, model.N)), model.K)
-    V_KM = rand(Gamma(model.c, 1 / model.d), model.K, model.M)
+    V_KM = rand(Gamma(model.c, 1 / dhyper), model.K, model.M)
     sigma2 = rand(InverseGamma(model.a0, model.b0))
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "d" => dhyper)
     return state
 end
 
@@ -173,7 +174,7 @@ end
 
 # V update: Ga(1, d) prior = Exponential(d), conditional is a truncated
 # normal on (0, Inf). Mu_NM kept in sync.
-function update_V!(model::STARMFNN, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
+function update_V!(model::STARMFNN, U_NK, V_KM, Z_NM, Mu_NM, sigma2, drate=model.d)
     @views for k in 1:model.K
         for j in 1:model.M
             A = 0.0
@@ -185,7 +186,7 @@ function update_V!(model::STARMFNN, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
                 B += u * e
             end
             A /= sigma2
-            B = B / sigma2 - model.d
+            B = B / sigma2 - drate
             vold = V_KM[k, j]
             vnew = truncgauss(A, B, 0.0, Inf)
             V_KM[k, j] = vnew
@@ -213,11 +214,13 @@ function backward_sample(model::STARMFNN, data, state, mask=nothing)
     Mu_NM = U_NK * V_KM
     Z_NM = zeros(model.N, model.M)
 
+    dhyper = get(state, "d", model.d)
     update_Z!(model, Y_NM, Z_NM, Mu_NM, sigma2, mask)
     update_U!(model, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
-    update_V!(model, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
+    update_V!(model, U_NK, V_KM, Z_NM, Mu_NM, sigma2, dhyper)
     sigma2 = update_sigma2(model, Z_NM, Mu_NM)
+    dhyper = sample_rate_hyper(V_KM, model.c)   # d | V, conjugate
 
-    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "Z_NM" => Z_NM)
+    state = Dict("U_NK" => U_NK, "V_KM" => V_KM, "sigma2" => sigma2, "Z_NM" => Z_NM, "d" => dhyper)
     return data, state
 end

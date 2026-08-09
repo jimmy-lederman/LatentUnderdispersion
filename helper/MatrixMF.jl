@@ -47,15 +47,43 @@ function thin_multinomial!(buf::AbstractVector{Int}, z::Integer, P_K::AbstractVe
     return buf
 end
 
+# --- hierarchical rate for the Gamma factor prior --------------------------
+# Models put V_km ~ Gamma(c, d). Holding d fixed lets the prior, rather than the
+# data, choose the scale of V. That is harmless where UV is the mean (Poisson,
+# median-Poisson, STAR-NN: the likelihood pins the scale) but decisive where UV
+# is the negative-binomial size and the mean is r(1-p)/p -- there the scale and
+# the dispersion trade off along a ridge, and a fixed d silently picks the split,
+# biasing p (measured: p ~ 0.32 against a true 0.25 on the Section 6.3 NB data).
+#
+# Giving d its own Gamma(e0, f0) prior is conjugate in every one of these models:
+#     d | V ~ Gamma(e0 + n_V * c,  f0 + sum(V))
+# so it costs one extra draw per sweep. Applied uniformly so the prior
+# specification is the same sentence for every model.
+const HYPER_E0 = 1.0
+const HYPER_F0 = 1.0
+
+sample_rate_hyper(V, c) =
+    rand(Gamma(HYPER_E0 + length(V) * c, 1 / (HYPER_F0 + sum(V))))
+
+# initial draw, used by sample_prior so chains start dispersed in d as well
+sample_rate_prior() = rand(Gamma(HYPER_E0, 1 / HYPER_F0))
+
 abstract type MatrixMF end
 
 function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,
-    skipupdate=nothing,constantinit=nothing,griddy=false,annealStrat=nothing,firstiter=false,keep_all=false,skipupdatealways=nothing)
-    #some checks
-    # Y_NM = data["Y_NM"]
-    # @assert size(Y_NM) == (model.N, model.M) "Incorrect data shape"
-    #@assert all(x -> x >= 0, Y_NM[:]) "Not all values in data are greater than or equal to 0"
-    #housekeeping
+    constantinit=nothing, init=nothing, keep_all=false)
+    # `init` SEEDS a parameter and then lets it move; `constantinit` PINS it for the whole
+    # run. Both are needed: the fixed-D columns pin D, while the median-NB model needs a
+    # data-driven starting point for r (its prior sits at r ~ 0.01 against a needed ~500,
+    # and from a prior draw the latent sums overflow Int64 before the hierarchical rate
+    # can adapt) without freezing r thereafter.
+    # Initialization is a draw from the prior for every model -- no tailored
+    # schemes. The griddy branch (S_griddy = 250 prepended iterations) and the
+    # skipupdate branch (parameters frozen while s < nburnin/2) were removed:
+    # griddy existed to work around a p update that never ran, and holding D
+    # fixed early is unnecessary (verified: R-hat <= 1.004 for the median-Poisson
+    # model with D free from the first iteration). `constantinit` is kept because
+    # it is how a model is pinned to a fixed order D for the fixed-D comparisons.
     samplelist = []
     if initialize
         Random.seed!(initseed)
@@ -66,87 +94,46 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         else
             state = sample_prior(model)
         end
+        if !isnothing(init)
+            for (var, value) in init
+                state[var] = value
+            end
+        end
         if !isnothing(constantinit)
             for (var, value) in constantinit
                 state[var] = value
             end
-            # println(state)
         end
     end
-    if !isnothing(annealStrat)
-        annealstart = 1000
-        annealtimes = 10
-        anneal = annealstart
-        annealcount = 1
-    else
-        anneal = nothing 
-    end
-    if griddy
-        S_griddy = 250
-        S = nburnin + nthin*nsamples + S_griddy
-    else
-        S = nburnin + nthin*nsamples
-    end
+
+    S = nburnin + nthin*nsamples
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
-    
+
     for s in 1:S
-        # if s == 1 || s == 2
-        #     println(state)
-        # end
-        
-        if s == 1 && firstiter
-            ~, state = backward_sample(model, data, state, mask, firstiter=true)
-        end
-        
-        if s < nburnin/2 && !isnothing(skipupdate)
-            ~, state = backward_sample(model, data, state, mask, skipupdate=skipupdate)
-        elseif s < nburnin/2 && !isnothing(annealStrat)#need to change to just nburnin later
-            if s > nburnin*annealcount/((annealtimes)*2)
-                anneal -= annealstart/annealtimes
-                annealcount += 1
-            end
-                # println(anneal)
-                # println(nburnin*annealcount/(annealstart))
-            #@assert anneal <= model.D
-            if griddy && s < S_griddy
-                ~, state = backward_sample(model, data, state, mask, griddy=griddy,annealStrat=annealStrat,anneal=anneal)
-            else
-                ~, state = backward_sample(model, data, state, mask,annealStrat=annealStrat,anneal=anneal)
-            end
-        else
-            if griddy && s < S_griddy 
-                ~, state = backward_sample(model, data, state, mask, griddy=true)
-            elseif !isnothing(skipupdatealways)
-                #@time ~, state = backward_sample(model, data, state, mask)
-                ~, state = backward_sample(model, data, state, mask,skipupdatealways=skipupdatealways)
-            else
-                ~, state = backward_sample(model, data, state, mask)
+        ~, state = backward_sample(model, data, state, mask)
+
+        # `constantinit` PINS these entries, it does not merely seed them. Models sample
+        # every parameter unconditionally inside backward_sample, so without this a
+        # "fixed D" run would silently become a D-inferred run: constantinit would set
+        # D once and the model's own D update would immediately overwrite it. Restoring
+        # after each sweep is what makes the fixed-D columns of the flights Table 2
+        # (D = 1, 3, 5, 7, 9) actually hold D fixed. Cost is one dictionary assignment
+        # per pinned variable per sweep; the update that produced the discarded value
+        # still runs, which for the flights model is ~6% of an iteration.
+        if !isnothing(constantinit)
+            for (var, value) in constantinit
+                state[var] = value
             end
         end
 
         if keep_all
-            #if mod(s,nthin) == 0 #KEEPING BURNIN
-                push!(samplelist, state)
-            #end
-        else
-            if griddy
-                if s > nburnin + S_griddy && mod(s,nthin) == 0
-                    push!(samplelist, state)
-                end
-            else
-                if s > nburnin && mod(s,nthin) == 0
-                    push!(samplelist, state)
-                end
-            end
+            push!(samplelist, state)
+        elseif s > nburnin && mod(s, nthin) == 0
+            push!(samplelist, state)
         end
 
-        # if mod(s,100) == 0
-        #     println(s)
-        # end
-        # flush was previously unconditional: one syscall per Gibbs sweep even when
-        # nothing is being printed.
         if verbose
             next!(prog)
             flush(stdout)

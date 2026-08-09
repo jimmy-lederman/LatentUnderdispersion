@@ -52,10 +52,10 @@ function run_one(dataset::String, mname::String, seed::Int;
     registry = Dict(
         "poisson"      => (() -> PoissonMF(N, M, K, 1.0, 1.0, 1.0, 0.01), Dict(), uv),
         "medpois"      => (() -> OrderStatisticPoissonMF(N, M, K, 1.0, 1.0, 1.0, 0.01, 15, 2, 0.5),
-                           Dict(:constantinit => Dict("D" => 1), :skipupdate => ["D"]), uv),
-        "nb"           => (() -> NegBinMF(N, M, K, 1.0, 1.0, 1.0, 0.01, 1.0, 1.0), Dict(:griddy => true), uvp),
+                           Dict(), uv),
+        "nb"           => (() -> NegBinMF(N, M, K, 1.0, 1.0, 1.0, 0.01, 1.0, 1.0), Dict(), uvp),
         "mednb"        => (() -> OrderStatisticNegBinMF(N, M, K, 1.0, 1.0, 1.0, 0.01, 1.0, 1.0, 3, 2),
-                           Dict(:griddy => true), uvp),
+                           Dict(), uvp),
         "star_id"      => (() -> STARMF(N, M, K, 1.0, 1.0, identity, identity), Dict(), uv),
         "star_sqrt"    => (() -> STARMF(N, M, K, 1.0, 1.0, sqrt, x -> x^2), Dict(), uv),
         "starnnf_id"   => (() -> STARMFNNF(N, M, K, 1.0, 1.0, 0.01, 1.0, 1.0, identity, identity), Dict(), uv),
@@ -159,5 +159,6 @@ function run_one(dataset::String, mname::String, seed::Int;
     end
     @printf("done %s %s seed %d: ir %.4f essmu %.0f essll %.0f cos %.4f (%.0fs)\n",
             dataset, mname, seed, ir, median(essmu), essll, cosine, t)
+    return ir
 
 end
