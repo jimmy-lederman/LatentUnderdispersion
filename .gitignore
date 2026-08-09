@@ -25,8 +25,23 @@
 analysis/**/older*/
 analysis/**/older*/**
 
-models/STARmodels/
-models/other_models/
+# Section 6.3 model code: the directories stay excluded (they hold scratch
+# variants and old copies), but the files the simulation study actually uses are
+# tracked -- they must reach the cluster by git, and referee 2 (point 5) asked
+# for the simulation scripts to be in the public repo.
+models/STARmodels/*
+!models/STARmodels/STARMF.jl
+!models/STARmodels/revision2/
+models/STARmodels/revision2/*
+!models/STARmodels/revision2/STARMFNN.jl
+!models/STARmodels/revision2/STARMFNNfloor.jl
+
+models/other_models/*
+!models/other_models/PoissonMF.jl
+!models/other_models/NegBinMF.jl
+!models/other_models/OrderStatisticPoissonMFprior.jl
+!models/other_models/OrderStatisticNegBinMF.jl
+
 models/genes_polya/
 
 models/birds/birds_old/
@@ -40,3 +55,39 @@ data/other_data/
 
 helper/old_helper/
 helper/OrderStatsSampling_fast.jl
+
+# Revision-2 experiment code. Whole tree is excluded by the leading "*", so the
+# directories are re-included step by step and only the scripts/data needed to
+# run and reproduce the Section 6.3 and 7.1 campaigns are tracked. Outputs
+# (results/, samples/, logs/) stay untracked.
+!revision2_experiments/
+revision2_experiments/*
+!revision2_experiments/star_nonneg/
+revision2_experiments/star_nonneg/*
+!revision2_experiments/star_nonneg/cluster/
+revision2_experiments/star_nonneg/cluster/*
+!revision2_experiments/star_nonneg/cluster/*.jl
+!revision2_experiments/star_nonneg/cluster/*.sh
+!revision2_experiments/star_nonneg/cluster/*.sbatch
+!revision2_experiments/star_nonneg/cluster/*.py
+!revision2_experiments/flights/
+revision2_experiments/flights/*
+!revision2_experiments/flights/cluster/
+revision2_experiments/flights/cluster/*
+!revision2_experiments/flights/cluster/*.jl
+!revision2_experiments/flights/cluster/*.sh
+!revision2_experiments/flights/cluster/*.sbatch
+!revision2_experiments/perf_review/
+revision2_experiments/perf_review/*
+!revision2_experiments/perf_review/bench_by_dataset.jl
+
+# Section 6.3 shared helpers + the simulated datasets they are run on
+!revison_experiments/
+revison_experiments/*
+!revison_experiments/mcmc_stuff.jl
+!revison_experiments/factorexperiment/
+revison_experiments/factorexperiment/*
+!revison_experiments/factorexperiment/data/
+revison_experiments/factorexperiment/data/*
+!revison_experiments/factorexperiment/data/*.csv
+!revison_experiments/factorexperiment/data/*.Rmd
