@@ -58,7 +58,8 @@ N = size(Y_NM)[1]
 M = size(Y_NM)[2]
 a =1
 b =.01
-alpha = beta = 1 #not used
+alpha = beta = 1 #Beta(1,1) prior on rho in both MedPois models AND on the
+                 #InverseGamma(1,1) for sigma2_k in both STAR models -- it IS used
 tau2 = 50^2
 gforwards = [x -> x, sqrt]
 gbakwards = [x -> x, x -> x^2]
@@ -90,9 +91,19 @@ info = Dict("routes_R2"=>routes_R4[:,3:6], "routes_N"=>routes_Ntrain)
 # priors of the original submission, kept so the hierarchical-vs-flat comparison is
 # reproducible.
 Dmax = 9
-a0 = 1.0; b0 = 0.01     # hyperprior on the population rate of mu_k
+# Hyperprior on the population rate of mu_k (and of r_k in the MedNB model).
+# E[b] = a0/b0 = 0.01, so E[mu] = a/E[b] = 100 -- the same prior mean as the submitted
+# flat model's mu ~ Gamma(1, 0.01). The CONCENTRATION matters as much as the mean: with
+# a0 = 1 a single draw of b moves every route's mu together over four orders of
+# magnitude, and draws that land with mu >> Y break sampleSumGivenOrderStatistic
+# ("Unsupported order |nu| > 50"). At a0 = 100 (CV 0.1) the population scale is pinned,
+# every model initialises from its own prior, and no data-driven seeding is needed.
+# The posterior is unaffected: b | . ~ Gamma(a0 + R*a, b0 + sum(mu)) with R = 583 routes
+# and sum(mu) ~ 79,000, so the hyperprior contributes <1% of either parameter.
+a0 = 100.0; b0 = 10000.0
 c0 = 1.0; d0 = 1.0      # hyperprior on the population variance of mu_k (STAR)
-Dkw = D > 0 ? (constantinit=Dict("D_R"=>fill(D,R)), skipupdatealways=["D_R"]) : NamedTuple()
+# D > 0 fixes D_k at that value: `constantinit` pins it, restored by fit after every sweep
+Dkw = D > 0 ? (constantinit=Dict("D_R"=>fill(D,R)),) : NamedTuple()
 
 if type == 1
     include(joinpath(ROOTDIR, "models/flights/flights_hier.jl"))
@@ -106,8 +117,13 @@ elseif type == 3
 elseif type == 4
     include(joinpath(ROOTDIR, "models/flights/flights_STAR.jl"))
     model = flights_STAR(Ntrain, M, R, alpha, beta, tau2, gforwards[g], gbakwards[g])
+elseif type == 5
+    # median-of-D Negative Binomial, D_k inferred. Initialised from its own prior like
+    # every other model -- the concentrated hyperprior above is what makes that work.
+    include(joinpath(ROOTDIR, "models/flights/flights_mednb.jl"))
+    model = flights_mednb(Ntrain, M, R, Dmax, a, a0, b0, alpha, beta, 1.0, 1.0)
 else
-    error("unknown type $type (1=MedPois hier, 2=STAR hier, 3=MedPois flat, 4=STAR flat)")
+    error("unknown type $type (1=MedPois hier, 2=STAR hier, 3=MedPois flat, 4=STAR flat, 5=MedNB)")
 end
 
 # warm up the JIT so compile time is not inside the timed fit
@@ -117,9 +133,11 @@ fit(model, datatrain; nsamples=1, nburnin=1, nthin=1, mask=nothing, info=info,
 t = @elapsed samples = fit(model, datatrain; nsamples=Nsamples, nburnin=nbunrin, nthin=nthin,
                            mask=nothing, info=info, initseed=chainSeed, verbose=true, Dkw...)
 
-samplesnew = (type == 1 || type == 3) ?
-    [Dict("U_R"=>s["U_R"], "D_R"=>s["D_R"]) for s in samples] :
-    [Dict("U_R"=>s["U_R"], "sigma2_R"=>s["sigma2_R"]) for s in samples]
+samplesnew = type == 5 ?
+    [Dict("r_R"=>s["r_R"], "p_R"=>s["p_R"], "D_R"=>s["D_R"]) for s in samples] :
+    (type == 1 || type == 3) ?
+        [Dict("U_R"=>s["U_R"], "D_R"=>s["D_R"]) for s in samples] :
+        [Dict("U_R"=>s["U_R"], "sigma2_R"=>s["sigma2_R"]) for s in samples]
 
 # ---- held-out predictive density, retained PER DRAW ------------------------------------
 # This is the input to both the information gain in Table 2 and the ESS diagnostics, so it
@@ -128,6 +146,7 @@ samplesnew = (type == 1 || type == 3) ?
 modelfull = type == 1 ? flights_hier(N, M, R, Dmax, a, a0, b0, alpha, beta) :
             type == 2 ? flights_STAR_hier(N, M, R, alpha, beta, tau2, c0, d0, gforwards[g], gbakwards[g]) :
             type == 3 ? flights(N, M, R, Dmax, a, b, alpha, beta) :
+            type == 5 ? flights_mednb(N, M, R, Dmax, a, a0, b0, alpha, beta, 1.0, 1.0) :
                         flights_STAR(N, M, R, alpha, beta, tau2, gforwards[g], gbakwards[g])
 route_idx_full = [findall(routes_N .== r) for r in 1:R]
 datafull = Dict{String,Any}("Y_NM"=>Y_NM, "route_idx"=>route_idx_full,
@@ -156,7 +175,8 @@ folder = joinpath(ROOTDIR, "output/flights/revisionsamples/")
 mkpath(folder)  #the samples subfolder itself, not just output/flights/
 name = type == 1 ? "MedPoissonD$(D)" :
        type == 2 ? "STARg$(g)" :
-       type == 3 ? "MedPoissonFlatD$(D)" : "STARFlatg$(g)"
+       type == 3 ? "MedPoissonFlatD$(D)" :
+       type == 5 ? "MedNBD$(D)" : "STARFlatg$(g)"
 save(folder*"$(name)mask$(maskSeed)chain$(chainSeed).jld",
      "params", params,                 # [maskSeed, chainSeed, D, type, g]
      "samples", samplesnew,

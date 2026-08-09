@@ -48,7 +48,7 @@ end
 function sample_prior(model::flights_hier, info=nothing, constantint=nothing)
     bmu = rand(Gamma(model.a0, 1/model.b0))
     U_R = rand(Gamma(model.a, 1/bmu), model.R)
-    p = .5
+    p = rand(Beta(model.alpha, model.beta))   #rho, drawn from its prior (was hardcoded .5)
     @assert mod(model.Dmax, 2) == 1
     D_R = 2 * rand(Binomial((model.Dmax - 1)/2, p), model.R) .+ 1
     return Dict("U_R"=>U_R, "p"=>p, "D_R"=>D_R, "bmu"=>bmu)

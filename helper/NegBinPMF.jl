@@ -111,13 +111,28 @@ function logprobOrderStatisticNB(Y,r,p,D,j;precision=100)
 end
 
 function logpmfOrderStatNegBin(Y,r,p,D,j;compute=true)
-
-    llik = logpdf(OrderStatistic(NegativeBinomial(r,p), D, j), Y)
-    if (isinf(llik) || isnan(llik)) && compute
-        llik = logprobOrderStatisticNB(Y,r,p,D,j)
-        if llik == 0
-            println(Y, " ", r, " ", p)
-            throw("missed low error")
+    if D == 1
+        return logpdf(NegativeBinomial(r,p), Y)
+    end
+    # Primary path: the same cancellation-free restricted-multinomial expansion that
+    # logpmfOrderStatPoisson uses. logpmf_orderstat_grid takes the parent cdf and pmf as
+    # NUMBERS, so it is parent-agnostic -- nothing about it is Poisson-specific. This
+    # replaces a DIFFERENCE of two incomplete-beta tails (which loses the result whenever
+    # the parent cdf saturates to 1.0 in Float64) with a finite sum of positive terms, and
+    # it keeps the NegBin evaluation path numerically consistent with the Poisson one.
+    # Both previous routes are retained as fallbacks, in the same order as before; the
+    # BigFloat fallback is especially worth avoiding here because it evaluates incomplete
+    # betas at extended precision.
+    dist = NegativeBinomial(r,p)
+    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j)
+    if isnan(llik) || isinf(llik)
+        llik = logpdf(OrderStatistic(dist, D, j), Y)
+        if (isinf(llik) || isnan(llik)) && compute
+            llik = logprobOrderStatisticNB(Y,r,p,D,j)
+            if llik == 0
+                println(Y, " ", r, " ", p)
+                throw("missed low error")
+            end
         end
     end
     return llik

@@ -31,14 +31,14 @@ const CONFIGS = [
     (7, 1, 0, "MedPois hier, D = 7",      :hier),
     (9, 1, 0, "MedPois hier, D = 9",      :hier),
     (0, 2, 2, "STAR hier (sqrt)",         :hier),
-    (0, 3, 0, "MedPois flat, D inferred", :flat),
-    (0, 4, 2, "STAR flat (sqrt)",         :flat),
+    (0, 5, 0, "MedNB, D inferred",        :hier),
 ]
-const BASELINES = Dict(:hier => (1, 1, 0), :flat => (1, 3, 0))
+const BASELINES = Dict(:hier => (1, 1, 0))
 
 fname(D, t, g, m, c) = t == 1 ? "MedPoissonD$(D)mask$(m)chain$(c).jld" :
                        t == 2 ? "STARg$(g)mask$(m)chain$(c).jld" :
                        t == 3 ? "MedPoissonFlatD$(D)mask$(m)chain$(c).jld" :
+                       t == 5 ? "MedNBD$(D)mask$(m)chain$(c).jld" :
                                 "STARFlatg$(g)mask$(m)chain$(c).jld"
 loadrun(D, t, g, m, c) = load(joinpath(DIR, fname(D, t, g, m, c)))
 
@@ -62,7 +62,8 @@ end
 
 # (draws, chains, routes) array of mu_k
 function mu_array(D, t, g, mask)
-    per = [reduce(hcat, [s["U_R"] for s in loadrun(D, t, g, mask, c)["samples"]])' for c in CHAINS]
+    key = t == 5 ? "r_R" : "U_R"     # MedNB stores the NB size as r_R, not U_R
+    per = [reduce(hcat, [s[key] for s in loadrun(D, t, g, mask, c)["samples"]])' for c in CHAINS]
     S, R = size(per[1])
     A = Array{Float64}(undef, S, length(CHAINS), R)
     for (ci, M) in enumerate(per); A[:, ci, :] = M; end
@@ -110,7 +111,7 @@ function summarize()
     println("ESS is the total from 4 chains; cost is the 4-chain wall-clock.\n")
     @printf("%-28s %8s %9s %7s %8s %8s %7s %9s %11s\n",
             "model", "s/chain", "s/100it", "-Inf%", "ESSbulk", "ESStail", "Rhat", "ESS/s", "s/1000ESS")
-    allcfg = vcat(CONFIGS, [(1, 1, 0, "MedPois hier, D = 1", :hier), (1, 3, 0, "MedPois flat, D = 1", :flat)])
+    allcfg = vcat(CONFIGS, [(1, 1, 0, "MedPois hier, D = 1", :hier)])
     for (D, t, g, lab, _) in allcfg
         times = [loadrun(D, t, g, m, c)["time"] for m in MASKS for c in CHAINS]
         tmed = median(times)

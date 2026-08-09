@@ -59,10 +59,8 @@ function sample_likelihood(model::flights, mu,D,n=1)
 end
 
 function sample_prior(model::flights, info=nothing, constantint=nothing)
-    p = nothing
     U_R = rand(Gamma(model.a, 1/model.b), model.R)
-    # p = rand(Beta(model.alpha,model.beta)) 
-    p = .5
+    p = rand(Beta(model.alpha, model.beta))   #rho, drawn from its prior (was hardcoded .5)
     @assert mod(model.Dmax, 2) == 1
     D_R = 2 * rand(Binomial((model.Dmax - 1)/2, p), model.R) .+ 1
 

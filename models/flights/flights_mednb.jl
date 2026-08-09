@@ -38,9 +38,19 @@ end
 
 # Chinese-restaurant-table samplers, as in models/genes/genes_final.jl
 function sampleCRT_nb(Y, R)
-    Y == 0 && return 0
+    Y <= 0 && return 0
     Y == 1 && return 1
-    return 1 + sum(rand.(Bernoulli.([R / (R + i - 1) for i in 2:Y])))
+    # Allocation-free. The idiomatic form, 1 + sum(rand.(Bernoulli.([R/(R+i-1) for i in 2:Y]))),
+    # builds three O(Y) temporaries per call -- the probability vector, the vector of
+    # Bernoulli objects, and the vector of draws. Here Y is the latent NB sum, roughly
+    # D * mean ~ 760 for the flights data, and the call happens once per flight per sweep
+    # (42,773 times), so that is ~32M draws behind ~128k array allocations every sweep.
+    # Same draws, same distribution: rand() < R/(R+i-1) is rearranged to avoid the divide.
+    c = 1
+    @inbounds for i in 2:Y
+        rand() * (R + i - 1) < R && (c += 1)
+    end
+    return c
 end
 function sampleCRTlecam_nb(Y, R, tol = 0.4)
     Ymax = R * (1 / tol - 1)
@@ -67,7 +77,7 @@ function sample_prior(model::flights_mednb, info = nothing, constantint = nothin
     bmu = rand(Gamma(model.a0, 1 / model.b0))
     r_R = rand(Gamma(model.a, 1 / bmu), model.R)
     p_R = rand(Beta(model.alpha_p, model.beta_p), model.R)
-    rho = 0.5
+    rho = rand(Beta(model.alpha, model.beta))   #drawn from its prior (was hardcoded 0.5)
     @assert mod(model.Dmax, 2) == 1
     D_R = 2 * rand(Binomial((model.Dmax - 1) / 2, rho), model.R) .+ 1
     return Dict("r_R" => r_R, "p_R" => p_R, "D_R" => D_R, "p" => rho, "bmu" => bmu)
@@ -113,9 +123,15 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
 
     # ---- p_k | . : Beta conjugacy. Each flight contributes D_k draws from NB(r_k, p_k),
     #      and the sum of D_k*n_k iid NB(r_k, p) is NB(D_k*n_k*r_k, p).
+    # The clamp is a numerical guard, not a modelling choice. Dispersion is f(D)/p, so
+    # p -> 0 means an ever more overdispersed parent; the latent sums Z2 then grow without
+    # bound and OVERFLOW Int64, which surfaces as a negative Beta parameter and kills the
+    # chain (observed at D = 9). At PMIN = 1e-4 the implied dispersion ceiling is
+    # f(D)/PMIN >= 1670, against a maximum empirical route dispersion of about 2 -- so the
+    # bound is far outside the region the data support and never binds in practice.
     @views for k in 1:model.R
-        p_R[k] = rand(Beta(model.alpha_p + D_R[k] * route_n[k] * r_R[k],
-                           model.beta_p + Z2_R[k]))
+        p_R[k] = clamp(rand(Beta(model.alpha_p + D_R[k] * route_n[k] * r_R[k],
+                                 model.beta_p + Z2_R[k])), 1e-4, 1 - 1e-12)
     end
 
     # ---- r_k | . : Gamma conjugacy through the CRT counts ----
