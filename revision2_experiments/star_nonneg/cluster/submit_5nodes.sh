@@ -27,6 +27,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p logs results/samples
 
+# OpenBLAS sizes its thread pool from the NODE's physical core count, not from
+# the cgroup the job is confined to. Measured on g005 under --cpus-per-task=2:
+# 2 cores visible, BLAS.get_num_threads() = 32, and a cell that runs in 4 s
+# unrestricted took over 900 s -- 16x oversubscription with 32 threads fighting
+# over 2 cores. That is what made the first sweep produce 4 cells per job in 12
+# hours while burning 24 CPU-hours. Julia's own threads are already 1; this is
+# the separate BLAS pool.
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+
 NODES=("$@")
 if [ ${#NODES[@]} -eq 0 ]; then
     NODES=(g003 g004 g006 g007 g008)
@@ -43,6 +53,7 @@ for i in "${!NODES[@]}"; do
            --time=12:00:00 --partition=general \
            --output="logs/f63_${task}_%j.out" --error="logs/f63_${task}_%j.err" \
            --mail-user=jlederman@uchicago.edu --mail-type=END,FAIL \
+           --export=ALL,OPENBLAS_NUM_THREADS=1,OMP_NUM_THREADS=1 \
            --wrap="cd \$SLURM_SUBMIT_DIR && echo \"=== task $task/$NJOBS on \$(hostname) \$(date) ===\" && lscpu | grep -E 'Model name' && \$HOME/.juliaup/bin/julia --project=../../.. --threads=1 run_task.jl $task $NJOBS && echo \"=== task $task done \$(date) ===\""
 done
 echo

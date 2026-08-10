@@ -36,6 +36,12 @@
 # ============================================================
 
 set -u
+# OpenBLAS sizes its thread pool from the node's physical core count, not the
+# cgroup: measured 32 BLAS threads against 2 visible cores, turning a 4 s cell
+# into >900 s. Julia's own threads are already 1; this is the separate BLAS pool.
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+
 cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")}"
 
 NJOBS=23
