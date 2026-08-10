@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --ntasks=1
 #SBATCH --job-name=factor100
-#SBATCH --array=1-23%23
+#SBATCH --array=1-21%21
 #SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=4000
+#SBATCH --mem-per-cpu=8000
 #SBATCH --time=12:00:00
 #SBATCH --partition=general
 #SBATCH --output=logs/factor_%a_%j.out
@@ -13,15 +13,20 @@
 # ============================================================
 # Section 6.3 production run: 4 datasets x 8 models x 100 seeds = 3200 cells.
 #
-# 199 array tasks, throttled to 23 RUNNING at once (%23) — one slot below
-# the cluster's 24-concurrent-job cap stays free for other work. Remaining
-# tasks wait in the array queue and start as slots free up.
-# NOTE: if the 24-cap turns out to apply to SUBMITTED (not running) jobs and
-# sbatch rejects the array, resize to --array=1-23%23 and set NJOBS=23 below
-# (the round-robin then gives each job ~139 cells, ~2h each — still fine).
-# Round-robin assignment as in SD/cluster/submit_all.sh: job j runs cells
-# j, j+199, j+398, ... Each job handles 16-17 cells sequentially
-# (~15-25 min total per job).
+# 21 array tasks, all 21 running at once (%21): the cluster's cap is 24
+# concurrent jobs, the flights campaign holds 2, and one slot is deliberately
+# left free. Round-robin via run_task.jl: task j runs ORDER[j], ORDER[j+21],
+# ... = 152-153 cells each, sequentially, in ONE Julia process (packages load
+# once, not per cell). At the 40-120 s/cell that 4 chains x 10000 sweeps
+# implies, that is ~2-5 h per task, comfortably inside the 12 h wall.
+#
+# Chosen over submit_5nodes.sh (one job per A40 node) because at submission
+# time only g006-g009 were idle -- g003/g004 were fully allocated at load ~50.
+# Four nodes means 800 cells each, ~9-27 h, which overruns the wall. The
+# one-node-per-job design existed to keep seconds-per-fit comparable across
+# models, but the timing column now comes from submit_timing.sbatch on a single
+# pinned node, and fits/ESS/R-hat are hardware-independent -- so the sweep does
+# not need homogeneous hardware and can use whatever capacity is free.
 #
 # Cell -> (dataset, model, seed):
 #   seed  = (cell-1) % 100 + 1
@@ -44,7 +49,7 @@ export OMP_NUM_THREADS=1
 
 cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")}"
 
-NJOBS=23
+NJOBS=21
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 
 # multi-target cache: login node (precompile host) and compute nodes have
