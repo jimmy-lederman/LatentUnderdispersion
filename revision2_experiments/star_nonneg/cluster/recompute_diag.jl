@@ -42,7 +42,17 @@ const SAMPDIR = joinpath(@__DIR__, "results", "samples")
 const OUTDIR  = joinpath(@__DIR__, "results_diag")
 mkpath(OUTDIR)
 
-function diag_cell(path::String)
+# Models whose identified mean is NOT U*V. For the negative-binomial family
+# U*V is the SHAPE r, and only r(1-p)/p is identified -- the r/p split is the
+# alpha-p ridge, along which chains wander freely without disagreeing about the
+# mean. Computing ESS on U*V for these models measures the ridge, not the fit:
+# on CMP mednb seed 100 it reports rank-Rhat 1.35 and ESS 64, against 1.008 and
+# 2546 for the identified mean. This mirrors `uv` / `uvp` in cell_lib.jl, and is
+# the same mistake -- diagnosing an unidentified quantity -- that made the
+# submitted Table D.1 report ESS ~30 for STAR.
+const NB_FAMILY = ("nb", "mednb")
+
+function diag_cell(path::String, mname::String)
     d = JLD.load(path)
     U, V = d["U"], d["V"]
     ll = d["llik_chain"]                 # (nsamples, 1, nchains)
@@ -51,11 +61,22 @@ function diag_cell(path::String)
     M = size(V, 3)
     P = N * M
 
+    needs_p = mname in NB_FAMILY
+    if needs_p && !haskey(d, "scalar_p")
+        error("$mname requires the identified mean r(1-p)/p but scalar_p is absent")
+    end
+    pvec = needs_p ? d["scalar_p"] : nothing
+
     # mu[draw, chain, entry]; saved global index is (ch-1)*ns + s
     mu = Array{Float64}(undef, ns, nch, P)
     for ch in 1:nch, s in 1:ns
         g = (ch - 1) * ns + s
-        mu[s, ch, :] = vec(Float64.(@view U[g, :, :]) * Float64.(@view V[g, :, :]))
+        m = vec(Float64.(@view U[g, :, :]) * Float64.(@view V[g, :, :]))
+        if needs_p
+            p = pvec[g]
+            m .*= (1 - p) / p
+        end
+        mu[s, ch, :] = m
     end
 
     bulk = Vector{Float64}(undef, P)
@@ -90,7 +111,7 @@ for (i, f) in enumerate(mine)
     ds = parts[1]
     mname = join(parts[2:end-1], "_")
     try
-        r = diag_cell(joinpath(SAMPDIR, f))
+        r = diag_cell(joinpath(SAMPDIR, f), mname)
         CSV.write(out, DataFrame(; dataset = ds, model = mname, seed = seed,
                                  pairs(r)...))
     catch e
