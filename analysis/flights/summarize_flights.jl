@@ -32,6 +32,7 @@ const CONFIGS = [
     (9, 1, 0, "MedPois hier, D = 9",      :hier),
     (0, 2, 2, "STAR hier (sqrt)",         :hier),
     (0, 5, 0, "MedNB, D inferred",        :hier),
+    (9, 5, 0, "MedNB, D = 9 fixed",       :hier),
 ]
 const BASELINES = Dict(:hier => (1, 1, 0))
 

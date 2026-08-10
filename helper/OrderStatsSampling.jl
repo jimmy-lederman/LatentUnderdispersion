@@ -116,8 +116,18 @@ end
 # F1 = cdf(parent, y), f = pdf(parent, y). pA/pE/pB are scratch buffers of length >= D+1
 # (pass per-thread buffers). Returns NaN if the sum underflows, so the caller can fall
 # back to the incomplete-beta / BigFloat path.
+# `logf` is the parent LOG-pmf at y. It defaults to log(f), which reproduces the previous
+# behaviour exactly, but callers that have logpdf on hand should pass it: when y sits far
+# into the parent's tail, f underflows to exactly 0.0 in Float64 while logpdf stays finite
+# (e.g. NegBin(15000, 0.35) at y = 136: pdf 0.0, logpdf -15033.06). Handed f = 0 the
+# log-space retry below cannot recover -- the information is already gone from its input --
+# so it returns NaN and the caller falls through to the BigFloat path, which recurses at
+# escalating precision chasing a value near log(0). That cost 48 GB per sweep and OOM-killed
+# a cluster job. With logf supplied the retry returns the correct value (here log(D)+logf,
+# the one-draw-at-y term) in Float64.
 function logpmf_orderstat_grid(F1::Float64, f::Float64, D::Int, j::Int, T::Matrix{Float64},
-                               pA::Vector{Float64}, pE::Vector{Float64}, pB::Vector{Float64})
+                               pA::Vector{Float64}, pE::Vector{Float64}, pB::Vector{Float64},
+                               logf::Float64 = (f > 0.0 ? log(f) : -Inf))
     F0 = F1 - f
     F0 < 0.0 && (F0 = 0.0)
     S1 = 1.0 - F1
@@ -147,7 +157,7 @@ function logpmf_orderstat_grid(F1::Float64, f::Float64, D::Int, j::Int, T::Matri
     # returns a finite but badly wrong value -- and being finite it never triggers the
     # BigFloat guard either (e.g. mu=0.3, Y=30, D=15, j=8: truth -879.8, that path -145.2).
     lF0 = F0 > 0.0 ? log(F0) : -Inf
-    lf  = f  > 0.0 ? log(f)  : -Inf
+    lf  = logf
     lS1 = S1 > 0.0 ? log(S1) : -Inf
     acc = -Inf
     @inbounds for b in 0:(D-j)
@@ -226,12 +236,13 @@ end
 
 # log P(X_(j) = y) for a discrete parent, from the parent's cdf and pmf at y.
 # Cancellation-free; returns NaN on underflow so callers can fall back.
-function logpmf_orderstat_grid_cached(F1::Float64, f::Float64, D::Int, j::Int)
+function logpmf_orderstat_grid_cached(F1::Float64, f::Float64, D::Int, j::Int,
+                                      logf::Float64 = (f > 0.0 ? log(f) : -Inf))
     T = orderstat_grid_coefs_cached(D, j)
     pA = Vector{Float64}(undef, D + 1)
     pE = Vector{Float64}(undef, D + 1)
     pB = Vector{Float64}(undef, D + 1)
-    return logpmf_orderstat_grid(F1, f, D, j, T, pA, pE, pB)
+    return logpmf_orderstat_grid(F1, f, D, j, T, pA, pE, pB, logf)
 end
 
 function sampleSumGivenOrderStatistic(Y,D,j,dist)

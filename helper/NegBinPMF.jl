@@ -22,7 +22,9 @@ using HypergeometricFunctions
 #     return result
 # end
 
-function log_incomplete_beta3(a, b, x; precision=64)
+function log_incomplete_beta3(a, b, x; precision=64, maxprecision=4096)
+    # innermost of the BigFloat chain, and it recursed on ANY pFq failure with no ceiling
+    precision > maxprecision && return -Inf
     setprecision(BigFloat,precision)
     a = BigFloat(a)
     b = BigFloat(b)
@@ -34,9 +36,9 @@ function log_incomplete_beta3(a, b, x; precision=64)
         # if precision > 100000
         #     return 0
         # else 
-        #     return log_incomplete_beta3(a,b,x;precision=5*precision)
+        #     return log_incomplete_beta3(a,b,x;precision=5*precision, maxprecision=maxprecision)
         # end
-        return log_incomplete_beta3(a,b,x;precision=5*precision)
+        return log_incomplete_beta3(a,b,x;precision=5*precision, maxprecision=maxprecision)
     end
 end
 
@@ -73,18 +75,24 @@ end
 
 #need to do: implement median
 
-function logprobOrderStatisticNB(Y,r,p,D,j;precision=100)
+function logprobOrderStatisticNB(Y,r,p,D,j;precision=100, maxprecision=4096)
+    # Precision was multiplied by 5 at each retry with NO ceiling. When the target is
+    # genuinely below representable range (y far into the parent's tail) it never converges,
+    # so it escalated 100 -> 500 -> 2500 -> ... allocating BigFloats until the process was
+    # OOM-killed. Give up and report -Inf instead: at that point the pmf really is zero to
+    # any precision the caller can use.
+    precision > maxprecision && return -Inf
     #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
     #must set precision
     setprecision(BigFloat,precision)
     r = big(r)
     p = big(p)
     Y = big(Y)
-    firstbeta = log_incomplete_beta3(r,Y+1,p,precision=precision)
-    secondbeta = log_incomplete_beta3(r,Y,p,precision=precision)
+    firstbeta = log_incomplete_beta3(r,Y+1,p,precision=precision,maxprecision=maxprecision)
+    secondbeta = log_incomplete_beta3(r,Y,p,precision=precision,maxprecision=maxprecision)
     #println(firstbeta, " ", secondbeta)
     if firstbeta >= 0 || secondbeta >= 0
-        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision)
+        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision, maxprecision=maxprecision)
     end
     firstbeta_comp = log1mexp(firstbeta)
     secondbeta_comp = log1mexp(secondbeta)
@@ -104,7 +112,7 @@ function logprobOrderStatisticNB(Y,r,p,D,j;precision=100)
     
     result = logsubexp(j*firstbeta + cdf1, j*secondbeta + cdf2)
     if isinf(result) || isnan(result)
-        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision)
+        return logprobOrderStatisticNB(Y,r,p,D,j,precision=5*precision, maxprecision=maxprecision)
     else
         return Float64(result)
     end
@@ -124,7 +132,7 @@ function logpmfOrderStatNegBin(Y,r,p,D,j;compute=true)
     # BigFloat fallback is especially worth avoiding here because it evaluates incomplete
     # betas at extended precision.
     dist = NegativeBinomial(r,p)
-    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j)
+    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j, logpdf(dist, Y))
     if isnan(llik) || isinf(llik)
         llik = logpdf(OrderStatistic(dist, D, j), Y)
         if (isinf(llik) || isnan(llik)) && compute
@@ -148,7 +156,7 @@ end
 #     secondgammas =gamma_inc(Y,mu)
 #     result = logsubexp(2*log(firstgammas[2]) + log(1+2*firstgammas[1]), 2*log(secondgammas[2]) + log(1+2*secondgammas[1]))
 #     if isinf(result) || isnan(result)
-#         return logprobMedian(Y,mu,precision=5*precision)
+#         return logprobMedian(Y,mu,precision=5*precision, maxprecision=maxprecision)
 #     else
 #         return Float64(result)
 #     end

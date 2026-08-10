@@ -5,19 +5,27 @@
 #   type 2 = STAR,       hierarchical mu (default)      type 4 = STAR,       flat mu
 #   D = 0 infers D_k; D > 0 fixes it. g: 1 = identity, 2 = sqrt.
 
-# --- the Table 2 columns, plus the flat-prior pair for the referee 2(a) comparison ---
+# --- the Table 2 columns ---
 CONFIGS=(
   "0 1 0"   # MedPois hier, D_k inferred
-  "1 1 0"   # MedPois hier, D_k = 1   <- the Poisson baseline that information gain is relative to
+  "1 1 0"   # MedPois hier, D_k = 1   <- the Poisson baseline information gain is relative to
   "3 1 0"   # MedPois hier, D_k = 3
   "5 1 0"   # MedPois hier, D_k = 5
   "7 1 0"   # MedPois hier, D_k = 7
   "9 1 0"   # MedPois hier, D_k = 9
   "0 2 2"   # STAR hier, g = sqrt
-  "0 3 0"   # MedPois flat, D_k inferred   (2(a) comparison)
-  "1 3 0"   # MedPois flat, D_k = 1        (2(a) comparison baseline)
-  "0 4 2"   # STAR flat, g = sqrt          (2(a) comparison)
+  "0 5 0"   # MedNB, D_k inferred
+  "9 5 0"   # MedNB, D_k = 9 fixed  <- identified; dispersion carried continuously by p
 )
+# MedNB is back in. The OOM that removed it was a numerics bug, not the model: when the
+# parent pdf underflowed the grid gave up and the BigFloat fallback recursed at 5x
+# precision forever (48 GB/sweep). Fixed by passing logpdf into the grid and capping the
+# recursion; the same state now costs 0.4 MB. p is updated by a mean-preserving Metropolis
+# move every 10th sweep -- its conjugate conditional cannot learn p at this data scale.
+# The flat-prior models (types 3 and 4) are dropped. Every reported model now carries the
+# hierarchical mu_k prior, so the whole table comes from one code version at one commit --
+# which is what check_runs.jl verifies before it will endorse the timings. The flat runs
+# from the previous campaign remain on disk but are no longer read.
 
 MASKS=(101 102 103 104 105)     # the five train/test splits
 CHAINS=(1 2 3 4)                # four chains per split
@@ -54,5 +62,6 @@ outfile_for() {  # args: D type g mask chain
     2) echo "output/flights/revisionsamples/STARg${g}mask${mask}chain${chain}.jld" ;;
     3) echo "output/flights/revisionsamples/MedPoissonFlatD${D}mask${mask}chain${chain}.jld" ;;
     4) echo "output/flights/revisionsamples/STARFlatg${g}mask${mask}chain${chain}.jld" ;;
+    5) echo "output/flights/revisionsamples/MedNBD${D}mask${mask}chain${chain}.jld" ;;
   esac
 }

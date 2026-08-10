@@ -9,15 +9,16 @@ using JLD, Printf, Statistics
 const ROOT = abspath(joinpath(@__DIR__, "..", "..", ".."))
 const DIR  = joinpath(ROOT, "output/flights/revisionsamples")
 
-const CONFIGS = [(0,1,0),(1,1,0),(3,1,0),(5,1,0),(7,1,0),(9,1,0),(0,2,2),(0,3,0),(1,3,0),(0,4,2)]
+const CONFIGS = [(0,1,0),(1,1,0),(3,1,0),(5,1,0),(7,1,0),(9,1,0),(0,2,2),(0,5,0),(9,5,0)]
 const MASKS   = [101,102,103,104,105]
 const CHAINS  = [1,2,3,4]
 
 label(D,t,g) = t == 1 ? "MedPois hier D=$D"  : t == 2 ? "STAR hier g=$g" :
-               t == 3 ? "MedPois flat D=$D"  : "STAR flat g=$g"
+               t == 3 ? "MedPois flat D=$D"  : t == 5 ? "MedNB D=$D" : "STAR flat g=$g"
 fname(D,t,g,m,c) = t == 1 ? "MedPoissonD$(D)mask$(m)chain$(c).jld" :
                    t == 2 ? "STARg$(g)mask$(m)chain$(c).jld" :
                    t == 3 ? "MedPoissonFlatD$(D)mask$(m)chain$(c).jld" :
+                   t == 5 ? "MedNBD$(D)mask$(m)chain$(c).jld" :
                             "STARFlatg$(g)mask$(m)chain$(c).jld"
 
 function coverage()

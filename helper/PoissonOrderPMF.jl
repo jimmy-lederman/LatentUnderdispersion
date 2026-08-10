@@ -39,7 +39,8 @@ function logpmfMaxPoisson(Y,mu,D;compute=true)
     return llik
 end
 
-function logprobMax(Y,mu,D;precision=1000)
+function logprobMax(Y,mu,D;precision=1000, maxprecision=4096)
+    precision > maxprecision && return -Inf
      #must set precision
      setprecision(BigFloat,precision) do
         mu = big(mu)
@@ -48,7 +49,7 @@ function logprobMax(Y,mu,D;precision=1000)
         secondgammas = gamma_inc(Y,mu)
         result = logsubexp(D*log(firstgammas[2]), D*log(secondgammas[2]))
         if isinf(result) || isnan(result)
-            return logprobMax(Y,mu,D,precision=5*precision)
+            return logprobMax(Y,mu,D,precision=5*precision, maxprecision=maxprecision)
         else
             return Float64(result)
         end
@@ -64,13 +65,19 @@ function logprobMedian3(Y,mu;precision=1000)
     secondgammas =gamma_inc(Y,mu)
     result = logsubexp(2*log(firstgammas[2]) + log(1+2*firstgammas[1]), 2*log(secondgammas[2]) + log(1+2*secondgammas[1]))
     if isinf(result) || isnan(result)
-        return logprobMedian(Y,mu,precision=5*precision)
+        return logprobMedian(Y,mu,precision=5*precision, maxprecision=maxprecision)
     else
         return Float64(result)
     end
 end
 
-function logprobOrderStatisticPoisson(Y,mu,D,j;precision=1000)
+function logprobOrderStatisticPoisson(Y,mu,D,j;precision=1000, maxprecision=4096)
+    # Precision was multiplied by 5 at each retry with NO ceiling. When the target is
+    # genuinely below representable range (y far into the parent's tail) it never converges,
+    # so it escalated 100 -> 500 -> 2500 -> ... allocating BigFloats until the process was
+    # OOM-killed. Give up and report -Inf instead: at that point the pmf really is zero to
+    # any precision the caller can use.
+    precision > maxprecision && return -Inf
     #This is based on the alternative form of (2.1.3) on page 10 of David's Order Statistics
     #must set precision
     setprecision(BigFloat,precision)
@@ -90,7 +97,7 @@ function logprobOrderStatisticPoisson(Y,mu,D,j;precision=1000)
     end
     result = logsubexp(j*log(firstgammas[2]) + cdf1, j*log(secondgammas[2]) + cdf2)
     if isinf(result) || isnan(result)
-        return logprobOrderStatisticPoisson(Y,mu,D,j,precision=5*precision)
+        return logprobOrderStatisticPoisson(Y,mu,D,j,precision=5*precision, maxprecision=maxprecision)
     else
         return Float64(result)
     end
@@ -106,7 +113,7 @@ function logpmfOrderStatPoisson(Y,mu,D,j;compute=true)
     # (small mu, moderate Y) -- there it can be wrong by a factor of ~2 in the pmf.
     # It is retained as the first fallback, then the BigFloat path as before.
     dist = Poisson(mu)
-    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j)
+    llik = logpmf_orderstat_grid_cached(cdf(dist, Y), pdf(dist, Y), D, j, logpdf(dist, Y))
     if isnan(llik) || isinf(llik)
         llik = logpdf(OrderStatistic(dist, D, j), Y)
         if (isinf(llik) || isnan(llik)) && compute

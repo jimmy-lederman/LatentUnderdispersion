@@ -94,6 +94,127 @@ function forward_sample(model::flights_mednb; state = nothing, info = nothing)
     return Dict("Y_NM" => Y_NM), state
 end
 
+# Mean-preserving griddy update of p_k.
+#
+# The conjugate step cannot learn p at this data scale: p | . ~ Beta(a + D*n*r, b + Z2)
+# with Z2 the latent sum drawn UNDER the current p, so the conditional is centred on where
+# it already is (measured: from starts 0.15/0.30/0.60/0.90 it moved to 0.143/0.282/0.587/
+# 0.898 in 300 sweeps). The informative direction changes dispersion at FIXED mean, and
+# that direction moves p and r together via r = mu*p/(1-p) -- a coordinate move cannot
+# follow it.
+#
+# So reparameterise (r, p) -> (mu, p) and update p | mu. The Jacobian of r = mu*p/(1-p) at
+# fixed mu is dr/dmu = p/(1-p), giving the log-weight below. Scoring is on the OBSERVED Y
+# through the order-statistic pmf, not on latent draws generated under the current p.
+# Verified beforehand that a route's own flights do pin its dispersion this way: implied
+# dispersion at the profile maximum matched the empirical to a few percent, with 1.6-11.5
+# nats of curvature at +/-0.1 in p.
+const PGRID = collect(0.03:0.04:0.95)
+
+# How often the marginal p move runs, and how many proposals it makes when it does.
+# Between those sweeps p uses its conjugate update. Running it periodically rather than
+# only during burn-in matters: the conjugate step is near-self-confirming, so a burn-in-only
+# schedule would leave p frozen wherever the marginal step last put it, giving an
+# artificially narrow posterior for the dispersion.
+const P_MH_EVERY = 10
+const P_MH_NPROP = 5
+const P_MH_SD    = 0.6      # random-walk sd on the logit scale
+
+# marginal log-target for p at fixed mean mu, on the curve r = mu*p/(1-p).
+# Same target the griddy scores; see griddy_p! for why it is the observed-Y marginal.
+@inline function logtarget_p(pc, mu, D, j, uYk, cYk, model, T, pA, pE, pB, bmu)
+    (pc <= 0 || pc >= 1) && return -Inf
+    rc = mu * pc / (1 - pc)
+    (rc <= 0 || !isfinite(rc)) && return -Inf
+    dist = NegativeBinomial(rc, pc)
+    acc = 0.0
+    @inbounds for i in eachindex(uYk)
+        y = uYk[i]
+        F = cdf(dist, y); f = pdf(dist, y); lf = logpdf(dist, y)
+        v = D == 1 ? lf : logpmf_orderstat_grid(F, f, D, j, T, pA, pE, pB, lf)
+        isnan(v) && (v = -Inf)
+        acc += cYk[i] * v
+    end
+    acc += (model.a - 1) * log(rc) - bmu * rc                       # prior on r
+    acc += (model.alpha_p - 1) * log(pc) + (model.beta_p - 1) * log(1 - pc)
+    acc += log(pc) - log(1 - pc)                                    # Jacobian dr/dmu
+    return acc
+end
+
+# Random-walk Metropolis on logit(p), holding the fitted mean fixed. One likelihood
+# evaluation per proposal instead of the grid's 24, and p stays continuous rather than
+# being pinned to lattice points. Proposal is symmetric in logit space, so the accept
+# ratio carries the log|dp/dtheta| = log(p(1-p)) terms and nothing else.
+function mh_p!(r_R, p_R, D_R, uY, cY, model, tabs_by_D, bmu)
+    pA = Vector{Float64}(undef, model.Dmax + 1)
+    pE = Vector{Float64}(undef, model.Dmax + 1)
+    pB = Vector{Float64}(undef, model.Dmax + 1)
+    nacc = 0; ntry = 0
+    @inbounds for k in 1:model.R
+        uYk = uY[k]; isempty(uYk) && continue
+        cYk = cY[k]; D = D_R[k]; j = div(D, 2) + 1; T = tabs_by_D[D]
+        mu = r_R[k] * (1 - p_R[k]) / p_R[k]
+        (mu <= 0 || !isfinite(mu)) && continue
+        pcur = p_R[k]
+        lcur = logtarget_p(pcur, mu, D, j, uYk, cYk, model, T, pA, pE, pB, bmu) +
+               log(pcur) + log(1 - pcur)
+        for _ in 1:P_MH_NPROP
+            th = log(pcur / (1 - pcur)) + P_MH_SD * randn()
+            pp = 1 / (1 + exp(-th))
+            lp = logtarget_p(pp, mu, D, j, uYk, cYk, model, T, pA, pE, pB, bmu) +
+                 log(pp) + log(1 - pp)
+            ntry += 1
+            if log(rand()) < lp - lcur
+                pcur = pp; lcur = lp; nacc += 1
+            end
+        end
+        p_R[k] = pcur
+        r_R[k] = mu * pcur / (1 - pcur)
+    end
+    return nacc / max(ntry, 1)
+end
+
+function griddy_p!(r_R, p_R, D_R, uY, cY, model, tabs_by_D, bmu)
+    R = model.R
+    pA = Vector{Float64}(undef, model.Dmax + 1)
+    pE = Vector{Float64}(undef, model.Dmax + 1)
+    pB = Vector{Float64}(undef, model.Dmax + 1)
+    logw = Vector{Float64}(undef, length(PGRID))
+    @inbounds for k in 1:R
+        uYk = uY[k]; isempty(uYk) && continue
+        cYk = cY[k]
+        D = D_R[k]; j = div(D, 2) + 1
+        mu = r_R[k] * (1 - p_R[k]) / p_R[k]      # hold the fitted mean fixed
+        (mu <= 0 || !isfinite(mu)) && continue
+        T = tabs_by_D[D]
+        for (gi, pc) in enumerate(PGRID)
+            rc = mu * pc / (1 - pc)
+            dist = NegativeBinomial(rc, pc)
+            acc = 0.0
+            for i in eachindex(uYk)
+                y = uYk[i]
+                F = cdf(dist, y); f = pdf(dist, y); lf = logpdf(dist, y)
+                v = D == 1 ? lf : logpmf_orderstat_grid(F, f, D, j, T, pA, pE, pB, lf)
+                isnan(v) && (v = -Inf)
+                acc += cYk[i] * v
+            end
+            # prior on r at the transformed point, prior on p, and the Jacobian p/(1-p)
+            acc += (model.a - 1) * log(rc) - bmu * rc
+            acc += (model.alpha_p - 1) * log(pc) + (model.beta_p - 1) * log(1 - pc)
+            acc += log(pc) - log(1 - pc)
+            logw[gi] = acc
+        end
+        gbest = 1; best = -Inf
+        for gi in eachindex(PGRID)
+            v = logw[gi] + rand(Gumbel(0, 1))
+            v > best && (best = v; gbest = gi)
+        end
+        p_R[k] = PGRID[gbest]
+        r_R[k] = mu * p_R[k] / (1 - p_R[k])
+    end
+    return nothing
+end
+
 function backward_sample(model::flights_mednb, data, state, mask = nothing;
                          skipupdatealways = nothing, skipupdate = nothing)
     Y_NM = copy(data["Y_NM"])
@@ -121,6 +242,14 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
     end
     Z2_R = sum(Z2_nt); Z1_R = sum(Z1_nt)
 
+    # distinct Y per route, needed by BOTH the p griddy step and the D update
+    tabs_y = isnothing(mask) ?
+        get!(() -> route_ycounts(Y_NM, route_idx), data, "route_ycounts") :
+        route_ycounts(Y_NM, route_idx)
+    uY = tabs_y[1]::Vector{Vector{Int}}
+    cY = tabs_y[2]::Vector{Vector{Int}}
+    tabs_by_D = Dict(d => orderstat_grid_coefs(d, (d ÷ 2) + 1) for d in 1:2:model.Dmax)
+
     # ---- p_k | . : Beta conjugacy. Each flight contributes D_k draws from NB(r_k, p_k),
     #      and the sum of D_k*n_k iid NB(r_k, p) is NB(D_k*n_k*r_k, p).
     # The clamp is a numerical guard, not a modelling choice. Dispersion is f(D)/p, so
@@ -129,9 +258,17 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
     # chain (observed at D = 9). At PMIN = 1e-4 the implied dispersion ceiling is
     # f(D)/PMIN >= 1670, against a maximum empirical route dispersion of about 2 -- so the
     # bound is far outside the region the data support and never binds in practice.
-    @views for k in 1:model.R
-        p_R[k] = clamp(rand(Beta(model.alpha_p + D_R[k] * route_n[k] * r_R[k],
-                                 model.beta_p + Z2_R[k])), 1e-4, 1 - 1e-12)
+    # p update: the MARGINAL move every P_MH_EVERY sweeps, the conjugate one otherwise.
+    # Never both in the same sweep -- the conjugate draw would just be overwritten, and it
+    # is the marginal move that actually learns p (the conjugate conditional is centred on
+    # wherever p already is; measured, it does not move at this data scale).
+    sweep = get(state, "sweep", 0) + 1
+    do_marginal = (sweep % P_MH_EVERY == 0)
+    if !do_marginal
+        @views for k in 1:model.R
+            p_R[k] = clamp(rand(Beta(model.alpha_p + D_R[k] * route_n[k] * r_R[k],
+                                     model.beta_p + Z2_R[k])), 1e-4, 1 - 1e-12)
+        end
     end
 
     # ---- r_k | . : Gamma conjugacy through the CRT counts ----
@@ -139,6 +276,11 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
         r_R[k] = rand(Gamma(model.a + Z1_R[k],
                             1 / (bmu + D_R[k] * route_n[k] * log(1 / p_R[k]))))
     end
+
+    # ---- p_k | mu : mean-preserving griddy move (replaces the conjugate p step's role
+    #      as the dispersion update; see griddy_p! above for why the conjugate one cannot
+    #      learn p at this data scale). Resets r_k along the curve r = mu*p/(1-p).
+    accrate = do_marginal ? mh_p!(r_R, p_R, D_R, uY, cY, model, tabs_by_D, bmu) : NaN
 
     # ---- population rate b | r : conjugate (same hierarchy as flights_hier) ----
     bmu = rand(Gamma(model.a0 + model.R * model.a, 1 / (model.b0 + sum(r_R))))
@@ -154,11 +296,6 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
             (d - 1) * log(rho) / 2 + (model.Dmax - d) * log(1 - rho) / 2
             for d in 1:2:model.Dmax
         ]
-        tabs_y = isnothing(mask) ?
-            get!(() -> route_ycounts(Y_NM, route_idx), data, "route_ycounts") :
-            route_ycounts(Y_NM, route_idx)
-        uY = tabs_y[1]::Vector{Vector{Int}}
-        cY = tabs_y[2]::Vector{Vector{Int}}
         cand = collect(1:2:model.Dmax); ncand = length(cand)
         tabs = [orderstat_grid_coefs(d, (d ÷ 2) + 1) for d in cand]
 
@@ -181,7 +318,7 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
                         logprobs[ci] += c * lf
                     else
                         j = (d ÷ 2) + 1
-                        v = logpmf_orderstat_grid(F, f, d, j, tabs[ci], pA, pE, pB)
+                        v = logpmf_orderstat_grid(F, f, d, j, tabs[ci], pA, pE, pB, lf)
                         isnan(v) && (v = logpmfOrderStatNegBin(y, r, p, d, j))
                         logprobs[ci] += c * v
                     end
@@ -193,5 +330,6 @@ function backward_sample(model::flights_mednb, data, state, mask = nothing;
                         model.beta + (model.Dmax * model.R - sum(D_R)) / 2))
     end
 
-    return data, Dict("r_R" => r_R, "p_R" => p_R, "D_R" => D_R, "p" => rho, "bmu" => bmu)
+    return data, Dict("r_R" => r_R, "p_R" => p_R, "D_R" => D_R, "p" => rho, "bmu" => bmu,
+                      "sweep" => sweep, "p_accrate" => accrate)
 end

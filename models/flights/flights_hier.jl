@@ -133,7 +133,7 @@ function backward_sample(model::flights_hier, data, state, mask=nothing; skipupd
                         logprobs[ci] += c * lf
                     else
                         j = (d ÷ 2) + 1
-                        v = logpmf_orderstat_grid(F, f, d, j, tabs[ci], pA, pE, pB)
+                        v = logpmf_orderstat_grid(F, f, d, j, tabs[ci], pA, pE, pB, lf)
                         isnan(v) && (v = logpmfOrderStatPoisson(y, mu, d, j))
                         logprobs[ci] += c * v
                     end
