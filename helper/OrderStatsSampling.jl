@@ -51,6 +51,30 @@ struct OSConsts
     lccdfY::Float64
 end
 
+# StatsFuns' Poisson logcdf/logccdf go through an incomplete gamma that THROWS
+# ("Unsupported order |nu| > 50 off the positive real axis") for some (mu, Y) with Y > 50 --
+# e.g. Poisson(1000) at Y=60, or Poisson(1e4) at Y=100, while Poisson(1000) at Y=16 and
+# Poisson(500) at Y=51 are fine. Flights has Y from 16 to 368, so any large mu drawn at
+# initialisation can land in that zone; it killed 10 runs of the production campaign (every
+# chain-3 MedPois run) at sweep 1. The exact call is kept -- it is the accurate one and the
+# fallback is never reached in the normal regime -- with a guard that uses the cdf value we
+# already have. log(F) deviates from logcdf by ~3e-8, and when F itself has underflowed the
+# largest term of the sum is the right order of magnitude.
+@inline function _robust_logcdf(dist, x, F)
+    try
+        return logcdf(dist, x)
+    catch
+        return F > 0.0 ? log(F) : logpdf(dist, x)
+    end
+end
+@inline function _robust_logccdf(dist, x, F)
+    try
+        return logccdf(dist, x)
+    catch
+        return F < 1.0 ? log1p(-F) : logpdf(dist, x + 1)
+    end
+end
+
 @inline function os_consts(dist, Y)
     pdfY = pdf(dist, Y)
     FYm1 = cdf(dist, Y - 1)
@@ -62,7 +86,7 @@ end
     FY = FYm1 + pdfY
     FY > 1.0 && (FY = 1.0)
     OSConsts(pdfY, logpdf(dist, Y), FY, FYm1,
-             logcdf(dist, Y - 1), logccdf(dist, Y))
+             _robust_logcdf(dist, Y - 1, FYm1), _robust_logccdf(dist, Y, FY))
 end
 
 # cdf/ccdf of the j-th order statistic of n iid draws, evaluated through the parent cdf
