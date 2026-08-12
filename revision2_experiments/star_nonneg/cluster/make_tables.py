@@ -29,10 +29,14 @@ only because of the pairing.
                            is what the submitted table effectively did; it is
                            more generous and ignores the pairing.
   --tol T                  additionally bold anything within T nats of the best
-                           regardless of significance. Use when a difference is
-                           statistically resolvable but scientifically nil
-                           (T=0.01 bolds MedNB alongside NB on NB data). Default
-                           0.0 = off.
+                           regardless of significance. DEFAULT 0.01, which is
+                           the chosen convention: with 100 paired replicates the
+                           test resolves differences far below what the table
+                           prints, so the strict rule would bold Poisson and
+                           MedPois at -2.29 while leaving NB's identical-looking
+                           -2.29 plain (paired gap 0.006 +/- 0.002). Bolding to
+                           0.01 nats keeps equal printed values typeset equally.
+                           Pass --tol 0 for the strict paired rule.
 """
 import argparse
 import glob
@@ -171,7 +175,7 @@ def recovery_table(cos):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bold", choices=["paired", "se"], default="paired")
-    ap.add_argument("--tol", type=float, default=0.0)
+    ap.add_argument("--tol", type=float, default=0.01)
     a = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
