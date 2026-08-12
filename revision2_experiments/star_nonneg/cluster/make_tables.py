@@ -9,7 +9,8 @@ Inputs (per-cell CSVs, one row each, 3200 cells = 4 datasets x 8 models x 100 se
 
 Outputs (tabular environments only -- wrap \\caption/\\label yourself):
   tables/inforate.tex     Table 1
-  tables/diagnostics.tex  Appendix D diagnostics (see --diag-layout)
+  tables/diagnostics_mu.tex, _loglik.tex, _timing.tex   Appendix D (wide layout)
+  tables/diagnostics.tex  Appendix D, single stacked table (--diag-layout tall)
   tables/recovery.tex     factor recovery, permutation vs rotation alignment
 
 Usage:  python3 make_tables.py [--bold {paired,se}] [--tol T]
@@ -183,10 +184,9 @@ def diagnostics_wide(diag, base):
         T.append(f"{lbl} & " + " & ".join(vals) + r" \\")
     T += [r"\bottomrule", r"\end{tabular}"]
 
-    return ("% ==== fitted mean mu_ij ====\n" + mu
-            + "\n\n% ==== heldout log-density l ====\n" + ll
-            + "\n\n% ==== seconds per 1000 iterations of one chain ====\n"
-            + "\n".join(T))
+    return {"diagnostics_mu.tex": mu,
+            "diagnostics_loglik.tex": ll,
+            "diagnostics_timing.tex": "\n".join(T)}
 
 
 def diagnostics_table(diag, base):
@@ -256,8 +256,11 @@ def main():
             d = load(sub)
             check_complete(d, sub)
             if key == "diagnostics.tex":
-                tables[key] = (diagnostics_wide(d, base) if a.diag_layout == "wide"
-                               else diagnostics_table(d, base))
+                # wide emits one file per table so each can be its own float
+                if a.diag_layout == "wide":
+                    tables.update(diagnostics_wide(d, base))
+                else:
+                    tables[key] = diagnostics_table(d, base)
             else:
                 tables[key] = fn(d)
         else:
