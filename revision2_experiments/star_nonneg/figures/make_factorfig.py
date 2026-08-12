@@ -25,12 +25,14 @@ permute onto the truth, finally matching signs per column. Skipping this would
 make the panels incomparable -- the figure would be meaningless rather than
 merely unflattering to STAR.
 
-COLOR. The truth tile and every non-negative model share one sequential
-white-to-red scale. Gaussian STAR uses a diverging blue-white-red scale centered
-at zero because its loadings genuinely go negative; that is the visual point of
-the panel, and a sequential scale would conceal it. Each tile is scaled to its
-own maximum, since factors are identified only up to a scale exchanged with phi
--- only the PATTERN is comparable across models, never the magnitude.
+COLOR. Every loading tile uses ONE diverging blue-white-red scale with white at
+zero, so a single colorbar describes all of them. The non-negative models simply
+never reach the blue half -- that is the constraint made visible -- while
+Gaussian STAR-G uses the full range because its loadings genuinely go negative.
+Each tile is divided by its own largest absolute value, since factors are
+identified only up to a scale exchanged with phi: only the PATTERN is comparable
+across models, never the magnitude. The colorbar is therefore a RELATIVE scale
+running -1 to 1, not a common one.
 
 Usage: python3 make_factorfig.py [seed]
 """
@@ -78,7 +80,7 @@ PANELS = [("medpois", "MedPoisson", False),
           ("nb", "NB", False),
           ("star_id", "STAR-G", True)]
 
-SEQ = LinearSegmentedColormap.from_list("wred", ["white", "#C0392B"])
+DIV = "RdBu_r"   # shared diverging scale for all loading tiles, white at zero
 DATA_CMAP = LinearSegmentedColormap.from_list("wdata", ["white", "#C62828"])
 
 
@@ -151,15 +153,16 @@ def style(ax):
         s.set_linewidth(0.6)
 
 
-def draw_loadings(ax, A, gauss):
-    """Draw one loading tile, scaled to its own extreme (see COLOR above)."""
-    if gauss:
-        m = np.abs(A).max()
-        ax.imshow(A / m, cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="auto",
-                  interpolation="nearest")
-    else:
-        ax.imshow(A / A.max(), cmap=SEQ, vmin=0.0, vmax=1.0, aspect="auto",
-                  interpolation="nearest")
+def draw_loadings(ax, A):
+    """One loading tile on the shared diverging scale (see COLOR above).
+
+    Dividing by max|A| puts every tile on [-1, 1] with 0 fixed at white, so the
+    same colorbar reads for all of them. Non-negative models occupy only the
+    upper half; that asymmetry is the constraint being displayed, not an
+    artifact of the scaling.
+    """
+    ax.imshow(A / np.abs(A).max(), cmap=DIV, vmin=-1.0, vmax=1.0,
+              aspect="auto", interpolation="nearest")
     style(ax)
 
 
@@ -169,7 +172,7 @@ fig = plt.figure(figsize=(15.5, 4.9))
 # box only pads it with whitespace instead of enlarging it. The bottom margin
 # leaves a clear strip for the (a)/(b) labels so they never sit over a tile.
 outer = fig.add_gridspec(1, 3, width_ratios=[0.58, 0.34, 1.0], wspace=0.08,
-                         left=0.035, right=0.945, top=0.90, bottom=0.15)
+                         left=0.035, right=0.965, top=0.90, bottom=0.15)
 
 axa = fig.add_subplot(outer[0, 0])
 im = axa.imshow(Y, cmap=DATA_CMAP, aspect="equal", interpolation="nearest")
@@ -182,25 +185,29 @@ style(axa)
 axa.set_xlabel("$j$", fontsize=15, labelpad=2)
 axa.set_ylabel("$i$", fontsize=15, labelpad=2, rotation=0, va="center")
 cb_data = fig.colorbar(im, ax=axa, fraction=0.030, pad=0.06)
-cb_data.set_label("$Y_{i,j}$", fontsize=15, labelpad=4)
+# Colorbar labels go ABOVE the bar rather than beside it. matplotlib's default
+# runs them sideways up a vertical bar; set_label(rotation=0) turns them upright
+# but pushes them right, where they collide with the next panel or fall off the
+# canvas. A title sits upright and takes no horizontal room.
+cb_data.ax.set_title("$Y_{i,j}$", fontsize=15, pad=8)
 
 grid = outer[0, 2].subgridspec(2, 3, wspace=0.18, hspace=0.30)
 tiles = []
-for i, (key, label, gauss) in enumerate(PANELS):
+for i, (key, label, _) in enumerate(PANELS):
     ax = fig.add_subplot(grid[i // 3, i % 3])
-    draw_loadings(ax, loadings[key], gauss)
+    draw_loadings(ax, loadings[key])
     ax.set_title(label, fontsize=13, pad=5)
     tiles.append(ax)
 
-# One shared colorbar for panel (b). Tiles are normalized to their own maximum,
-# so the scale is RELATIVE -- factors are identified only up to a scale traded
-# off against phi, and the absolute magnitudes are not comparable across models.
-# It is drawn before the truth tile is placed because stealing space from the
-# tiles changes their boxes, and the truth tile is sized from one of them.
-cb_theta = fig.colorbar(ScalarMappable(norm=Normalize(0.0, 1.0), cmap=SEQ),
-                        ax=tiles, fraction=0.022, pad=0.02, ticks=[0, 1])
-cb_theta.set_label(r"$\theta_{i,k}$", fontsize=15, labelpad=4)
-cb_theta.ax.set_yticklabels(["0", "max"])
+# One shared colorbar for panel (b). Tiles are normalized to their own largest
+# absolute value, so the scale is RELATIVE -- factors are identified only up to
+# a scale traded off against phi, and absolute magnitudes are not comparable
+# across models. Drawn before the truth tile is placed, because stealing space
+# from the tiles changes their boxes and the truth tile is sized from one.
+cb_theta = fig.colorbar(ScalarMappable(norm=Normalize(-1.0, 1.0), cmap=DIV),
+                        ax=tiles, fraction=0.022, pad=0.02,
+                        ticks=[-1, -0.5, 0, 0.5, 1])
+cb_theta.ax.set_title(r"$\theta_{i,k}$", fontsize=15, pad=8)
 
 # The truth tile takes its width and height from an ALREADY-PLACED (b) tile, so
 # it matches them exactly whatever the grid geometry, and is vertically centered
@@ -213,7 +220,7 @@ DATA_GAP = 0.032
 ymid = (tiles[0].get_position().y1 + tiles[3].get_position().y0) / 2
 axt = fig.add_axes([cb_data.ax.get_position().x1 + DATA_GAP,
                     ymid - th / 2, tw, th])
-draw_loadings(axt, Utrue, False)
+draw_loadings(axt, Utrue)
 axt.set_title("True factor matrix", fontsize=13, pad=5)
 
 # Panel labels and the divider sit in FIGURE coordinates, so the figure is saved
