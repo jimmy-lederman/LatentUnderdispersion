@@ -77,6 +77,22 @@ revision2_experiments/flights/cluster/*
 !revision2_experiments/flights/cluster/*.jl
 !revision2_experiments/flights/cluster/*.sh
 !revision2_experiments/flights/cluster/*.sbatch
+!revision2_experiments/covid/
+revision2_experiments/covid/*
+!revision2_experiments/covid/*.jl
+!revision2_experiments/covid/*.md
+# reference/covid_orig.jl is git HEAD's sampler with only the two fixes it needs to run,
+# kept so the validation scripts can compare against it; it is generated, but tracked so
+# the comparison is reproducible.
+!revision2_experiments/covid/reference/
+revision2_experiments/covid/reference/*
+!revision2_experiments/covid/reference/*.jl
+!revision2_experiments/covid/cluster/
+revision2_experiments/covid/cluster/*
+!revision2_experiments/covid/cluster/*.jl
+!revision2_experiments/covid/cluster/*.sh
+!revision2_experiments/covid/cluster/*.sbatch
+
 !revision2_experiments/perf_review/
 revision2_experiments/perf_review/*
 !revision2_experiments/perf_review/bench_by_dataset.jl
@@ -91,3 +107,7 @@ revison_experiments/factorexperiment/*
 revison_experiments/factorexperiment/data/*
 !revison_experiments/factorexperiment/data/*.csv
 !revison_experiments/factorexperiment/data/*.Rmd
+
+# revision2 figure: script and output are tracked, the 65MB of sample inputs are not
+!revision2_experiments/star_nonneg/figures/
+revision2_experiments/star_nonneg/cluster/figsamples/
