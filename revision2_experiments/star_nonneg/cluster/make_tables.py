@@ -132,20 +132,23 @@ def inforate_table(df, rule, tol):
 
 
 def diagnostics_table(diag, base):
+    """All four data-generating processes in ONE tabular, separated by spanning
+    section rows, so the appendix carries a single float rather than four."""
     m = diag.merge(base[["dataset", "model", "seed", "time_s"]],
                    on=["dataset", "model", "seed"])
-    out = []
-    for ds, head in DATASETS:
+    out = [r"\begin{tabular}{lrrrrrrr}", r"\toprule",
+           r" & \multicolumn{3}{c}{fitted mean $\mu_{ij}$} & "
+           r"\multicolumn{3}{c}{heldout log-density $\ell$} & \\",
+           r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
+           r"model & ESS$_{\mathrm{bulk}}$ & ESS$_{\mathrm{tail}}$ & "
+           r"$\widehat{R}_{\max}$ & ESS$_{\mathrm{bulk}}$ & "
+           r"ESS$_{\mathrm{tail}}$ & $\widehat{R}_{\max}$ & s/1k iter \\"]
+    for n, (ds, head) in enumerate(DATASETS):
         s = m[m.dataset == ds]
-        out.append(f"% ---- {ds} ----")
-        out += [r"\begin{tabular}{lrrrrrrr}", r"\toprule",
-                head + r" & \multicolumn{3}{c}{fitted mean $\mu_{ij}$} & "
-                r"\multicolumn{3}{c}{heldout log-density $\ell$} & \\",
-                r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
-                r"model & ESS$_{\mathrm{bulk}}$ & ESS$_{\mathrm{tail}}$ & "
-                r"$\widehat{R}_{\max}$ & ESS$_{\mathrm{bulk}}$ & "
-                r"ESS$_{\mathrm{tail}}$ & $\widehat{R}_{\max}$ & s/1k iter \\",
-                r"\midrule"]
+        out.append(r"\midrule" if n == 0 else r"\midrule")
+        out.append(r"\multicolumn{8}{l}{\emph{data generating process: "
+                   + head + r"}} \\")
+        out.append(r"\addlinespace[2pt]")
         for key, lbl in MODELS:
             g = s[s.model == key]
             out.append(
@@ -153,7 +156,7 @@ def diagnostics_table(diag, base):
                 f"{g.essmu_tail_med.mean():.0f} & {g.rhatmu_rank_max.max():.3f} & "
                 f"{g.essll_bulk.mean():.0f} & {g.essll_tail.mean():.0f} & "
                 f"{g.rhatll_rank.max():.3f} & {(g.time_s / 40).mean():.2f}" + r" \\")
-        out += [r"\bottomrule", r"\end{tabular}", ""]
+    out += [r"\bottomrule", r"\end{tabular}"]
     return "\n".join(out)
 
 
