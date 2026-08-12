@@ -25,14 +25,23 @@ permute onto the truth, finally matching signs per column. Skipping this would
 make the panels incomparable -- the figure would be meaningless rather than
 merely unflattering to STAR.
 
-COLOR. Every loading tile uses ONE diverging blue-white-red scale with white at
-zero, so a single colorbar describes all of them. The non-negative models simply
-never reach the blue half -- that is the constraint made visible -- while
-Gaussian STAR-G uses the full range because its loadings genuinely go negative.
-Each tile is divided by its own largest absolute value, since factors are
-identified only up to a scale exchanged with phi: only the PATTERN is comparable
-across models, never the magnitude. The colorbar is therefore a RELATIVE scale
-running -1 to 1, not a common one.
+COLOR. Every tile is drawn at its TRUE magnitude on one shared diverging
+blue-white-red scale with white at zero, so the colorbar reads in the units of
+theta and tiles are directly comparable to each other and to the truth.
+
+This is possible because theta_k ~ Dirichlet(1) constrains each factor column to
+the simplex: the columns of every non-negative fit, and of the truth, sum to
+exactly 1. The scale ambiguity that generally afflicts a factorization -- theta
+-> theta*c with phi -> phi/c leaving theta*phi unchanged -- is removed by that
+prior, so the magnitudes are identified and rescaling each tile to its own
+maximum would discard real information.
+
+The exception is STAR-G, whose Gaussian prior imposes no such constraint; its
+column sums are ~(-1.04, 0.12, -1.41) rather than 1, so its scale is pinned only
+by the learned prior variance. It happens to land in the same range here, but a
+reader should not read its magnitudes as commensurate. It is also the only tile
+reaching the blue half, since the others cannot be negative -- that asymmetry is
+the constraint made visible.
 
 Usage: python3 make_factorfig.py [seed]
 """
@@ -153,15 +162,14 @@ def style(ax):
         s.set_linewidth(0.6)
 
 
-def draw_loadings(ax, A):
-    """One loading tile on the shared diverging scale (see COLOR above).
+def draw_loadings(ax, A, vlim):
+    """One loading tile at TRUE magnitude on the shared scale (see COLOR above).
 
-    Dividing by max|A| puts every tile on [-1, 1] with 0 fixed at white, so the
-    same colorbar reads for all of them. Non-negative models occupy only the
-    upper half; that asymmetry is the constraint being displayed, not an
-    artifact of the scaling.
+    Symmetric limits fix white at zero, so the non-negative fits occupy only the
+    upper half of the colorbar while STAR-G spans both -- that asymmetry is the
+    constraint being displayed, not an artifact of the scaling.
     """
-    ax.imshow(A / np.abs(A).max(), cmap=DIV, vmin=-1.0, vmax=1.0,
+    ax.imshow(A, cmap=DIV, vmin=-vlim, vmax=vlim,
               aspect="auto", interpolation="nearest")
     style(ax)
 
@@ -191,22 +199,23 @@ cb_data = fig.colorbar(im, ax=axa, fraction=0.030, pad=0.06)
 # canvas. A title sits upright and takes no horizontal room.
 cb_data.ax.set_title("$Y_{i,j}$", fontsize=15, pad=8)
 
+# One symmetric limit for every tile, including the truth, so all of them are on
+# a genuinely common scale rather than each normalized to itself.
+VLIM = max([np.abs(Utrue).max()] + [np.abs(loadings[k]).max() for k, _, _ in PANELS])
+
 grid = outer[0, 2].subgridspec(2, 3, wspace=0.18, hspace=0.30)
 tiles = []
 for i, (key, label, _) in enumerate(PANELS):
     ax = fig.add_subplot(grid[i // 3, i % 3])
-    draw_loadings(ax, loadings[key])
+    draw_loadings(ax, loadings[key], VLIM)
     ax.set_title(label, fontsize=13, pad=5)
     tiles.append(ax)
 
-# One shared colorbar for panel (b). Tiles are normalized to their own largest
-# absolute value, so the scale is RELATIVE -- factors are identified only up to
-# a scale traded off against phi, and absolute magnitudes are not comparable
-# across models. Drawn before the truth tile is placed, because stealing space
-# from the tiles changes their boxes and the truth tile is sized from one.
-cb_theta = fig.colorbar(ScalarMappable(norm=Normalize(-1.0, 1.0), cmap=DIV),
-                        ax=tiles, fraction=0.022, pad=0.02,
-                        ticks=[-1, -0.5, 0, 0.5, 1])
+# One shared colorbar for panel (b), in the units of theta. Drawn before the
+# truth tile is placed, because stealing space from the tiles changes their
+# boxes and the truth tile is sized from one of them.
+cb_theta = fig.colorbar(ScalarMappable(norm=Normalize(-VLIM, VLIM), cmap=DIV),
+                        ax=tiles, fraction=0.022, pad=0.02)
 cb_theta.ax.set_title(r"$\theta_{i,k}$", fontsize=15, pad=8)
 
 # The truth tile takes its width and height from an ALREADY-PLACED (b) tile, so
@@ -220,7 +229,7 @@ DATA_GAP = 0.032
 ymid = (tiles[0].get_position().y1 + tiles[3].get_position().y0) / 2
 axt = fig.add_axes([cb_data.ax.get_position().x1 + DATA_GAP,
                     ymid - th / 2, tw, th])
-draw_loadings(axt, Utrue)
+draw_loadings(axt, Utrue, VLIM)
 axt.set_title("True factor matrix", fontsize=13, pad=5)
 
 # Panel labels and the divider sit in FIGURE coordinates, so the figure is saved
