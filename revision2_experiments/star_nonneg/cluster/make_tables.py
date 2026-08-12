@@ -139,7 +139,7 @@ def diagnostics_table(diag, base):
         s = m[m.dataset == ds]
         out.append(f"% ---- {ds} ----")
         out += [r"\begin{tabular}{lrrrrrrr}", r"\toprule",
-                r" & \multicolumn{3}{c}{fitted mean $\mu_{ij}$} & "
+                head + r" & \multicolumn{3}{c}{fitted mean $\mu_{ij}$} & "
                 r"\multicolumn{3}{c}{heldout log-density $\ell$} & \\",
                 r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
                 r"model & ESS$_{\mathrm{bulk}}$ & ESS$_{\mathrm{tail}}$ & "
