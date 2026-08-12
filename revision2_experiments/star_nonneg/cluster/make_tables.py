@@ -9,7 +9,7 @@ Inputs (per-cell CSVs, one row each, 3200 cells = 4 datasets x 8 models x 100 se
 
 Outputs (tabular environments only -- wrap \\caption/\\label yourself):
   tables/inforate.tex     Table 1
-  tables/diagnostics.tex  Appendix D, one tabular per dataset
+  tables/diagnostics.tex  Appendix D diagnostics (see --diag-layout)
   tables/recovery.tex     factor recovery, permutation vs rotation alignment
 
 Usage:  python3 make_tables.py [--bold {paired,se}] [--tol T]
@@ -131,6 +131,64 @@ def inforate_table(df, rule, tol):
     return "\n".join(L)
 
 
+def diagnostics_wide(diag, base):
+    """Transposed layout: models are ROWS, datasets become column groups.
+
+    The stacked version runs 36 body rows, which overflows a float. Here each
+    table is 8 rows and 13 columns, so the same numbers fit comfortably. The
+    two functionals and the timing become three small tables instead of one
+    long one -- the alternative would be 17+ columns, which is worse.
+    """
+    m = diag.merge(base[["dataset", "model", "seed", "time_s"]],
+                   on=["dataset", "model", "seed"])
+    short = {"GC": "GC", "CMP": "CMP", "Poisson": "Poisson", "NB": "NB"}
+
+    def block(cols, fmts, aggs):
+        spec = "l" + " rrr" * len(DATASETS)
+        L = [r"\begin{tabular}{" + spec + "}", r"\toprule",
+             " & " + " & ".join(r"\multicolumn{3}{c}{" + short[d] + "}"
+                                for d, _ in DATASETS) + r" \\",
+             "".join(r"\cmidrule(lr){%d-%d}" % (2 + 3 * i, 4 + 3 * i)
+                     for i in range(len(DATASETS))),
+             "model & " + " & ".join([" & ".join(cols)] * len(DATASETS)) + r" \\",
+             r"\midrule"]
+        for key, lbl in MODELS:
+            cells = []
+            for ds, _ in DATASETS:
+                g = m[(m.dataset == ds) & (m.model == key)]
+                cells += [f.format(a(g)) for f, a in zip(fmts, aggs)]
+            L.append(f"{lbl} & " + " & ".join(cells) + r" \\")
+        L += [r"\bottomrule", r"\end{tabular}"]
+        return "\n".join(L)
+
+    mu = block([r"ESS$_{\mathrm{bulk}}$", r"ESS$_{\mathrm{tail}}$",
+                r"$\widehat{R}_{\max}$"],
+               ["{:.0f}", "{:.0f}", "{:.3f}"],
+               [lambda g: g.essmu_bulk_med.mean(),
+                lambda g: g.essmu_tail_med.mean(),
+                lambda g: g.rhatmu_rank_max.max()])
+    ll = block([r"ESS$_{\mathrm{bulk}}$", r"ESS$_{\mathrm{tail}}$",
+                r"$\widehat{R}_{\max}$"],
+               ["{:.0f}", "{:.0f}", "{:.3f}"],
+               [lambda g: g.essll_bulk.mean(),
+                lambda g: g.essll_tail.mean(),
+                lambda g: g.rhatll_rank.max()])
+
+    T = [r"\begin{tabular}{l" + "r" * len(DATASETS) + "}", r"\toprule",
+         "model & " + " & ".join(short[d] for d, _ in DATASETS) + r" \\",
+         r"\midrule"]
+    for key, lbl in MODELS:
+        vals = [f"{(m[(m.dataset == ds) & (m.model == key)].time_s / 40).mean():.2f}"
+                for ds, _ in DATASETS]
+        T.append(f"{lbl} & " + " & ".join(vals) + r" \\")
+    T += [r"\bottomrule", r"\end{tabular}"]
+
+    return ("% ==== fitted mean mu_ij ====\n" + mu
+            + "\n\n% ==== heldout log-density l ====\n" + ll
+            + "\n\n% ==== seconds per 1000 iterations of one chain ====\n"
+            + "\n".join(T))
+
+
 def diagnostics_table(diag, base):
     """All four data-generating processes in ONE tabular, separated by spanning
     section rows, so the appendix carries a single float rather than four."""
@@ -179,6 +237,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bold", choices=["paired", "se"], default="paired")
     ap.add_argument("--tol", type=float, default=0.01)
+    ap.add_argument("--diag-layout", choices=["wide", "tall"], default="wide",
+                    help="wide: models as rows, datasets as column groups "
+                         "(8 rows, fits a float). tall: one stacked table, "
+                         "36 rows, needs longtable or a full page.")
     a = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -193,7 +255,11 @@ def main():
         if glob.glob(os.path.join(HERE, sub, "*.csv")):
             d = load(sub)
             check_complete(d, sub)
-            tables[key] = fn(d, base) if key == "diagnostics.tex" else fn(d)
+            if key == "diagnostics.tex":
+                tables[key] = (diagnostics_wide(d, base) if a.diag_layout == "wide"
+                               else diagnostics_table(d, base))
+            else:
+                tables[key] = fn(d)
         else:
             print(f"skipping {key}: no {sub}/", file=sys.stderr)
 
