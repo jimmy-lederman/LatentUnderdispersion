@@ -55,7 +55,8 @@ import h5py
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.lines import Line2D
 
 SEED = int(sys.argv[1]) if len(sys.argv) > 1 else 1
@@ -64,15 +65,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DATADIR = os.path.join(HERE, "../../../revison_experiments/factorexperiment/data")
 SAMPDIR = os.path.join(HERE, "../cluster/figsamples")
 
-# Panel (b): the six fitted models, two rows of three. STAR-NN is placed next to
-# STAR so the only difference between neighbouring tiles is the factor prior.
+# Panel (b), filled row-major into 2x3. Each COLUMN pairs a model with its
+# counterpart, so every vertical neighbour differs in exactly one thing:
+#   MedPoisson / Poisson    order statistic layer vs its base distribution
+#   MedNB      / NB         likewise
+#   STAR-NN    / STAR-G     same STAR likelihood, non-negative vs Gaussian prior
 # (model key, label, Gaussian prior?)
 PANELS = [("medpois", "MedPoisson", False),
           ("mednb", "MedNB", False),
+          ("starnnf_id", "STAR-NN", False),
           ("poisson", "Poisson", False),
           ("nb", "NB", False),
-          ("starnnf_id", "STAR-NN", False),
-          ("star_id", "STAR", True)]
+          ("star_id", "STAR-G", True)]
 
 SEQ = LinearSegmentedColormap.from_list("wred", ["white", "#C0392B"])
 DATA_CMAP = LinearSegmentedColormap.from_list("wdata", ["white", "#C62828"])
@@ -148,22 +152,24 @@ def style(ax):
 
 
 def draw_loadings(ax, A, gauss):
+    """Draw one loading tile, scaled to its own extreme (see COLOR above)."""
     if gauss:
         m = np.abs(A).max()
-        ax.imshow(A, cmap="RdBu_r", vmin=-m, vmax=m, aspect="auto",
+        ax.imshow(A / m, cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="auto",
                   interpolation="nearest")
     else:
-        ax.imshow(A, cmap=SEQ, vmin=0.0, vmax=A.max(), aspect="auto",
+        ax.imshow(A / A.max(), cmap=SEQ, vmin=0.0, vmax=1.0, aspect="auto",
                   interpolation="nearest")
     style(ax)
 
 
-fig = plt.figure(figsize=(15.5, 4.6))
+fig = plt.figure(figsize=(15.5, 4.9))
 # Panel (a) holds the data and the true loadings; panel (b) the six fits. The
 # left ratio keeps the square 20x20 heatmap close to filling its box -- a wider
-# box only pads it with whitespace instead of enlarging it.
-outer = fig.add_gridspec(1, 3, width_ratios=[0.58, 0.38, 1.0], wspace=0.10,
-                         left=0.03, right=0.985, top=0.90, bottom=0.06)
+# box only pads it with whitespace instead of enlarging it. The bottom margin
+# leaves a clear strip for the (a)/(b) labels so they never sit over a tile.
+outer = fig.add_gridspec(1, 3, width_ratios=[0.58, 0.34, 1.0], wspace=0.08,
+                         left=0.035, right=0.945, top=0.90, bottom=0.15)
 
 axa = fig.add_subplot(outer[0, 0])
 im = axa.imshow(Y, cmap=DATA_CMAP, aspect="equal", interpolation="nearest")
@@ -173,9 +179,12 @@ axa.grid(which="minor", color="0.75", linewidth=0.4)
 axa.tick_params(which="both", bottom=False, left=False,
                 labelbottom=False, labelleft=False)
 style(axa)
-fig.colorbar(im, ax=axa, fraction=0.030, pad=0.08)
+axa.set_xlabel("$j$", fontsize=15, labelpad=2)
+axa.set_ylabel("$i$", fontsize=15, labelpad=2, rotation=0, va="center")
+cb_data = fig.colorbar(im, ax=axa, fraction=0.030, pad=0.06)
+cb_data.set_label("$Y_{i,j}$", fontsize=15, labelpad=4)
 
-grid = outer[0, 2].subgridspec(2, 3, wspace=0.18, hspace=0.32)
+grid = outer[0, 2].subgridspec(2, 3, wspace=0.18, hspace=0.30)
 tiles = []
 for i, (key, label, gauss) in enumerate(PANELS):
     ax = fig.add_subplot(grid[i // 3, i % 3])
@@ -183,21 +192,29 @@ for i, (key, label, gauss) in enumerate(PANELS):
     ax.set_title(label, fontsize=13, pad=5)
     tiles.append(ax)
 
+# One shared colorbar for panel (b). Tiles are normalized to their own maximum,
+# so the scale is RELATIVE -- factors are identified only up to a scale traded
+# off against phi, and the absolute magnitudes are not comparable across models.
+# It is drawn before the truth tile is placed because stealing space from the
+# tiles changes their boxes, and the truth tile is sized from one of them.
+cb_theta = fig.colorbar(ScalarMappable(norm=Normalize(0.0, 1.0), cmap=SEQ),
+                        ax=tiles, fraction=0.022, pad=0.02, ticks=[0, 1])
+cb_theta.set_label(r"$\theta_{i,k}$", fontsize=15, labelpad=4)
+cb_theta.ax.set_yticklabels(["0", "max"])
+
 # The truth tile takes its width and height from an ALREADY-PLACED (b) tile, so
-# it matches them exactly whatever the grid geometry, and is centered both in
-# its own column and vertically in the figure. Sizing it from its own gridspec
-# cell would only approximate the match.
+# it matches them exactly whatever the grid geometry, and is vertically centered
+# on the tile block. Its left edge is set from the data colorbar rather than
+# from a gridspec cell, which is what actually controls the gap the eye sees --
+# matplotlib does not count colorbar tick labels in the gridspec box.
 tpos = tiles[0].get_position()
 tw, th = tpos.width, tpos.height
-slot = outer[0, 1].get_position(fig)
-# Nudge clear of the colorbar: its tick labels overhang the gridspec box for
-# column 0, which matplotlib does not account for, so a tile centered in column
-# 1 would otherwise be drawn on top of them.
-CBAR_LABEL_PAD = 0.016
-axt = fig.add_axes([slot.x0 + (slot.width - tw) / 2 + CBAR_LABEL_PAD,
-                    0.5 - th / 2, tw, th])
+DATA_GAP = 0.032
+ymid = (tiles[0].get_position().y1 + tiles[3].get_position().y0) / 2
+axt = fig.add_axes([cb_data.ax.get_position().x1 + DATA_GAP,
+                    ymid - th / 2, tw, th])
 draw_loadings(axt, Utrue, False)
-axt.set_title("Truth", fontsize=13, pad=5)
+axt.set_title("True factor matrix", fontsize=13, pad=5)
 
 # Panel labels and the divider sit in FIGURE coordinates, so the figure is saved
 # without bbox_inches="tight" -- tight cropping rescales those coordinates after
@@ -205,9 +222,9 @@ axt.set_title("Truth", fontsize=13, pad=5)
 # truth tile and the grid, so it tracks any layout change without crowding
 # either side.
 DIV = (axt.get_position().x1 + tpos.x0) / 2
-fig.add_artist(Line2D([DIV, DIV], [0.04, 0.96], color="black", linewidth=3))
-fig.text(0.015, 0.07, "(a)", fontsize=20, va="bottom", ha="left")
-fig.text(DIV + 0.012, 0.07, "(b)", fontsize=20, va="bottom", ha="left")
+fig.add_artist(Line2D([DIV, DIV], [0.05, 0.97], color="black", linewidth=3))
+fig.text(0.015, 0.035, "(a)", fontsize=20, va="bottom", ha="left")
+fig.text(DIV + 0.012, 0.035, "(b)", fontsize=20, va="bottom", ha="left")
 
 out = os.path.join(HERE, "factorsfig")
 fig.savefig(out + ".pdf")
