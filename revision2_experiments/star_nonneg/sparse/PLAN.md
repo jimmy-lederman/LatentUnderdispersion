@@ -301,3 +301,70 @@ a = c in {1, 0.5, 0.25, 0.1, 0.05, 0.01} x {poisson, medpois, starnn_slice,
 starnn_mh} x 10 seeds, at 4 chains x 6000 draws after 6000 warmup -- 3x the
 earlier budget, so the models being compared have converged rather than being
 compared mid-transient.
+
+---
+
+# Extended grid, long run: 240 cells, 10 seeds, 4 chains x 6000 after 6000 warmup
+
+## Where the comparison is valid at all
+
+Fraction of seeds with rank-normalized R-hat > 1.05:
+
+| a = c | Poisson | MedPois | STAR-NN slice | STAR-NN MH |
+|---|---|---|---|---|
+| 1.00 | 0.0 | 0.0 | 0.0 | 0.0 |
+| 0.50 | 0.0 | 0.0 | 0.0 | 0.1 |
+| 0.25 | 0.0 | 0.0 | 0.0 | **1.0** |
+| 0.10 | 0.0 | 0.6 | 0.2 | 1.0 |
+| 0.05 | 0.7 | 1.0 | 1.0 | 1.0 |
+| 0.01 | 1.0 | 1.0 | 1.0 | 1.0 |
+
+**Below a = 0.05 NOTHING converges, conjugate or not.** Poisson's mean R-hat is
+1.86 at a = 0.01 and MedPois's is 1.98. Tripling the budget did not fix it. At
+those settings the posterior itself is hard -- the near-degenerate simplex
+geometry, not the update rule -- so results there say nothing about conjugacy
+and must not be used for the claim. STAR-NN MH's R-hat at a = 0.01 is 1.2e14,
+which is total breakdown and matches its Schein FAIL.
+
+The clean window is **a = c in {1, 0.5, 0.25}**, where Poisson, MedPois and
+STAR-NN slice all converge on every seed.
+
+## Cost inside the clean window
+
+ESS/s relative to a = c = 1, paired within seed:
+
+| model | 0.50 | 0.25 |
+|---|---|---|
+| Poisson | 1.3x | 1.9x |
+| MedPois | 1.3x | 1.8x |
+| STAR-NN slice | 2.3x | 6.6x |
+| STAR-NN MH | 3.1x | 23.1x (does not converge) |
+
+The conjugate models lose about 1.9x at a = 0.25 simply because the posterior is
+harder. STAR-NN slice loses 6.6x, so the part attributable to losing conjugacy
+is roughly **3.5x**. MH loses 23x and fails to converge on every seed.
+
+MH acceptance over the grid: 0.75, 0.52, 0.27, 0.17, 0.12 at a = 0.5 down to
+0.01.
+
+## A limitation to state plainly
+
+On the DENSE CMP data a sparse prior is misspecified, and it shows: MedPois's
+info rate degrades monotonically from -1.488 at a = 1 to -1.632 at a = 0.01. A
+referee can fairly ask why anyone would impose a prior that hurts.
+
+Answering that needs the sparse DGP after all -- to show a regime where a < 1
+IMPROVES fit, so that the computational cost is a cost worth caring about. The
+dense data isolates the computational effect cleanly, which is why the headline
+numbers come from it; the sparse data is what motivates wanting the prior. Both
+are therefore probably needed, contrary to the earlier decision to shelve the
+sparse DGP.
+
+## Decisions recorded
+
+* Clean window is a >= 0.25; below 0.05 no model converges and no conjugacy
+  claim can be made from that region.
+* Slice headlines; MH is reported as the natural implementation that fails,
+  both on cost (23x) and on validity (Schein FAIL at 0.01).
+* The 2000-draw run is archived in `results_short2000/`; the 6000-draw run in
+  `results/` supersedes it.
