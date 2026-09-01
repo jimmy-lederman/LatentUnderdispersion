@@ -174,3 +174,78 @@ degenerate (or including it with the underflow caveat stated). Models: MedPois,
 Poisson, STAR-NN (slice), STAR-G. Metrics: bulk/tail ESS per second, wall-clock,
 rank-normalized R-hat, info rate, cosine. Geweke/Schein on the full model before
 production.
+
+---
+
+# Full-model results (dense CMP, 10 seeds, 4 chains x 2000 after 2000 warmup)
+
+## Decision: run on the DENSE CMP data, not the sparse DGP
+
+A first pass on SparseCMP confounded two effects. STAR fits that data badly
+whatever the hyperparameters (info rate -1.73 against MedPois -0.97) because 59%
+of entries are zero and the STAR zero bin censors heavily, and the control
+STAR-G did not converge at baseline. That mixes a FIT story into what is meant
+to be a COMPUTATIONAL one. On the dense CMP data all models are competitive at
+a = c = 1 (established by the Section 6.3 sweep), so varying a and c changes one
+thing only. The sparse DGP is kept for later use; it is not needed for this
+claim.
+
+## Headline: ESS per second
+
+Mean over 10 seeds. Every model is given the same a and c.
+
+| a = c | Poisson | MedPois | STAR-NN slice | STAR-NN MH |
+|---|---|---|---|---|
+| 1.00 | 757 | 67 | 340 | 341 |
+| 0.50 | 625 | 55 | 157 | 119 |
+| 0.25 | 492 | 43 | 56 | 16 |
+
+Degradation from a = 1 to a = 0.25, paired within seed:
+
+| model | factor |
+|---|---|
+| Poisson | 1.5x +/- 0.1 |
+| MedPois | 1.6x +/- 0.1 |
+| STAR-NN slice | 6.1x +/- 0.2 |
+| STAR-NN MH | 21.4x +/- 2.4 |
+
+The sparse posterior is harder for EVERY model -- the conjugate ones lose about
+1.5x. Isolating the part attributable to losing conjugacy: 6.1/1.6 ~ 3.8x with
+the better sampler, 21.4/1.6 ~ 13x with the natural one.
+
+## MH does not merely slow down, it stops working
+
+Rank-normalized R-hat, mean over seeds, and the fraction of seeds exceeding 1.05:
+
+| a = c | Poisson | MedPois | STAR-NN slice | STAR-NN MH |
+|---|---|---|---|---|
+| 1.00 | 1.008 (0%) | 1.016 (0%) | 1.008 (0%) | 1.008 (0%) |
+| 0.50 | 1.010 (0%) | 1.024 (0%) | 1.020 (0%) | 1.073 (30%) |
+| 0.25 | 1.018 (0%) | 1.051 (60%) | 1.044 (20%) | 1.821 (100%) |
+
+Independence MH fails to converge on EVERY seed at a = 0.25. Slice stays valid
+(mean 1.044) and is the sampler to report; fielding MH as the implementation
+would be a strawman, which is why both were built.
+
+## Honest caveat
+
+MedPois exceeds R-hat 1.05 on 60% of seeds at a = 0.25 -- worse than STAR-NN
+slice at 20%. Sparse hyperparameters make the posterior harder for the order
+statistic models too. What they do NOT pay is the ESS/s penalty: 1.6x against
+6.1x. The claim is therefore about the cost of the UPDATE, not about the order
+statistic models being immune to sparse priors.
+
+## Validation
+
+* 1-D conditionals vs exact rejection draws: `validate_samplers.jl`
+* Whole model, Schein joint test: `validate_schein_sparse.jl` -- 5/5 pass,
+  including both samplers at a = c = 0.5 and 0.25
+* MH and slice are bit-identical at a = c = 1 (both branch to the exact draw),
+  which the results confirm
+
+## Known limitation in this script
+
+`run_sparse_cells.jl` computes cosine from a plain posterior mean with no
+per-draw label-switch alignment, so its cosine column is unreliable and swings
+between seeds. ESS/s and R-hat are the metrics this experiment is for. Use
+`cluster/recompute_cosine.jl` if recovery is wanted here.
