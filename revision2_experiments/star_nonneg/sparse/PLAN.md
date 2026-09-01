@@ -97,3 +97,80 @@ either outcome is reportable and we are not fishing.
 Wallach, Mimno & McCallum, "Rethinking LDA: Why Priors Matter" (2009), for why
 the concentration is a substantive modeling choice. VERIFY it supports the
 specific claim it is attached to before citing.
+
+---
+
+# Findings so far (samplers built and validated)
+
+`models/STARmodels/revision2/STARMFNNsparse.jl` implements STAR-NN for general
+`a` and `c` with three samplers (`:exact`, `:mh`, `:slice`). STARMFNN.jl is
+untouched: it is validated and used by the finished Section 6.3 sweep, so it
+must stay bit-identical.
+
+## MH acceptance collapses as the prior sharpens
+
+Measured on 20x20, K=3, over 100 sweeps after 50 burn-in:
+
+| a = c | accept (U) | accept (V) |
+|---|---|---|
+| 1.00 | n/a (exact) | n/a (exact) |
+| 0.50 | 0.724 | 0.779 |
+| 0.25 | 0.508 | 0.435 |
+| 0.10 | 0.207 | 0.139 |
+
+## Cost per effective draw, 1-D conditionals
+
+Thinning needed for KS-indistinguishability from exact rejection draws:
+
+| a = c | MH | slice |
+|---|---|---|
+| 0.50 | 10-50 | 10 |
+| 0.25 | 50-5000 | 10 |
+
+Slice dominates MH by 25-500x at a = 0.25. Independent ESS measurement agrees:
+at a = 0.25, MH needs ~150 iterations per effective draw and slice ~30; at
+a = 0.10, MH ~290 and slice ~100.
+
+## Two traps hit while validating -- do not repeat
+
+**1. KS needs independent samples.** The first validation pass recorded from
+iteration 1 with no burn-in and no thinning, and flagged BOTH samplers as wrong
+at every setting. That was an artifact of autocorrelation, not a bug -- the same
+trap that produced false Geweke failures earlier in this project. Burn-in and
+thinning are built into the test now.
+
+**2. The "exact" reference is itself biased at a = 0.1.** Rejection sampling
+proposes from Beta(a,a); at a = 0.1, 1.28% of those draws underflow to exactly
+1.0 in Float64 and 3.2% fall below 1e-12. The reference skipped them, so it was
+not sampling the target, and the resulting KS failures at a = 0.1 said nothing
+about the samplers. Conclusions at a = 0.1 from that test are void. a = 0.25 is
+clean (0.003% underflow) and a = 0.5 is exact.
+
+## The structural point this exposes
+
+At a = 0.1 the conditional's mass genuinely concentrates within machine epsilon
+of the simplex boundary -- that is a property of the target, not of any sampler.
+The order statistic models never meet it: their conditional is
+Dirichlet(a + counts), so wherever the data allocate any mass the effective
+concentration exceeds 1 and the singularity is regularized away. STAR's
+conditional keeps the raw `t^(a-1)` factor no matter how informative the data
+are, because the Gaussian likelihood multiplies rather than conjugates. That is
+a sharper version of the modularity claim than "STAR needs MH".
+
+## Decisions recorded
+
+* Separate model file, so the production STARMFNN stays bit-identical.
+* Both samplers implemented, per instruction; slice is the one to headline,
+  since fielding the weaker of the two would be a strawman.
+* Validate against an INDEPENDENT exact reference, not the two samplers against
+  each other, so a shared bug cannot pass.
+* The sparse DGP is built but NOT yet needed for these results, which are
+  conditional-level. Whether the full fit experiment uses it is still open.
+
+## Next
+
+Full fit comparison at a = c in {1, 0.5, 0.25}, dropping 0.1 as numerically
+degenerate (or including it with the underflow caveat stated). Models: MedPois,
+Poisson, STAR-NN (slice), STAR-G. Metrics: bulk/tail ESS per second, wall-clock,
+rank-normalized R-hat, info rate, cosine. Geweke/Schein on the full model before
+production.
