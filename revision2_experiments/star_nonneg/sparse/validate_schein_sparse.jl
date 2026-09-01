@@ -54,7 +54,7 @@ end
 println("== whole-model Schein test, nsamples=$nsamples nthin=$nthin ==")
 ok = Bool[]
 push!(ok, run_schein(1.0, 1.0, :exact))          # control: the validated path
-for ac in (0.5, 0.25)
+for ac in (0.5, 0.25, 0.1, 0.05, 0.01)
     push!(ok, run_schein(ac, ac, :mh))
     push!(ok, run_schein(ac, ac, :slice))
 end

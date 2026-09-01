@@ -249,3 +249,55 @@ statistic models being immune to sparse priors.
 per-draw label-switch alignment, so its cosine column is unreliable and swings
 between seeds. ESS/s and R-hat are the metrics this experiment is for. Use
 `cluster/recompute_cosine.jl` if recovery is wanted here.
+
+---
+
+# Pushing a and c below 0.25
+
+## A real bug the extension exposed
+
+At a = 0.01 the MH branch died with `log(-1.79e-14)`. `truncgauss` can return a
+value a rounding error outside [0, s], and the power-factor ratio takes the log
+of `s - prop`. Fixed with a clamp to [4*eps(s), s - 4*eps(s)], skipping the move
+when the interval is narrower than that. The V branch got the analogous guard on
+its lower end.
+
+The clamp is not cosmetic: below roughly a = 0.05 the conditional's mass
+genuinely lies within machine epsilon of the simplex boundary, so Float64 cannot
+represent it faithfully however the update is written. That is a property of the
+TARGET, not of the sampler.
+
+## MH becomes wrong, not merely slow
+
+Schein joint test, small model, 4000 replicates at nthin = 20:
+
+| a = c | MH | slice |
+|---|---|---|
+| 0.50 | PASS (p = 0.58) | PASS (p = 0.31) |
+| 0.25 | PASS (p = 0.29) | PASS (p = 0.45) |
+| 0.10 | PASS (p = 0.10) | PASS (p = 0.14) |
+| 0.05 | PASS (p = 0.44) | PASS (p = 0.61) |
+| 0.01 | **FAIL** (Bonferroni 0.010; var(U_NK) p = 0.001) | PASS (p = 0.28) |
+
+MH is valid down to a = 0.05 and invalid at 0.01. That matches its behaviour:
+at a = 0.01 the MH chain wanders to U entries of 1e-163, where the clamp starts
+to bias it, while slice stays near 1e-16.
+
+Strictly the failure is of "MH as implementable in Float64" rather than of MH in
+exact arithmetic -- but since the clamp was required to stop it crashing, that
+distinction does not help a practitioner.
+
+## Consequence for what gets reported
+
+Slice is the sampler to headline: valid at every setting tested, 0.01 included.
+MH is reported as the natural implementation that is NOT good enough -- it costs
+21x at a = 0.25 and fails validation at 0.01. Fielding only MH would be a
+strawman; fielding only slice would hide that the obvious implementation breaks.
+
+## Longer run
+
+The 2000-draw results are kept in `results_short2000/`. The production grid is
+a = c in {1, 0.5, 0.25, 0.1, 0.05, 0.01} x {poisson, medpois, starnn_slice,
+starnn_mh} x 10 seeds, at 4 chains x 6000 draws after 6000 warmup -- 3x the
+earlier budget, so the models being compared have converged rather than being
+compared mid-transient.

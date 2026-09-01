@@ -205,12 +205,27 @@ function update_U!(model::STARMFNNsp, U_NK, V_KM, Z_NM, Mu_NM, sigma2)
                 prop = truncgauss(A, B, 0.0, s)
                 ntry += 1
                 # proposal IS the a = 1 conditional, so it cancels exactly and
-                # the ratio is only the power factors the proposal omits
-                lr = (a - 1) * (log(prop) + log(s - prop) - log(told1) - log(s - told1))
-                if isfinite(lr) && log(rand()) < lr
-                    t = prop; nacc += 1
+                # the ratio is only the power factors the proposal omits.
+                #
+                # The clamp is not cosmetic. truncgauss can return a value a
+                # rounding error outside [0, s], and at a = 0.01 that made
+                # log(s - prop) throw a DomainError on -1.8e-14. Below roughly
+                # a = 0.05 the conditional's mass genuinely lies within machine
+                # epsilon of the simplex boundary, so Float64 cannot represent it
+                # faithfully however the update is written -- that is a property
+                # of the target, not of this sampler.
+                eps_s = 4 * eps(max(s, 1.0))
+                if s <= 8 * eps_s
+                    t = told1                       # interval too narrow to move in
                 else
-                    t = told1
+                    p1 = clamp(prop,  eps_s, s - eps_s)
+                    t1 = clamp(told1, eps_s, s - eps_s)
+                    lr = (a - 1) * (log(p1) + log(s - p1) - log(t1) - log(s - t1))
+                    if isfinite(lr) && log(rand()) < lr
+                        t = p1; nacc += 1
+                    else
+                        t = told1
+                    end
                 end
             else  # :slice
                 f(x) = -A * x^2 / 2 + B * x + (a - 1) * (log(x) + log(s - x))
@@ -251,9 +266,13 @@ function update_V!(model::STARMFNNsp, U_NK, V_KM, Z_NM, Mu_NM, sigma2, drate=mod
             elseif model.sampler === :mh
                 prop = truncgauss(A, B, 0.0, Inf)
                 ntry += 1
-                lr = (c - 1) * (log(prop) - log(vold))
+                # same guard as the U update: the support is (0, Inf), so only
+                # the lower end can underflow
+                p1 = max(prop, floatmin(Float64))
+                v1 = max(vold, floatmin(Float64))
+                lr = (c - 1) * (log(p1) - log(v1))
                 if isfinite(lr) && log(rand()) < lr
-                    vnew = prop; nacc += 1
+                    vnew = p1; nacc += 1
                 else
                     vnew = vold
                 end
