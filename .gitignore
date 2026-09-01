@@ -111,3 +111,7 @@ revison_experiments/factorexperiment/data/*
 # revision2 figure: script and output are tracked, the 65MB of sample inputs are not
 !revision2_experiments/star_nonneg/figures/
 revision2_experiments/star_nonneg/cluster/figsamples/
+
+# revision2 sparse-prior experiment: code, plan and the small generated dataset
+!revision2_experiments/star_nonneg/sparse/
+!revision2_experiments/star_nonneg/sparse/**
