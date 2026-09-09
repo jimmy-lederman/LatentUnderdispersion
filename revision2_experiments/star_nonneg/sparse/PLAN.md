@@ -483,3 +483,62 @@ absorb it at ~1.2x cost while STAR pays ~6x with a well-tuned slice sampler and
 fails to converge with the natural MH implementation. Both datasets are needed:
 sparse to show the prior is worth wanting, dense to show the cost is not an
 artifact of the data.
+
+---
+
+# Making sparse a work: it is an INFORMATION problem
+
+Three hypotheses tested at a = c = 0.05, two wrong:
+
+**1. Prior scale collapse -- WRONG.** E[V] = c/d falls with the shape, so the
+prior mean of mu collapses (1.13 at c = 1, 0.06 at c = 0.05 against data mean
+1.76). Pinning d = c fixes the mean but not the median (a Gamma(0.05, 0.05) draw
+is still ~0), and made STAR's R-hat WORSE at a = 0.25 (1.042 -> 1.271).
+
+**2. Better initialization -- PARTIAL, and harmful elsewhere.** Initializing from
+a well-conditioned distribution (U ~ Dir(1), V ~ Gamma(1, scale) with the scale
+set so E[mu] = mean(Y)) while keeping the sparse prior for the run helps STAR
+(R-hat 1.376 -> 1.148 at a = 0.05; 1.854 -> 1.483 at 0.01) but HURTS the
+conjugate models (MedPois 1.120 -> 1.393), because they start dense and must
+shrink. Nothing reaches 1.05.
+
+**3. Matching the DGP's sparsity to the prior -- WRONG, and backwards.** Making
+the truth sparser (support 4 -> 2 -> 1 rows per factor) monotonically worsened
+convergence for every model (STAR 1.746 -> 2.058 -> 2.399), because sparser truth
+means more zeros (60% -> 86%) and less information.
+
+## What actually works: more counts
+
+At a = c = 0.05, R-hat on a SCALAR functional (mean of mu) and the 95th
+percentile over entries:
+
+| data | Poisson | STAR-NN slice |
+|---|---|---|
+| 20x20, mean Y 1.26, 60% zero | 1.001 / 1.023 | **2.121 / 1.633** |
+| 20x20, 10x counts, mean Y 4.33, 44% zero | 1.002 / 1.148 | **1.017 / 1.081** |
+| 40x40, mean Y 0.61, 82% zero | 1.003 / 1.011 | 1.108 / 1.171 |
+
+Raising the count level rescues STAR; adding cells does not, because a bigger
+matrix at the same rate is sparser per cell. It is information PER CELL that
+binds, not matrix size and not agreement between prior and truth.
+
+**STAR needs roughly 10x the counts the conjugate models need to converge under
+the same sparse prior.** That is a further cost of the framework, and one a
+practitioner meets directly.
+
+## Correction to an earlier claim
+
+"Below a = 0.05 nothing converges" was partly an artifact of taking MAX R-hat
+over all 400 entries -- an extreme order statistic dominated by a few near-zero
+cells. On a scalar functional Poisson converges fine at a = 0.05 with base
+counts (1.001). Entrywise max R-hat should be reported alongside a quantile, not
+alone, and is not comparable across matrix sizes.
+
+## Pipeline
+
+`make_sparse_data.jl` now takes PREFIX and RATE from the environment, so the
+higher-count variant is written alongside the base one:
+
+    WRITE=1 PREFIX=SparseHi RATE=0.0045 julia --project=../../.. make_sparse_data.jl
+
+`SparseHi` is registered in run_sparse_cells.jl: 20x20, mean Y 4.38, 45% zeros.

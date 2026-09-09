@@ -43,6 +43,10 @@ const A_ON, A_OFF = env("A_ON", 1.0), env("A_OFF", 0.002)
 # The off-block weight supplies the background level.
 const C_HI, C_LO = env("C_HI", 5.0), env("C_LO", 0.5)     # gamma shape in/out
 const RATE = env("RATE", 0.045)         # gamma rate; matches the dense data's mu level
+# Output prefix, so a higher-count variant can be written alongside the base one
+# without clobbering it. RATE = 0.0045 gives ~10x the counts, which is what STAR
+# needs before it converges under a sparse prior (see PLAN.md).
+const PREFIX = get(ENV, "PREFIX", "SparseCMP")
 
 seed = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 20260812
 blockof(i, n, k) = min(k, div((i - 1) * k, n) + 1)
@@ -94,8 +98,8 @@ if get(ENV, "WRITE", "0") == "1"
     d = joinpath(@__DIR__, "data")
     wr(path, A) = CSV.write(path, DataFrame(hcat(string.(1:size(A, 1)), A),
                                             ["", ["V$(j)" for j in 1:size(A, 2)]...]))
-    wr(joinpath(d, "SparseCMPfactor.csv"), Y)
-    wr(joinpath(d, "SparseCMPU_NK.csv"), permutedims(U))
-    wr(joinpath(d, "SparseCMPV_KM.csv"), V)
-    println("wrote data/SparseCMP{factor,U_NK,V_KM}.csv")
+    wr(joinpath(d, PREFIX*"factor.csv"), Y)
+    wr(joinpath(d, PREFIX*"U_NK.csv"), permutedims(U))
+    wr(joinpath(d, PREFIX*"V_KM.csv"), V)
+    println("wrote data/$(PREFIX){factor,U_NK,V_KM}.csv")
 end

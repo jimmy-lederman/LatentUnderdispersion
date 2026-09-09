@@ -29,6 +29,7 @@ NC     = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : 4
 const HERE = @__DIR__
 DATA = Dict(
   "SparseCMP" => (joinpath(HERE, "data/SparseCMPfactor.csv"), joinpath(HERE, "data/SparseCMPU_NK.csv")),
+  "SparseHi"  => (joinpath(HERE, "data/SparseHifactor.csv"), joinpath(HERE, "data/SparseHiU_NK.csv")),
   "CMP"       => (joinpath(HERE, "../../../revison_experiments/factorexperiment/data/CMPfactor.csv"),
                   joinpath(HERE, "../../../revison_experiments/factorexperiment/data/CMPU_NK2.csv")))
 
