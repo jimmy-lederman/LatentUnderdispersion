@@ -1,0 +1,2 @@
+dataset,model,ac,seed,inforate,essmu_bulk,essmu_tail,rhat_max,essll_bulk,cosine,time_s,ess_per_s,accept,iters
+SparseCMP,starnn_slice,0.5,9,-1.0150380233058802,3892.524467083526,6565.119496026115,1.0049640738051904,3127.641035584475,0.7943596511800438,19.243435334,202.27804440956922,NaN,48000

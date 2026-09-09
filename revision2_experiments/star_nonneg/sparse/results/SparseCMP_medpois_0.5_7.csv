@@ -1,0 +1,2 @@
+dataset,model,ac,seed,inforate,essmu_bulk,essmu_tail,rhat_max,essll_bulk,cosine,time_s,ess_per_s,accept,iters
+SparseCMP,medpois,0.5,7,-0.9748134746287959,1972.731054862002,4581.113192549814,1.0303313056301517,345.8420320908136,0.6441082068974722,63.306657,31.16151046898594,NaN,48000

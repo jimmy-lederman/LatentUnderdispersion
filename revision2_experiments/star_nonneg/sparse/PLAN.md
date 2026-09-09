@@ -427,3 +427,59 @@ on every seed at a <= 0.25. Slice's info rate tracks Poisson (-1.587 against
 Whether STAR degrades on genuinely sparse data is now UNANSWERED, not answered
 in the negative. It needs re-running with floor binning, which the ceil ceiling
 made impossible to assess.
+
+---
+
+# Sparse data, re-run with correct floor binning (10 seeds, 4 chains x 6000)
+
+## The sparse-data claim is withdrawn in full
+
+Info rate at a = c = 1, where every update is exact and no sampler is involved:
+
+| model | ceil (buggy) | floor (correct) |
+|---|---|---|
+| MedPois | -0.970 | -0.920 |
+| Poisson | -1.133 | -1.043 |
+| STAR-NN | **-1.726** | **-1.064** |
+
+The gap to MedPois falls from 0.76 nats to 0.14, and STAR-NN lands within 0.02
+of Poisson. R-hat on sparse data is 1.005 against 1.002 on dense -- no
+degradation. STAR does NOT uniquely struggle on sparse data; the earlier result
+was the ceil ceiling on P(Y = 0).
+
+## The re-run fixes the motivation problem
+
+On the sparse DGP a sparse prior IMPROVES fit for every model:
+
+| model | a = 1 | 0.5 | 0.25 |
+|---|---|---|---|
+| MedPois | -0.920 | -0.884 | **-0.869** |
+| Poisson | -1.043 | -0.970 | **-0.943** |
+| STAR-NN slice | -1.064 | -1.031 | **-1.014** |
+
+On dense data it hurts (MedPois -1.488 -> -1.548). So the sparse DGP earns its
+place: it is the regime where a < 1 is the right modelling choice, which answers
+the obvious objection that nobody would impose a prior that costs them fit.
+
+## And the conjugacy penalty is LARGER where the prior is warranted
+
+ESS/s degradation from a = 1 to a = 0.25:
+
+| model | sparse data | dense data |
+|---|---|---|
+| Poisson | 1.07x | 1.9x |
+| MedPois | 1.25x | 1.8x |
+| STAR-NN slice | **6.3x** | 3.9x |
+| STAR-NN MH | 24x (diverges) | 15.8x |
+
+Excess over the conjugate models is 5-6x on sparse data against about 2x on
+dense. All models except MH are converged at a = 0.25 on sparse data
+(R-hat 1.005 / 1.017 / 1.019 against MH's 1.796).
+
+## The argument this supports
+
+On data where a sparse prior demonstrably helps, the order statistic models
+absorb it at ~1.2x cost while STAR pays ~6x with a well-tuned slice sampler and
+fails to converge with the natural MH implementation. Both datasets are needed:
+sparse to show the prior is worth wanting, dense to show the cost is not an
+artifact of the data.
