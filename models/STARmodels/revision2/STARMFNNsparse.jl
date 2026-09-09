@@ -16,8 +16,24 @@ using LogExpFunctions
 # standard, and for a, c < 1 they diverge at the boundary -- exactly where a
 # Gaussian proposal has no mass.
 #
-# This file is separate from STARMFNN.jl on purpose: that model is validated and
-# used in the finished Section 6.3 sweep, and must stay bit-identical.
+# BINNING. This uses FLOOR binning, matching STARMFNNfloor.jl (STARMFNNF), which
+# is what the Section 6.3 sweep actually fits:
+#     Y = y  <=>  Z in (g(y), g(y+1)],   zero bin (-inf, g(1)]
+# An earlier version of this file was built on STARMFNN.jl's CEIL binning, zero
+# bin (-inf, g(0)], and that is a superseded convention: with mu constrained
+# non-negative it caps P(Y = 0) = Phi((0 - mu)/sigma) at 1/2, so it cannot fit
+# data with more than half zeros AT ALL. On the 59%-zero sparse dataset that
+# produced an apparent "STAR degrades on sparse data" result which was entirely
+# an artifact of the wrong bins. Floor binning has no such cap: P(Y = 0) ->
+# 1 as mu -> 0.
+#
+# The U and V conditionals -- the ones that lose conjugacy -- are identical under
+# both conventions, since they depend only on (Z, Mu). Binning enters through
+# update_Z! and the pmf alone.
+#
+# This file is separate from STARMFNN.jl/STARMFNNfloor.jl on purpose: those are
+# validated and used in the finished Section 6.3 sweep, and must stay
+# bit-identical.
 #
 # Two samplers, selected by `sampler`:
 #   :mh     independence Metropolis-Hastings proposing from the a = c = 1
@@ -50,14 +66,17 @@ end
 function STARlogpmf(model::STARMFNNsp, x, mu, sigma2)
     std = sqrt(sigma2)
     if x == 0
-        z = (model.g(0) - mu) / std
-        return logcdf(Normal(), z)
+        return logcdf(Normal(), (model.g(1) - mu) / std)      # zero bin (-inf, g(1)]
     end
-    z1 = (model.g(x) - mu) / std
-    z0 = (model.g(x - 1) - mu) / std
-    hi = logcdf(Normal(), z1)
-    lo = logcdf(Normal(), z0)
+    hi = logcdf(Normal(), (model.g(x + 1) - mu) / std)
+    lo = logcdf(Normal(), (model.g(x) - mu) / std)
     return hi + log1mexp(min(lo - hi, -1e-12))
+end
+
+"Y = y <=> Z in (g(y), g(y+1)]; z <= g(1) maps to 0. Matches STARMFNNfloor.jl."
+function ytoz_floor(model::STARMFNNsp, z)
+    z <= model.g(1) && return 0.0
+    return ceil(model.g_inv(z)) - 1
 end
 
 function evalulateLogLikelihood(model::STARMFNNsp, state, data, info, row, col)
@@ -83,7 +102,7 @@ function forward_sample(model::STARMFNNsp; state=nothing, info=nothing)
     Z_NM = rand.(Normal.(Mu_NM, sqrt(sigma2)))
     Y_NM = zeros(model.N, model.M)
     for n in 1:model.N, m in 1:model.M
-        Y_NM[n, m] = Z_NM[n, m] < 0 ? 0 : ceil(model.g_inv(Z_NM[n, m]))
+        Y_NM[n, m] = ytoz_floor(model, Z_NM[n, m])
     end
     state["Z_NM"] = Z_NM
     return Dict("Y_NM" => Y_NM), state
@@ -159,18 +178,18 @@ end
 
 function update_Z!(model::STARMFNNsp, Y_NM, Z_NM, Mu_NM, sigma2, mask)
     sd = sqrt(sigma2)
-    g0 = model.g(0)
+    g1 = model.g(1)
     @views for n in 1:model.N
         for m in 1:model.M
             if !isnothing(mask) && mask[n, m] == 1
                 z = rand(Normal(Mu_NM[n, m], sd))
-                Y_NM[n, m] = z < 0 ? 0 : ceil(model.g_inv(z))
+                Y_NM[n, m] = ytoz_floor(model, z)
             end
             if Y_NM[n, m] == 0
-                Z_NM[n, m] = rand(Truncated(Normal(Mu_NM[n, m], sd), -Inf, g0))
+                Z_NM[n, m] = rand(Truncated(Normal(Mu_NM[n, m], sd), -Inf, g1))
             else
                 Z_NM[n, m] = rand(Truncated(Normal(Mu_NM[n, m], sd),
-                                            model.g(Y_NM[n, m] - 1), model.g(Y_NM[n, m])))
+                                            model.g(Y_NM[n, m]), model.g(Y_NM[n, m] + 1)))
             end
         end
     end

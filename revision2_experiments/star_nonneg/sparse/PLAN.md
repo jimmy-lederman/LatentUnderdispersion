@@ -368,3 +368,62 @@ sparse DGP.
   both on cost (23x) and on validity (Schein FAIL at 0.01).
 * The 2000-draw run is archived in `results_short2000/`; the 6000-draw run in
   `results/` supersedes it.
+
+---
+
+# CORRECTION: the first STAR results used the wrong bins
+
+`STARMFNNsparse.jl` was built on `STARMFNN.jl` (CEIL binning, zero bin
+(-inf, g(0)]). Section 6.3 fits `STARMFNNF` (`STARMFNNfloor.jl`, FLOOR binning,
+zero bin (-inf, g(1)]). The `f` in the registry name `starnnf_id` is exactly this
+distinction, and it was visible in cell_lib.jl when the hyperparameters were
+checked there.
+
+Ceil binning with mu constrained non-negative caps
+P(Y = 0) = Phi((0 - mu)/sigma) at 1/2. It therefore CANNOT fit data with more
+than half zeros at any parameter setting.
+
+## What this invalidated
+
+The claim that STAR degrades on sparse count data. The sparse dataset is 59%
+zeros, above the ceil model's structural ceiling, so its info rate of -1.73,
+cosine of 0.41 and R-hat of 1.6 measured the wrong bins, not STAR. **Withdrawn.**
+Those cells are quarantined in `results_ceilbug/`.
+
+## What survived, and why
+
+The U and V conditionals -- where conjugacy breaks -- are identical under both
+conventions; STARMFNNfloor.jl literally reuses STARMFNN's `update_U!` and
+`update_V!` through a shim, and binning enters only via `update_Z!` and the pmf.
+So the sampler work, the 1-D validation against exact rejection draws, and the
+Schein results all stand. Re-running Schein on the corrected model reproduced the
+same pattern: PASS to a = 0.05, MH FAIL at 0.01, slice PASS.
+
+Verified after porting: at a = c = 1 the corrected model is bit-identical to
+production STARMFNNF -- forward draws equal, U/V/sigma2 differing by exactly 0
+after 60 sweeps, log-pmf to 10 decimals. Its forward samples now produce 62%
+zeros, which the ceil version structurally could not.
+
+## Corrected numbers (dense CMP, 10 seeds, 4 chains x 6000 after 6000)
+
+ESS/s, with the superseded ceil figures in brackets:
+
+| a = c | Poisson | MedPois | STAR-NN slice | STAR-NN MH |
+|---|---|---|---|---|
+| 1.00 | 1128 | 57 | 409 [421] | 409 [417] |
+| 0.50 | 903 | 46 | 240 [184] | 178 [136] |
+| 0.25 | 627 | 33 | 106 [64] | 28 [19] |
+
+Paired degradation from a = 1 to a = 0.25: Poisson 1.9x, MedPois 1.8x,
+slice **3.9x** [was 6.6x], MH **15.8x** [was 23.1x].
+
+**The conjugacy penalty in the clean window is therefore about 2x excess over
+the conjugate models, not the 3.5x reported before.** MH still fails to converge
+on every seed at a <= 0.25. Slice's info rate tracks Poisson (-1.587 against
+-1.585 at a = 0.25), consistent with Section 6.3.
+
+## Still open
+
+Whether STAR degrades on genuinely sparse data is now UNANSWERED, not answered
+in the negative. It needs re-running with floor binning, which the ceil ceiling
+made impossible to assess.
