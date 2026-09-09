@@ -542,3 +542,35 @@ higher-count variant is written alongside the base one:
     WRITE=1 PREFIX=SparseHi RATE=0.0045 julia --project=../../.. make_sparse_data.jl
 
 `SparseHi` is registered in run_sparse_cells.jl: 20x20, mean Y 4.38, 45% zeros.
+
+---
+
+# Correction: "10x counts fixes STAR" was overstated, and max R-hat was misleading
+
+## Report the R-hat DISTRIBUTION, not the max
+
+Base sparse data, 20x20, 4 chains x 4000 after 4000:
+
+| model | a = c | R-hat med | q95 | max | % > 1.05 | ESS med |
+|---|---|---|---|---|---|---|
+| Poisson | 0.05 | 1.001 | 1.014 | 1.038 | 0% | 5988 |
+| MedPois | 0.05 | 1.002 | 1.020 | 1.142 | 2% | 1844 |
+| STAR-NN slice | 0.05 | 1.093 | 1.446 | 1.669 | 71% | 99 |
+
+At 20x20 everything converges cleanly to a = 0.25 (0% of entries above 1.05 for
+every model). At a = 0.05 the conjugate models are still fine -- Poisson has NO
+entry above 1.05 -- and STAR is the only failure, in the BULK rather than the
+tail: its median R-hat is 1.093 and 71% of entries fail.
+
+Max R-hat over 400 entries is an extreme order statistic dominated by a few
+near-zero cells and is not comparable across matrix sizes. `run_sparse_cells.jl`
+now records `rhat_med`, `rhat_q95` and `rhat_frac_bad` alongside it.
+
+## The higher-count claim, corrected
+
+The single-cell test suggested 10x counts took STAR from R-hat 2.12 to 1.02, but
+that was ONE seed on a scalar functional. The 6-seed grid on SparseHi
+(mean Y 4.38, 45% zeros) gives, at a = 0.05: max R-hat 1.669 -> 1.092 and median
+ESS 99 -> 230. More counts SUBSTANTIALLY help STAR but do not rescue it -- every
+seed still exceeds 1.05 by the max criterion.
+

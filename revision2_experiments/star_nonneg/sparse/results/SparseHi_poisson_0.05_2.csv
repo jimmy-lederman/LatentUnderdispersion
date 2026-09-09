@@ -1,0 +1,2 @@
+dataset,model,ac,seed,inforate,essmu_bulk,essmu_tail,rhat_max,essll_bulk,cosine,time_s,ess_per_s,accept,iters
+SparseHi,poisson,0.05,2,-1.3458722013684898,6547.6306445093,9795.9921414786,1.009050943565509,660.1870057761978,0.7834270862082745,20.63039125,317.37791906924207,NaN,32000

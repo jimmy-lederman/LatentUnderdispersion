@@ -71,6 +71,12 @@ end
 essb = [MCD.ess(@view(mu[:, :, p]); kind=:bulk) for p in 1:(N * M)]
 esst = [MCD.ess(@view(mu[:, :, p]); kind=:tail) for p in 1:(N * M)]
 rh   = [MCD.rhat(@view(mu[:, :, p]); kind=:rank) for p in 1:(N * M)]
+# The MAX over 400 entries is an extreme order statistic dominated by a few
+# near-zero cells, and it is not comparable across matrix sizes. Recording the
+# median and 95th percentile too: on sparse data at a = 0.05 Poisson's max
+# reaches 1.038 while its median is 1.001 and NO entry exceeds 1.05, whereas
+# STAR-NN's median is itself 1.093 with 71% of entries failing -- one is a tail,
+# the other is a real failure, and max alone cannot tell them apart.
 ir = evaluateInfoRate(model, data, vcat(samples...), mask=mask, verbose=false)
 
 bp(Ut, U) = (S = abs.(cor(Ut, U)); best = -Inf; p0 = collect(1:K);
@@ -85,7 +91,9 @@ cosine = mean(abs(dot(Utrue[:, k], Um[:, k])) / (norm(Utrue[:, k]) * norm(Um[:, 
 
 row = DataFrame(dataset=ds, model=mname, ac=ac, seed=seed,
                 inforate=ir, essmu_bulk=median(essb), essmu_tail=median(esst),
-                rhat_max=maximum(rh), essll_bulk=MCD.ess(ll; kind=:bulk),
+                rhat_max=maximum(rh), rhat_med=median(rh),
+                rhat_q95=quantile(rh, 0.95), rhat_frac_bad=mean(rh .> 1.05),
+                essll_bulk=MCD.ess(ll; kind=:bulk),
                 cosine=cosine, time_s=t, ess_per_s=median(essb) / t,
                 accept=isempty(acc) ? NaN : mean(acc), iters=NC * (NS + NB))
 outdir = joinpath(HERE, "results"); mkpath(outdir)
