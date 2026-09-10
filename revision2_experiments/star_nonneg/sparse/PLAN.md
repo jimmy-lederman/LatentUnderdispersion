@@ -622,3 +622,58 @@ At a <= 0.05 STAR's chains are partly unconverged (25% of entries above 1.05),
 so its ESS/s there is measured on chains that have not fully mixed. The
 conjugate models are converged throughout, so the CONTRAST is sound, but STAR's
 absolute number at 0.05 is a lower bound on how bad it is, not a clean estimate.
+
+---
+
+# How low can a go, and what does "well specified" even mean here
+
+## a is not the sparsity knob -- a*N is
+
+Dirichlet(a * 1_N) concentrates on roughly a*N coordinates, so a*N ~ 1 is where a
+factor collapses onto a single row. Effective rows per factor (exp of the column
+entropy of U):
+
+| N | a | a*N | eff rows/factor | % dead rows (K=3) |
+|---|---|---|---|---|
+| 20 | 0.25 | 5.0 | 6.09 | 5% |
+| 20 | 0.05 | 1.0 | 1.84 | 40% |
+| 100 | 0.05 | 5.0 | 10.14 | 47% |
+| 100 | 0.01 | 1.0 | 2.43 | 86% |
+| 20 | 0.01 | 0.2 | 1.01 | 85% |
+
+**At N = 20 the floor is a = 0.05.** Below it the prior is not sparse, it is
+degenerate: at a = 0.01, 85% of rows are explained by NO factor and the matrix is
+99% empty.
+
+## A coherent sparse model needs K to grow as 1/a
+
+Coverage requires K * (eff rows per factor) ~ N. Holding K = 3 while shrinking a
+leaves most rows unexplained. Dead rows at a = 0.01 fall 85% -> 40% -> 10% -> 0%
+as K goes 3 -> 10 -> 20 -> 40. A well-specified a = 0.01 experiment therefore
+needs K ~ 100 and a correspondingly larger N -- a different and much bigger
+model, not a parameter tweak.
+
+## Consequence: the two claims need different designs
+
+1. **The computational claim** (STAR pays for losing conjugacy) is about the
+   t^(a-1) boundary singularity in the conditional. It does NOT need
+   well-specified data. Run it on FIXED, well-conditioned data and push a as low
+   as we like; misspecification is irrelevant because we are measuring sampler
+   cost, not fit. This is what the base-sparse grid does, now extended to
+   a = 0.005.
+2. **The motivation claim** (a < 1 is worth wanting) needs well-specified data,
+   and there a >= 0.05 at N = 20, K = 3 is the coherent range. Already
+   established: info rate improves monotonically as a falls to 0.25.
+
+Do not conflate them. An earlier matched-data attempt held E[mu] fixed across a
+and still produced 99% zeros at a = 0.01, because sparsity concentrates mu into a
+few cells rather than lowering its mean -- holding the count level fixed does not
+rescue a design that is degenerate for structural reasons.
+
+## Budget inconsistency, fixed
+
+Earlier grids mixed budgets: dense CMP at 48k sweeps per cell throughout, but
+base sparse at 48k for a >= 0.25 and only 32k for a <= 0.1. ESS/s is roughly
+budget-invariant (ESS and wall-clock both scale with draws), so the headline
+"MedPois flat" comparison survives, but absolute ESS and R-hat do not compare
+across those rows. The low-a rows are being re-run at 48k.
