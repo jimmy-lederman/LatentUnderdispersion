@@ -677,3 +677,71 @@ base sparse at 48k for a >= 0.25 and only 32k for a <= 0.1. ESS/s is roughly
 budget-invariant (ESS and wall-clock both scale with draws), so the headline
 "MedPois flat" comparison survives, but absolute ESS and R-hat do not compare
 across those rows. The low-a rows are being re-run at 48k.
+
+---
+
+# FINAL GRID (cluster job 1657295): 300 cells, 10 seeds, 0 failures
+
+Data: SparsePois -- sparse loadings, POISSON counts (so MedPois has no
+dispersion advantage; at D = 1 it is Poisson). 20x20, K = 3, mean Y 1.89,
+68% zeros. Budget 4 chains x 48000 after 48000 (384k sweeps/cell), chosen by
+pilot so the sqrt variant converges at a = 0.01.
+
+## ESS median per second
+
+| a = c | Poisson | MedPois | STAR-NN sqrt | STAR-NN id | STAR-NN MH |
+|---|---|---|---|---|---|
+| 1.00 | 4527 | 85 | 121 | 52 | 119 |
+| 0.50 | 4291 | 73 | 71 | 58 | 57 |
+| 0.25 | 4071 | 91 | 31 | 31 | 11 |
+| 0.10 | 3628 | 372 | 9 | 8 | 3 |
+| 0.05 | 3430 | 471 | 5 | 4 | 2 |
+| 0.01 | 2017 | 313 | 3.5 | 3 | 1.5 |
+
+Paired within seed, a = 1 -> 0.01: Poisson 2.6x +/- 0.7, **MedPois 0.3x +/- 0.1
+(3.7x FASTER)**, **STAR-NN sqrt 34.8x +/- 4.9**, MH 80.8x +/- 8.5.
+
+The ordering REVERSES by ~124x: at a = 1 STAR-NN is 1.4x faster than MedPois;
+at a = 0.01 MedPois is 89x faster.
+
+## The comparison is maximally fair to STAR
+
+Info rate, where STAR-NN sqrt is best or tied at nearly every setting:
+
+| a = c | Poisson | MedPois | STAR-NN sqrt |
+|---|---|---|---|
+| 1.00 | -1.063 | -1.025 | **-0.946** |
+| 0.50 | -0.972 | -0.969 | **-0.935** |
+| 0.25 | -0.940 | -0.952 | -0.941 |
+| 0.01 | -1.004 | -1.006 | **-1.001** |
+
+STAR fits this data BEST and still collapses computationally. The dataset cannot
+be said to favour the order statistic models.
+
+Getting there required fixing a handicap: the first pilot ran STAR only with
+g(x) = x, which on this heavy-tailed data (var/mean 10.2, max 28 vs mean 1.89)
+scored -1.727 against Poisson's -1.113. With g(x) = sqrt(x) STAR becomes the best
+fitting model AND its collapse gets LARGER (34.8x vs 16.8x) -- the handicap was
+masking the effect, not creating it.
+
+## Convergence
+
+q95 of entrywise rank-R-hat. 384k sweeps is enough for every model worth
+reporting:
+
+| a = c | Poisson | MedPois | STAR-NN sqrt | STAR-NN MH |
+|---|---|---|---|---|
+| 0.25 | 1.000 | 1.000 | 1.001 | 1.188 |
+| 0.05 | 1.001 | 1.001 | 1.007 | 1.720 |
+| 0.01 | 1.005 | 1.006 | 1.013 | 3.350 |
+
+MH is broken from a = 0.25 down, which is the point of including it: the natural
+implementation -- proposing from the conjugate conditional -- does not work.
+
+## The claim this supports
+
+On data where a sparse prior is appropriate and where STAR fits BEST, the order
+statistic model's throughput is unaffected by the prior's sharpness (it improves,
+3.7x), while STAR loses 35x with a well-tuned slice sampler and 81x with the
+obvious one, which additionally stops converging. The conjugate Dirichlet and
+gamma conditionals absorb any concentration; STAR's do not.
