@@ -574,3 +574,51 @@ that was ONE seed on a scalar functional. The 6-seed grid on SparseHi
 ESS 99 -> 230. More counts SUBSTANTIALLY help STAR but do not rescue it -- every
 seed still exceeds 1.05 by the max criterion.
 
+
+---
+
+# THE RESULT (base sparse data, where the sparse prior is warranted)
+
+ESS median per second, 6-10 seeds, 20x20, mean Y 1.30, 59% zeros:
+
+| a = c | Poisson | MedPois | STAR-NN slice | STAR-NN MH |
+|---|---|---|---|---|
+| 1.00 | 2900 | 50 | 454 | 456 |
+| 0.50 | 2851 | 42 | 197 | 160 |
+| 0.25 | 2707 | 40 | 72 | 19 |
+| 0.10 | 1981 | 47 | 17.7 | 3.9 |
+| 0.05 | 1471 | **57** | **9.8** | 3.1 |
+
+**MedPois is FLAT over the whole range, 50 -> 57.** The conjugate update costs
+nothing extra as the prior sharpens; the Dirichlet and gamma conditionals absorb
+any a and c. Poisson loses 2x. STAR-NN slice collapses **46x** and MH 147x.
+
+Convergence, using the R-hat distribution rather than the max:
+
+| a = c | | Poisson | MedPois | slice | MH |
+|---|---|---|---|---|---|
+| 0.10 | R-hat med / % entries > 1.05 | 1.001 / 0% | 1.003 / 2% | 1.014 / 5% | 1.345 / 97% |
+| 0.05 | R-hat med / % entries > 1.05 | 1.002 / 1% | 1.004 / 7% | 1.034 / 25% | 1.519 / 99% |
+
+At a = 0.05 on data that warrants it: Poisson and MedPois are converged, slice
+degrades but keeps a median R-hat of 1.034, MH is broken.
+
+## Why this framing is the right one
+
+Earlier grids ran on DENSE data, where a sparse prior is misspecified and every
+model struggles -- that made it look as though sparse a was simply
+unconvergeable, and it buried the contrast. On data the prior suits:
+
+* the order statistic model pays NOTHING for sparsity (flat ESS/s),
+* STAR pays 46x with a well-tuned slice sampler,
+* the natural MH implementation stops working entirely below a = 0.25.
+
+Report ESS/s over the full range on THIS dataset. Reserve the dense-data grid
+for showing the cost is not an artifact of one DGP.
+
+## Caveat to keep
+
+At a <= 0.05 STAR's chains are partly unconverged (25% of entries above 1.05),
+so its ESS/s there is measured on chains that have not fully mixed. The
+conjugate models are converged throughout, so the CONTRAST is sound, but STAR's
+absolute number at 0.05 is a lower bound on how bad it is, not a clean estimate.
