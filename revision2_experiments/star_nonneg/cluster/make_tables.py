@@ -15,6 +15,15 @@ Outputs (tabular environments only -- wrap \\caption/\\label yourself):
 
 Usage:  python3 make_tables.py [--bold {paired,se}] [--tol T]
 
+SIGN CONVENTION. Julia's evaluateInfoRate() (helper/MatrixMF.jl) returns the
+mean heldout log predictive density -- it does NOT negate, despite the name --
+so the `inforate` column of results/*.csv is negative and higher is better.
+The paper defines the information rate as IR = -LPPD/n (Eq. eq:inforate):
+positive, in nats of average surprise, LOWER is better. We therefore keep all
+statistics (means, SEs, the paired bolding test) on the raw log density, where
+higher is better, and negate only when formatting the cell, so Table 1 reports
+the quantity the paper actually defines. Nothing else in this file negates.
+
 BOLDING. Referee 1 point (d) objected that the old text read an ordering off
 differences well inside the noise, so the rule is explicit and stated in the
 caption. Every model sees the SAME heldout mask at a given seed, so model
@@ -50,6 +59,22 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "tables")
 
+# Tables are written to tables/ (build output) and ALSO copied straight into the
+# draft, so the paper cannot drift from the runs. The draft files are pure
+# tabular environments -- the \caption/\label live in the surrounding float in
+# 6_3_factormodel.tex / D_sectionSimulation.tex, so overwriting is safe.
+# Anything not listed here has no home in the draft yet and is only written to
+# tables/; --no-draft skips the copy entirely.
+DRAFT = os.path.join(HERE, "..", "..", "..", "draft", "sections_revison2")
+DRAFT_MAP = {
+    "inforate.tex":           "6_3_table.tex",
+    "diagnostics.tex":        "6_3_table_computation.tex",   # --diag-layout tall
+    "diagnostics_mu.tex":     "6_3_table_diag_mu.tex",       # --diag-layout wide
+    "diagnostics_loglik.tex": "6_3_table_diag_loglik.tex",
+    "diagnostics_timing.tex": "6_3_table_diag_timing.tex",
+    "recovery.tex":           "6_3_table_recovery.tex",
+}
+
 # columns ordered by dispersion, matching the submitted Table 1
 DATASETS = [("GC", r"GC $(\mathbb{D}[Y] \approx .33)$"),
             ("CMP", r"CMP $(\mathbb{D}[Y] \approx .5)$"),
@@ -60,8 +85,12 @@ MODELS = [("poisson", "Poisson"),
           ("medpois", "MedPois"),
           ("nb", "NB"),
           ("mednb", "MedNB"),
-          ("star_id", r"STAR \,\,$g(x)=x$"),
-          ("star_sqrt", r"STAR \,\,$g(x)=\sqrt{x}$"),
+          # "STAR-G" (Gaussian factor priors), not "STAR": referee 2 point 2 asked
+          # that the author-specified variant be described as one STAR
+          # specification rather than "the" STAR model. Matches the text in
+          # 6_3_factormodel.tex, which already says STAR-G throughout.
+          ("star_id", r"STAR-G \,\,$g(x)=x$"),
+          ("star_sqrt", r"STAR-G \,\,$g(x)=\sqrt{x}$"),
           ("starnnf_id", r"STAR-NN \,\,$g(x)=x$"),
           ("starnnf_sqrt", r"STAR-NN \,\,$g(x)=\sqrt{x}$")]
 
@@ -82,9 +111,14 @@ def check_complete(df, name):
 
 
 def bold_set(sub, rule, tol):
-    """Which models to bold in one dataset column. sub is indexed by seed."""
+    """Which models to bold in one dataset column. sub is indexed by seed.
+
+    Operates on the raw heldout log density (higher is better), NOT on the
+    negated value printed in the table. Highest log density == lowest IR, so
+    the model selected here is still the one whose printed IR is smallest.
+    """
     means = sub.mean()
-    best = means.idxmax()                       # info rate: higher is better
+    best = means.idxmax()                       # log density: higher is better
     keep = {best}
     for m in means.index:
         if m == best:
@@ -118,14 +152,16 @@ def inforate_table(df, rule, tol):
             cells[(ds, key)] = (v.mean(), 1.96 * v.std(ddof=1) / np.sqrt(v.count()))
 
     L = [r"\begin{tabular}{lcccc}", r"\toprule",
-         r"info rate ($\uparrow$)~\cref{eq:inforate} & "
+         r"info rate ($\downarrow$)~\cref{eq:inforate} & "
          + " & ".join(h for _, h in DATASETS) + r" \\", r"\midrule"]
     width = max(len(lbl) for _, lbl in MODELS)
     for key, lbl in MODELS:
         row = []
         for ds, _ in DATASETS:
             mu, se = cells[(ds, key)]
-            s = f"{mu:.2f} $\\pm$ {se:.2f}"
+            # negate: cells hold mean log density, the paper reports IR = -that.
+            # se is a half-width and so is unchanged by the sign flip.
+            s = f"{-mu:.2f} $\\pm$ {se:.2f}"
             row.append(r"\textbf{" + s + "}" if key in bolds[ds] else s)
         L.append(f"{lbl:<{width}} & " + " & ".join(row) + r" \\")
     L += [r"\bottomrule", r"\end{tabular}"]
@@ -237,6 +273,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bold", choices=["paired", "se"], default="paired")
     ap.add_argument("--tol", type=float, default=0.01)
+    ap.add_argument("--no-draft", action="store_true",
+                    help="write only to tables/, do not copy into the draft")
     ap.add_argument("--diag-layout", choices=["wide", "tall"], default="wide",
                     help="wide: models as rows, datasets as column groups "
                          "(8 rows, fits a float). tall: one stacked table, "
@@ -266,10 +304,25 @@ def main():
         else:
             print(f"skipping {key}: no {sub}/", file=sys.stderr)
 
+    draft = os.path.normpath(DRAFT)
+    if not a.no_draft and not os.path.isdir(draft):
+        sys.exit(f"draft dir not found: {draft} (pass --no-draft to skip)")
+
     for name, body in tables.items():
         with open(os.path.join(OUT, name), "w") as fh:
             fh.write(body + "\n")
         print(f"\n%%%%%%%% tables/{name} %%%%%%%%\n{body}")
+
+        if a.no_draft:
+            continue
+        target = DRAFT_MAP.get(name)
+        if target is None:
+            print(f"  (no draft home for {name}; left in tables/ only)",
+                  file=sys.stderr)
+            continue
+        with open(os.path.join(draft, target), "w") as fh:
+            fh.write(body + "\n")
+        print(f"  -> draft/sections_revison2/{target}", file=sys.stderr)
 
 
 if __name__ == "__main__":

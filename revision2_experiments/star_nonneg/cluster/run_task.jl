@@ -11,8 +11,8 @@ using Random
 
 task_id = parse(Int, ARGS[1])
 njobs = parse(Int, ARGS[2])
-const TOTAL = 3200
-const NSEEDS_T = 100
+const TOTAL = 8000
+const NSEEDS_T = 250
 DATASETS = ["CMP", "GC", "Poisson", "NB"]
 MODELS = ["poisson", "medpois", "nb", "mednb", "star_id", "star_sqrt",
           "starnnf_id", "starnnf_sqrt"]

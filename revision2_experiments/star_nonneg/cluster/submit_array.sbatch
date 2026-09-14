@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --job-name=factor100
+#SBATCH --job-name=factor250
 #SBATCH --array=1-21%21
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8000

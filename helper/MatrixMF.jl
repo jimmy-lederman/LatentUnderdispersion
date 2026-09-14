@@ -71,7 +71,16 @@ sample_rate_prior() = rand(Gamma(HYPER_E0, 1 / HYPER_F0))
 abstract type MatrixMF end
 
 function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,
-    constantinit=nothing, init=nothing, keep_all=false)
+    constantinit=nothing, init=nothing, keep_all=false, skipupdate=nothing)
+    # `skipupdate` names parameters whose update block should not RUN at all, and is
+    # forwarded to backward_sample. It is distinct from `constantinit`, which lets the
+    # update run and then overwrites the result: the two give the same chain, but only
+    # skipupdate makes a pinned parameter cheap. That matters where the skipped block is
+    # a large share of a sweep -- for the covid model the D branch (the D update, the
+    # Polya-Gamma draws and the beta/tau blocks) is about half of one, so a fixed-D run
+    # scored on wall-clock would otherwise be charged for machinery it does not use.
+    # Defaults to nothing, in which case backward_sample is called exactly as before, so
+    # models whose backward_sample has no such keyword are unaffected.
     # `init` SEEDS a parameter and then lets it move; `constantinit` PINS it for the whole
     # run. Both are needed: the fixed-D columns pin D, while the median-NB model needs a
     # data-driven starting point for r (its prior sits at r ~ 0.01 against a needed ~500,
@@ -96,7 +105,13 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         end
         if !isnothing(init)
             for (var, value) in init
-                state[var] = value
+                # A Function is called on the (already prior-drawn) state, so a seed can
+                # depend on the draw rather than replace it. That is what lets a chain keep
+                # the dispersion of its own prior draw while having only its scale
+                # corrected -- see the covid run scripts, where the prior's scale for phi is
+                # wrong by three orders of magnitude and a fixed seed would make every chain
+                # start at the same point.
+                state[var] = value isa Function ? value(state) : value
             end
         end
         if !isnothing(constantinit)
@@ -112,7 +127,9 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     end
 
     for s in 1:S
-        ~, state = backward_sample(model, data, state, mask)
+        ~, state = isnothing(skipupdate) ?
+            backward_sample(model, data, state, mask) :
+            backward_sample(model, data, state, mask; skipupdate=skipupdate)
 
         # `constantinit` PINS these entries, it does not merely seed them. Models sample
         # every parameter unconditionally inside backward_sample, so without this a
@@ -197,7 +214,10 @@ function gandyscottTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000,
         #backward set 
         data, state = forward_sample(model, info)
         for j in 1:nthin
-            data, state = backward_sample(model, data, state)
+            # Skipping a block is still a valid (partial) Gibbs kernel, so the test stays
+            # exact; it lets one isolate a subset of the updates.
+            data, state = isnothing(skipupdate) ? backward_sample(model, data, state) :
+                                                  backward_sample(model, data, state; skipupdate=skipupdate)
         end
         for key in varlist
             push!(b_samples[key], state[key])
@@ -206,7 +226,7 @@ function gandyscottTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000,
     return f_samples, b_samples
 end
 
-function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nthin=5, info=nothing)
+function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nthin=5, info=nothing, skipupdate=nothing)
     f_samples = Dict("$key" => [] for key in varlist)
     b_samples = Dict("$key" => [] for key in varlist)
     @showprogress for i in 1:nsamples
@@ -217,7 +237,10 @@ function scheinTest(model::MatrixMF, varlist::Vector{String}; nsamples=1000, nth
         end
         #backward set 
         for j in 1:nthin
-            data, state = backward_sample(model, data, state)
+            # Skipping a block is still a valid (partial) Gibbs kernel, so the test stays
+            # exact; it lets one isolate a subset of the updates.
+            data, state = isnothing(skipupdate) ? backward_sample(model, data, state) :
+                                                  backward_sample(model, data, state; skipupdate=skipupdate)
         end
         for key in varlist
             push!(b_samples[key], state[key])
