@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=covidig
-#SBATCH --array=1-120%20
+#SBATCH --array=1-120%23
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -38,7 +38,8 @@
 # sweep count -- roughly 4.6 h at D = 1 and ~19 h at D = 9 for 15000 sweeps. The D = 7 and
 # D = 9 arms will exceed the 12 h limit and need ONE resubmission each; checkpointing every
 # 500 sweeps makes that a no-op (completed cells are skipped). Budget ~3 days of wall clock
-# for the grid at 20 concurrent tasks.
+# for the grid at 23 concurrent tasks. The cluster allows 24, so %23 leaves one slot free
+# for an interactive srun while the grid runs.
 #
 # STORAGE, and the two places it goes:
 #   SCRATCH  gets the full chain file, ~1.1 GB/chain with THETAFULL=1 (the theta trace alone
