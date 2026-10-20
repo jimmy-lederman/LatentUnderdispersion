@@ -1,6 +1,7 @@
 using ProgressMeter
 using Random
 using Distributions
+using JLD          # only for fit's optional checkpoint/resume; already a Project dependency
 
 
 function logsumexpvec(arr::AbstractVector{T}) where T <: Real
@@ -71,7 +72,9 @@ sample_rate_prior() = rand(Gamma(HYPER_E0, 1 / HYPER_F0))
 abstract type MatrixMF end
 
 function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initialize=true, initseed=1, mask=nothing, verbose=true, info=nothing,
-    constantinit=nothing, init=nothing, keep_all=false, skipupdate=nothing)
+    constantinit=nothing, init=nothing, keep_all=false, skipupdate=nothing,
+    griddy=false, S_griddy=250, annealStrat=nothing,
+    ckptfile=nothing, ckptevery=500)
     # `skipupdate` names parameters whose update block should not RUN at all, and is
     # forwarded to backward_sample. It is distinct from `constantinit`, which lets the
     # update run and then overwrites the result: the two give the same chain, but only
@@ -86,14 +89,49 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
     # data-driven starting point for r (its prior sits at r ~ 0.01 against a needed ~500,
     # and from a prior draw the latent sums overflow Int64 before the hierarchical rate
     # can adapt) without freezing r thereafter.
-    # Initialization is a draw from the prior for every model -- no tailored
-    # schemes. The griddy branch (S_griddy = 250 prepended iterations) and the
-    # skipupdate branch (parameters frozen while s < nburnin/2) were removed:
-    # griddy existed to work around a p update that never ran, and holding D
-    # fixed early is unnecessary (verified: R-hat <= 1.004 for the median-Poisson
-    # model with D free from the first iteration). `constantinit` is kept because
-    # it is how a model is pinned to a fixed order D for the fixed-D comparisons.
+    # Initialization is a draw from the prior for every model, except that
+    # `griddy=true` PREPENDS S_griddy iterations in which (p, r) are drawn from a
+    # grid over p rather than from their complete conditionals. Those iterations
+    # precede burn-in and are never retained.
+    #
+    # This branch was removed in ea4a13e as a workaround for a p update that never
+    # ran, and restored here because the Section 6.2 parameter-recovery results
+    # (Feb 2026) were produced WITH it: alpha and p are strongly correlated under
+    # this parameterization, and from a prior draw the chain reaches the right
+    # neighbourhood of (alpha, p) only slowly. Without it the repo cannot
+    # reproduce Figure 7. Default is false, so Section 6.3 and every other caller
+    # is unaffected.
+    #
+    # `annealStrat` is restored alongside griddy for the same reason: the Section
+    # 6.2 notebook passes it, and it is NOT inert -- the univariate NB model uses
+    # it to set shape_factor/rate_factor, which scale the sufficient statistics in
+    # the (mu, p) updates. It ramps `anneal` down from annealstart to 0 over the
+    # first half of burn-in in annealtimes steps. Default nothing, so every other
+    # caller is unaffected.
+    #
+    # The skipupdate branch (parameters frozen while s < nburnin/2) stays removed:
+    # holding D fixed early is unnecessary (verified: R-hat <= 1.004 for the
+    # median-Poisson model with D free from the first iteration). `constantinit`
+    # is kept because it is how a model is pinned to a fixed order D.
     samplelist = []
+    s0 = 0
+    # ---- optional checkpoint / resume -------------------------------------------------
+    # Opt-in: with ckptfile = nothing nothing is written or read, so every other section's
+    # behaviour is untouched. It exists because the Section 7.2 held-out runs are 8-10 h on
+    # the full matrix against a 12 h wall clock, so a job that is cut off can be resubmitted
+    # and continue instead of starting over.
+    #
+    # CAVEAT: a resumed chain is NOT bitwise identical to an uninterrupted one. The sampler
+    # draws from per-task RNGs inside @threads loops and those cannot be captured, so this is
+    # crash recovery, not reproducibility. (The same caveat applies to run_diag_chain.jl's
+    # own resume path.) The retained draws are still a valid sample from the chain either way.
+    if !isnothing(ckptfile) && isfile(ckptfile) && filesize(ckptfile) > 0
+        ck = JLD.load(ckptfile)
+        state = ck["state"]; s0 = ck["sweep"]; samplelist = ck["samplelist"]
+        initialize = false
+        verbose && println("resuming from $ckptfile at sweep $s0 ($(length(samplelist)) draws retained)")
+        flush(stdout)
+    end
     if initialize
         Random.seed!(initseed)
         if !isnothing(constantinit) && !isnothing(info)
@@ -121,15 +159,42 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         end
     end
 
-    S = nburnin + nthin*nsamples
+    # griddy iterations sit in FRONT of burn-in, so nburnin and nsamples keep
+    # their usual meaning and the retained draws are unchanged in number.
+    Sg = griddy ? S_griddy : 0
+    S = Sg + nburnin + nthin*nsamples
     if verbose
         prog = Progress(S, desc="Burnin+Samples...")
     end
 
-    for s in 1:S
-        ~, state = isnothing(skipupdate) ?
-            backward_sample(model, data, state, mask) :
+    annealstart = 1000
+    annealtimes = 10
+    anneal = isnothing(annealStrat) ? nothing : annealstart
+    annealcount = 1
+
+    for s in (s0+1):S
+        # anneal ramps down over the first half of burn-in (measured after any
+        # griddy prefix), matching the pre-ea4a13e schedule.
+        if !isnothing(annealStrat) && s > Sg && (s - Sg) < nburnin/2
+            if (s - Sg) > nburnin*annealcount/(annealtimes*2)
+                anneal -= annealstart/annealtimes
+                annealcount += 1
+            end
+        elseif !isnothing(annealStrat) && s > Sg
+            anneal = nothing
+        end
+
+        ~, state = if griddy && s <= Sg
+            backward_sample(model, data, state, mask; griddy=true,
+                            annealStrat=annealStrat, anneal=anneal)
+        elseif !isnothing(annealStrat)
+            backward_sample(model, data, state, mask;
+                            annealStrat=annealStrat, anneal=anneal)
+        elseif isnothing(skipupdate)
+            backward_sample(model, data, state, mask)
+        else
             backward_sample(model, data, state, mask; skipupdate=skipupdate)
+        end
 
         # `constantinit` PINS these entries, it does not merely seed them. Models sample
         # every parameter unconditionally inside backward_sample, so without this a
@@ -147,8 +212,16 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
 
         if keep_all
             push!(samplelist, state)
-        elseif s > nburnin && mod(s, nthin) == 0
+        elseif s > Sg + nburnin && mod(s - Sg, nthin) == 0
             push!(samplelist, state)
+        end
+
+        if !isnothing(ckptfile) && mod(s, ckptevery) == 0
+            # write to a temporary and move, so a job killed mid-write does not leave a
+            # truncated checkpoint that the next attempt would try to resume from
+            tmp = ckptfile * ".tmp"
+            JLD.save(tmp, "state", state, "sweep", s, "samplelist", samplelist)
+            mv(tmp, ckptfile; force=true)
         end
 
         if verbose

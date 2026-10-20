@@ -75,6 +75,7 @@ for a in ARGS; startswith(a, "a=") && (global atheta = parse(Float64, a[3:end]))
 for a in ARGS; startswith(a, "crt=") && (CRT_TOL[] = parse(Float64, a[5:end])); end
 println("CRT le Cam tolerance: ", CRT_TOL[])
 "taunaive" in ARGS && (TAU_NAIVE[] = true; println("tau: naive MvNormal draw"))
+"phigroup" in ARGS && (PHI_GROUP[] = true; println("phi group moves (tilt + curvature): on"))
 N, M, K, Q, Dmax = DIRREG ? (100, 60, 3, 5, 9) : SYNTHREG ? (100, 60, 3, 5, 9) : REALISTIC ? (60, 295, 5, 25, 9) : BIG ? (240, 48, 2, 3, 5) : (8, 6, 2, 3, 5)
 # Dirichlet theta: phi carries the scale. Typical factor size phibar sets start_V2 (E[phi_1] =
 # phibar) and c = c_for_scale(0.02, phibar); the small regime uses phibar = 10, dirreg 1000.

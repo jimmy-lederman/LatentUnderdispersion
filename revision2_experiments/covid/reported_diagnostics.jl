@@ -115,6 +115,28 @@ hybrid    = length(ARGS) >= 13 && ARGS[13] == "2"
 # the scale, so c comes from the scale rule c_for_scale(0.02, phibar) with phibar = the
 # total daily increment / K, and E[phi_1] = phibar; ARG 10 (c) is ignored in that case.
 dirichlet = length(ARGS) >= 14 && ARGS[14] == "1"
+# ARG 15: 1 = phi group moves (tilt + curvature on each trajectory) after the theta step
+length(ARGS) >= 15 && ARGS[15] == "1" && (PHI_GROUP[] = true)
+# ARG 16: warm-up annealing of the order, e.g. "1:1000,3:500,5:500" = D pinned at 1 for
+# sweeps 1-1000, then 3 for 500, then 5 for 500, then D inferred. The D = 1 model mixes
+# freely (its likelihood is flat enough that the factor landscape is not ridged), so
+# starting there and sharpening should leave every chain in the same basin with all
+# factors alive. It only shapes the warm-up -- the sampler afterwards is unchanged, and
+# the annealed sweeps are discarded as burn-in -- so it needs no separate validity check.
+anneal = length(ARGS) >= 16 ? ARGS[16] : ""
+function anneal_schedule(spec, nsweeps)
+    sched = fill(0, nsweeps)      # 0 = D inferred
+    isempty(spec) && return sched
+    s0 = 0
+    for part in split(spec, ",")
+        d, n = split(part, ":"); d = parse(Int, d); n = parse(Int, n)
+        for s in (s0+1):min(s0+n, nsweeps); sched[s] = d; end
+        s0 += n
+    end
+    sched
+end
+println("phi group moves: ", PHI_GROUP[])
+println("anneal schedule: ", isempty(anneal) ? "none" : anneal)
 phibar = mean_inc * N / K
 if dirichlet
     cphi = c_for_scale(0.02, phibar); sV1 = 1.0; sV2 = 1 / phibar; collapsed = true; hybrid = true
@@ -139,13 +161,16 @@ function run_chain(seed)
         st["V_KM"] = st["V_KM"] .* (target / max(cur, 1e-12))
     end
     dfix > 0 && (st["D_NM"] = fill(dfix, N, M))
+    sched = anneal_schedule(anneal, nsweeps)
+    isempty(anneal) || (st["D_NM"] = fill(max(sched[1], 1), N, M))
     sw = Int[]; ll = Float64[]; acc = Float64[]
     mu = Vector{Vector{Float64}}(); th = Vector{Matrix{Float64}}(); ph = Vector{Matrix{Float64}}()
     t0 = time()
     for s in 1:nsweeps
-        (_d, st) = dfix > 0 ? backward_sample(model, data, st, mask_NM; skipupdate=["D_NM"]) :
-                              backward_sample(model, data, st, mask_NM)
-        dfix > 0 && (st["D_NM"] = fill(dfix, N, M))
+        pin = dfix > 0 ? dfix : sched[s]
+        (_d, st) = pin > 0 ? backward_sample(model, data, st, mask_NM; skipupdate=["D_NM"]) :
+                             backward_sample(model, data, st, mask_NM)
+        pin > 0 && (st["D_NM"] = fill(pin, N, M))
         shear && push!(acc, st["shear_acc"])
         if s % THIN == 0
             U = st["U_NK"]::Matrix{Float64}; V = st["V_KM"]::Matrix{Float64}
@@ -172,6 +197,13 @@ for c in 1:nchains
 end
 
 sw = res[1][1]
+# per-chain mean held-out log density (total over the held-out cells) in the last half:
+# the fit itself, for comparing c / Q / D variants -- not a diagnostic.
+let nh = length(heldout)
+    lasthalf = findall(s -> s > nsweeps ÷ 2, sw)
+    @printf("held-out log density per chain, last half (per cell, %d cells): %s\n", nh,
+            join([@sprintf("%.4f", mean(res[c][2][lasthalf]) / nh) for c in 1:nchains], "  "))
+end
 safe(f, x) = try f(x) catch; NaN end
 r3(A) = reshape(A, size(A,1), size(A,2), 1)
 # Rhat is reported as median / p90 / max over parameters. Quoting only the max over 150

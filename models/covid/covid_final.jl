@@ -50,6 +50,10 @@ const CRT_TOL = Ref(0.02)
 # original serial formulation) instead of the Cholesky-factor draw, to bisect the tau
 # bias seen in the realistic-regime Schein test.
 const TAU_NAIVE = Ref(false)
+# Group moves on each factor's trajectory (phi_group_move!), off by default; the cluster
+# driver and the test harness switch it on. See the function for what it does.
+const PHI_GROUP = Ref(false)
+const PHI_GROUP_J = Ref(8)      # number of smooth basis functions (cosines of order 1..J)
 function sampleCRTlecam(Y::Integer, R::Real, tol=CRT_TOL[])
     tol <= 0 && return sampleCRT(Y, R)
     Y_max = floor(Int, R * (1/tol - 1))
@@ -393,9 +397,13 @@ function update_D(model::covid4, Y, mu, p, w::DUpdateWork)
     logp   = log(p)
     log1mp = log1p(-p)
     dist   = Poisson(mu)
-    F  = cdf(dist, Y)
-    f  = pdf(dist, Y)
-    lf = logpdf(dist, Y)
+    # Parent quantities from the Poisson pmf recurrence (helper/OrderStatsSampling.jl,
+    # os_consts(::Poisson)): no incomplete gamma per cell, and more accurate near Y ~ mu.
+    # The generic path is used automatically where the recurrence would underflow.
+    C  = os_consts(dist, Y)
+    F  = C.FY
+    f  = C.pdfY
+    lf = C.lpY
 
     half = (model.Dmax - 1) ÷ 2
     @inbounds for i in eachindex(w.cand)
@@ -463,7 +471,7 @@ function total_loglik_eps(model::covid4, Y_NM, Y0_N, mu_NM, D_NM, eps, works)
             else
                 idx = (D + 1) >> 1
                 j = w.jj[idx]
-                v = logpmf_orderstat_grid(cdf(dist, Y), pdf(dist, Y), D, j,
+                v = logpmf_orderstat_grid((C_ = os_consts(dist, Y); C_.FY), C_.pdfY, D, j,
                                           w.tabs[idx], w.pA, w.pE, w.pB)
                 isnan(v) && (v = logpmfOrderStatPoisson(Y, mu, D, j, compute=false))
                 s += v
@@ -600,7 +608,12 @@ end
 
 # Univariate slice sampler (Neal 2003, stepping out then shrinkage) on a log density.
 function slice1d(logf, x0::Float64, w::Float64; maxsteps::Int=20)
-    logy = logf(x0) + log(rand())
+    f0 = logf(x0)
+    # A current point with zero density (e.g. a trajectory entry that underflowed to 0.0
+    # in a Gamma draw with a tiny shape) would make the shrinkage loop spin forever, since
+    # no proposal can exceed -Inf. Leave the coordinate where it is.
+    isfinite(f0) || return x0
+    logy = f0 + log(rand())
     L = x0 - w * rand(); R = L + w
     j = floor(Int, maxsteps * rand()); kk = maxsteps - 1 - j
     while j > 0 && logf(L) > logy; L -= w; j -= 1; end
@@ -749,6 +762,61 @@ function phi_scale_move!(model::covid4, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps:
     return nothing
 end
 
+# Multiplicative group moves on a factor's trajectory, against the exact S-target.
+#
+# The PGDS step redraws phi_k conditional on the thinned counts, which pin every phi_kt to
+# ~1/sqrt(count) -- 0.1-0.3% on the full matrix -- so the SHAPE of the trajectory (where the
+# wave sits, how wide it is) random-walks with an autocorrelation of thousands of sweeps
+# even though mu and theta mix. The scale move handles the one global direction phi_k -> kappa
+# phi_k; this handles the next two: phi_kt -> phi_kt exp(a g(t)) with g = tilt (t - tbar)/M,
+# which moves the centre of mass, and g = curvature ((t - tbar)/M)^2 - mean, which changes
+# the width. Each is an elementwise bijection with log-Jacobian a * sum_t g(t), and a is
+# drawn by slice sampling from its exact conditional: gamma-Markov prior of the deformed
+# row + likelihood sum_it [S log mu - D mu] over all cells (O(NM) per evaluation, threaded
+# over columns) + the Jacobian. theta and everything else are fixed. Placed after the theta
+# step, where the thinned counts have been discarded, so it is ordinary slice-within-Gibbs
+# on the posterior; the PGDS pass, thinning, CRT and order-statistic steps are untouched.
+function phi_group_move!(model::covid4, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps::Float64)
+    N, M, K = model.N, model.M, model.K
+    off(n, m) = !model.use_offset ? 0.0 : Float64(m == 1 ? Y0_N[n] : Y_NM[n,m-1])
+    G_NM = U_NK * V_KM
+    # smooth multiplicative basis: cosines of order 1..J on [0, 1] (order 1 ~ tilt, 2 ~
+    # curvature, higher orders reshape the wave more locally), each mean-zero
+    basis = [[cos(j * pi * (t - 0.5) / M) for t in 1:M] for j in 1:PHI_GROUP_J[]]
+    nt = Threads.nthreads(); part = zeros(Float64, nt)
+    row = Vector{Float64}(undef, M); newrow = Vector{Float64}(undef, M)
+    for k in 1:K, g in basis
+        row .= V_KM[k, :]
+        # entries that underflowed to 0.0 (Gamma draws with shape ~d) have no finite log
+        # prior; the gamma-Markov chain keeps such tails tiny anyway, so floor them.
+        @inbounds for t in 1:M; row[t] = max(row[t], 1e-200); end
+        sumg = sum(g)
+        function lf(a)
+            @inbounds for t in 1:M; newrow[t] = row[t] * exp(a * g[t]); end
+            lp = logprior_phi_vec(model, newrow)
+            isfinite(lp) || return -Inf
+            fill!(part, 0.0)
+            @views Threads.@threads :static for m in 1:M
+                d = newrow[m] - row[m]
+                acc = 0.0
+                @inbounds for n in 1:N
+                    mu = off(n, m) + eps + G_NM[n,m] + U_NK[n,k] * d
+                    acc += S_NM[n,m] * log(mu) - D_NM[n,m] * mu
+                end
+                part[Threads.threadid()] += acc
+            end
+            lp + sum(part) + a * sumg
+        end
+        a1 = slice1d(lf, 0.0, 0.05)
+        @inbounds for t in 1:M
+            nv = row[t] * exp(a1 * g[t]); d = nv - row[t]
+            V_KM[k, t] = nv
+            for n in 1:N; G_NM[n,t] += U_NK[n,k] * d; end
+        end
+    end
+    return nothing
+end
+
 function collapsed_update!(model::covid4, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps::Float64, b_mu::Float64)
     N, M, K = model.N, model.M, model.K
     G_NM = U_NK * V_KM
@@ -760,6 +828,10 @@ function collapsed_update!(model::covid4, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, ep
                       theta_slice!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, G_NM, eps_th, b_mu)
     if model.dir_theta
         phi_scale_move!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps_th)
+        G_NM .= U_NK * V_KM
+    end
+    if PHI_GROUP[]
+        phi_group_move!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps_th)
         G_NM .= U_NK * V_KM
     end
 
@@ -963,6 +1035,7 @@ function backward_sample(model::covid4, data, state, mask=nothing; skipupdate=no
         model.dir_theta ? theta_simplex!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, G_NM, eps) :
                           theta_slice!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, G_NM, eps, b_mu)
         model.dir_theta && phi_scale_move!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps)
+        PHI_GROUP[] && phi_group_move!(model, Y_NM, Y0_N, S_NM, D_NM, U_NK, V_KM, eps)
         if model.hier_b
             b_mu = sample_rate_hyper(U_NK, model.a)
         end

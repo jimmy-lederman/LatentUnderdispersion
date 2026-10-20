@@ -46,12 +46,20 @@ export OPENBLAS_NUM_THREADS=1
 export COLLAPSED=${COLLAPSED:-0}     # see configs.sh; read by run_diag_chain.jl
 export DIRICHLET=${DIRICHLET:-0}
 export ATHETA=${ATHETA:-1.0}
+export KFAC=${KFAC:-5}
+export QDIM=${QDIM:-25}
+export THIN=${THIN:-1}
+export DFIX=${DFIX:-0}
+export CPHI=${CPHI:-100}
+export FINAL=${FINAL:-0}
+export ANNEAL=${ANNEAL:-0}
+export NMFINIT=${NMFINIT:-0}
 
 CHAIN=${SLURM_ARRAY_TASK_ID}
 OUT=$(outfile_for "$CHAIN")
 
 echo "=== covid diagnostics: chain ${CHAIN}, job ${SLURM_JOB_ID:-local}, $(date)"
-echo "=== host $(hostname), cpus ${CPUS}, julia threads ${JULIA_NUM_THREADS}, openblas ${OPENBLAS_NUM_THREADS}, collapsed ${COLLAPSED}, outdir ${OUTDIR}"
+echo "=== host $(hostname), cpus ${CPUS}, julia threads ${JULIA_NUM_THREADS}, openblas ${OPENBLAS_NUM_THREADS}, collapsed ${COLLAPSED}, K ${KFAC}, Q ${QDIM}, outdir ${OUTDIR}"
 echo "=== cpu: $(grep -m1 'model name' /proc/cpuinfo 2>/dev/null || echo unknown)"
 
 if [ -s "$REPO/$OUT" ]; then

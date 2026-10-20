@@ -55,6 +55,20 @@ esac
 [ "${DIRICHLET:-0}" = "1" ] && OUTDIR=output/covid/diag_dirichlet
 # ATHETA=X (default 1.0): shape of the theta prior; a sparse variant gets its own directory.
 [ -n "${ATHETA:-}" ] && [ "${ATHETA}" != "1.0" ] && OUTDIR=${OUTDIR}_a${ATHETA}
+# KFAC / QDIM (defaults 5 / 25): variants get their own directory.
+[ -n "${KFAC:-}" ] && [ "${KFAC}" != "5" ] && OUTDIR=${OUTDIR}_K${KFAC}
+[ -n "${QDIM:-}" ] && [ "${QDIM}" != "25" ] && OUTDIR=${OUTDIR}_Q${QDIM}
+# DFIX=n (default 0 = inferred): D pinned; the D = 1 Poisson baseline gets its own directory.
+[ -n "${DFIX:-}" ] && [ "${DFIX}" != "0" ] && OUTDIR=${OUTDIR}_D${DFIX}
+# CPHI (default 100): the gamma-Markov chain's c.
+[ -n "${CPHI:-}" ] && [ "${CPHI}" != "100" ] && OUTDIR=${OUTDIR}_c${CPHI}
+# FINAL=1: the paper's run -- K = 5, Q = 1, c = 100, eps = 0.5, hybrid sampler, unthinned,
+# full-surface statistics -- in its own directory, never mixed with the exploratory arrays.
+[ "${FINAL:-0}" = "1" ] && OUTDIR=output/covid/diag_final_Q1
+# ANNEAL=n (D held at 1 for the first n sweeps of warm-up) gets its own directory; this
+# rule is last so it also applies to the FINAL run.
+[ -n "${ANNEAL:-}" ] && [ "${ANNEAL}" != "0" ] && OUTDIR=${OUTDIR}_anneal${ANNEAL}
+[ "${NMFINIT:-0}" = "1" ] && OUTDIR=${OUTDIR}_nmf
 
 JULIA="$HOME/.juliaup/bin/julia"
 [ -x "$JULIA" ] || JULIA="$(command -v julia)"

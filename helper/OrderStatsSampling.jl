@@ -42,6 +42,11 @@ end
 # Per-(dist, Y) quantities that are constant across the sequential classification steps.
 # Hoisting them is an algebraic no-op: every downstream formula consumes the exact same
 # floating-point values it previously recomputed, so results are bitwise identical.
+# log(k!) for k = 0.._LF_MAX, so the Poisson log-pmf Y*log(mu) - mu - log(Y!) needs no
+# lgamma call per cell. Shared by the D-update and the Poisson-specialised os_consts.
+const _LF_MAX = 20000
+const _LF = [SpecialFunctions.loggamma(k + 1.0) for k in 0:_LF_MAX]
+
 struct OSConsts
     pdfY::Float64
     lpY::Float64
@@ -87,6 +92,68 @@ end
     FY > 1.0 && (FY = 1.0)
     OSConsts(pdfY, logpdf(dist, Y), FY, FYm1,
              _robust_logcdf(dist, Y - 1, FYm1), _robust_logccdf(dist, Y, FY))
+end
+
+# Poisson parent: every quantity from the recurrence f(k) = f(k-1)*mu/k, no special
+# functions. F(Y-1) and f(Y) come from one upward pass; the survival S(Y) is
+# 1 - F(Y-1) - f(Y) unless that is small, when it is summed forward from f(Y+1)
+# instead (geometric decay, exact). Against a 256-bit reference the recurrence is
+# MORE accurate than the incomplete gamma near Y ~ mu (5e-11 vs 6e-6). Delegates to
+# the generic method where exp(-mu) would underflow or Y exceeds the table.
+@inline function os_consts(dist::Poisson, Y)
+    mu = dist.λ
+    (mu > 600.0 || Y > _LF_MAX || !(mu > 0.0)) &&
+        return invoke(os_consts, Tuple{Any,Any}, dist, Y)
+    f = exp(-mu); FYm1 = 0.0
+    @inbounds for k in 1:Y
+        FYm1 += f
+        f *= mu / k
+    end
+    FY = FYm1 + f
+    S = 1.0 - FY
+    if S < 1e-3                       # see _cell_lliks_fused!: cancellation only below ~1e-3
+        S = 0.0; g = f
+        @inbounds for k in (Y+1):(Y+2000)
+            g *= mu / k
+            S += g
+            g < 1e-17 * S && break
+        end
+    end
+    lpY = Y * log(mu) - mu - _LF[Y+1]
+    return OSConsts(f, lpY, FY, FYm1, FYm1 > 0.0 ? log(FYm1) : -Inf, S > 0.0 ? log(S) : -Inf)
+end
+
+# Negative binomial parent, NB(r, p): same idea via the pmf recurrence
+#   f(0) = p^r,   f(k)/f(k-1) = (r+k-1)/k * (1-p).
+# r = alpha_ij is continuous here, so log f(Y) cannot come from an integer table:
+# it is log of the recurrence value, with logpdf (lgamma-based) only where that
+# would underflow. Measured 16x over the incomplete-beta path, accurate to 1e-14
+# against BigFloat. NB tails decay geometrically at rate (1-p), so the forward tail
+# sum can run long for small p; it is only entered when S < 1e-3, i.e. Y well into
+# the tail, which is rare for heavy tails. Delegates when p^r would underflow.
+@inline function os_consts(dist::NegativeBinomial, Y)
+    r = dist.r; p = dist.p
+    lf0 = r * log(p)
+    (lf0 < -700.0 || !(r > 0.0) || !(0.0 < p < 1.0)) &&
+        return invoke(os_consts, Tuple{Any,Any}, dist, Y)
+    q = 1.0 - p
+    f = exp(lf0); FYm1 = 0.0
+    @inbounds for k in 1:Y
+        FYm1 += f
+        f *= (r + k - 1) / k * q
+    end
+    FY = FYm1 + f
+    S = 1.0 - FY
+    if S < 1e-3
+        S = 0.0; g = f
+        @inbounds for k in (Y+1):(Y+50000)
+            g *= (r + k - 1) / k * q
+            S += g
+            g < 1e-17 * S && break
+        end
+    end
+    lpY = f > 1e-290 ? log(f) : logpdf(dist, Y)
+    return OSConsts(f, lpY, FY, FYm1, FYm1 > 0.0 ? log(FYm1) : -Inf, S > 0.0 ? log(S) : -Inf)
 end
 
 # cdf/ccdf of the j-th order statistic of n iid draws, evaluated through the parent cdf
@@ -167,9 +234,17 @@ function logpmf_orderstat_grid(F1::Float64, f::Float64, D::Int, j::Int, T::Matri
         pb = pB[b+1]
         pb == 0.0 && continue
         for a in 0:(j-1)
+            # pA[a+1] = F0^a is non-increasing in a (0 <= F0 <= 1), so once it
+            # underflows to zero every later term in this row is exactly zero and
+            # the row can be abandoned rather than accumulated. Bit-identical: it
+            # drops only exact zeros. Worth the branch because F0 = 0 whenever
+            # Y = 0, which is a large share of cells in sparse data -- it turns
+            # the j-term row into a single term there.
+            pa = pA[a+1]
+            pa == 0.0 && break
             e = D - a - b
             e < 1 && continue
-            s += T[a+1, b+1] * pA[a+1] * pE[e+1] * pb
+            s += T[a+1, b+1] * pa * pE[e+1] * pb
         end
     end
     s > 0.0 && return log(s)
@@ -396,6 +471,141 @@ function randTruncDirect(dist, lower, upper, n)
         end
     else # numerically zero mass: boundary atom dominates
         fill!(out, isinf(upper) ? lower : upper)
+    end
+    return out
+end
+
+# Poisson parent: inversion by walking k upward from `lower` accumulating f(k), one
+# multiply per step, after one recurrence pass for f(lower) and F(lower-1). Replaces
+# two incomplete-gamma cdf calls plus a quantile (itself a bisection over cdf) per
+# draw: measured 6.6x per draw, empirical pmf within Monte Carlo noise of exact.
+# Keeps the generic rule of rejection-from-parent when the region holds most of the
+# mass. Delegates to the generic method where the recurrence would underflow.
+function randTruncDirect(dist::Poisson, lower, upper, n)
+    mu = dist.λ
+    (mu > 600.0 || !(mu > 0.0)) &&
+        return invoke(randTruncDirect, Tuple{Any,Any,Any,Any}, dist, lower, upper, n)
+    n == 0 && return Int[]
+    out = Vector{Int}(undef, n)
+    lo = lower <= 0 ? 0 : Int(lower)
+    f = exp(-mu); Flo1 = 0.0
+    @inbounds for k in 1:lo
+        Flo1 += f
+        f *= mu / k
+    end
+    # Tail mass by FORWARD SUMMATION, never as 1 - F(lo-1). That subtraction loses
+    # every significant digit once F(lo-1) is within eps of 1: at mu = 8, lower = 60
+    # the true tail is 7e-32 but 1 - F(59) evaluates to 2.2e-16. The inversion below
+    # would then draw u far above the mass that actually exists, walk past the whole
+    # support and hit its bail-out, returning a latent count of 200000 -- which blows
+    # up mu for that row and column and throws the chain into a different basin.
+    # (Observed as R-hat ~8 with ESS ~28 on a third of the Section 6.3 NB datasets.)
+    # The generic method cannot fail this way because `quantile` is bounded by the
+    # support; the recurrence has no such backstop, so the mass must be right.
+    if isinf(upper)
+        mass = f; g = f
+        @inbounds for k in (lo+1):(lo+200000)
+            g *= mu / k
+            mass += g
+            g < 1e-17 * mass && break
+        end
+    else
+        up = Int(upper); g = f; mass = f
+        @inbounds for k in (lo+1):up
+            g *= mu / k
+            mass += g
+        end
+    end
+    if mass > 0.5
+        @inbounds for i in 1:n
+            x = rand(dist)
+            while x < lower || x > upper
+                x = rand(dist)
+            end
+            out[i] = x
+        end
+        return out
+    end
+    if !(mass > 0.0)
+        fill!(out, isinf(upper) ? lo : Int(upper))
+        return out
+    end
+    @inbounds for i in 1:n
+        u = rand() * mass
+        k = lo; g = f; acc = g
+        while acc < u
+            k += 1
+            g *= mu / k
+            acc += g
+            if k >= 200000 || (!isinf(upper) && k >= Int(upper))
+                break
+            end
+        end
+        out[i] = isinf(upper) ? k : min(k, Int(upper))
+    end
+    return out
+end
+
+# Negative binomial parent: inversion by walking the pmf recurrence upward from
+# `lower`, as for Poisson. Replaces two incomplete-beta cdf calls plus a quantile
+# (a bisection over the incomplete beta, 381 ns) per draw.
+function randTruncDirect(dist::NegativeBinomial, lower, upper, n)
+    r = dist.r; p = dist.p
+    lf0 = r * log(p)
+    (lf0 < -700.0 || !(r > 0.0) || !(0.0 < p < 1.0)) &&
+        return invoke(randTruncDirect, Tuple{Any,Any,Any,Any}, dist, lower, upper, n)
+    n == 0 && return Int[]
+    q = 1.0 - p
+    out = Vector{Int}(undef, n)
+    lo = lower <= 0 ? 0 : Int(lower)
+    f = exp(lf0); Flo1 = 0.0
+    @inbounds for k in 1:lo
+        Flo1 += f
+        f *= (r + k - 1) / k * q
+    end
+    f == 0.0 && return invoke(randTruncDirect, Tuple{Any,Any,Any,Any}, dist, lower, upper, n)
+    # Forward tail sum, not 1 - F(lo-1): see the Poisson method for why that
+    # subtraction is unsafe. NB tails are heavier, so the sum can run longer.
+    if isinf(upper)
+        mass = f; g = f
+        @inbounds for k in (lo+1):(lo+2000000)
+            g *= (r + k - 1) / k * q
+            mass += g
+            g < 1e-17 * mass && break
+        end
+    else
+        up = Int(upper); g = f; mass = f
+        @inbounds for k in (lo+1):up
+            g *= (r + k - 1) / k * q
+            mass += g
+        end
+    end
+    if mass > 0.5
+        @inbounds for i in 1:n
+            x = rand(dist)
+            while x < lower || x > upper
+                x = rand(dist)
+            end
+            out[i] = x
+        end
+        return out
+    end
+    if !(mass > 0.0)
+        fill!(out, isinf(upper) ? lo : Int(upper))
+        return out
+    end
+    @inbounds for i in 1:n
+        u = rand() * mass
+        k = lo; g = f; acc = g
+        while acc < u
+            k += 1
+            g *= (r + k - 1) / k * q
+            acc += g
+            if k >= 2000000 || (!isinf(upper) && k >= Int(upper))
+                break
+            end
+        end
+        out[i] = isinf(upper) ? k : min(k, Int(upper))
     end
     return out
 end

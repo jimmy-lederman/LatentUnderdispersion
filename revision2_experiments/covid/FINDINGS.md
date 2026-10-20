@@ -1289,3 +1289,477 @@ August thinning run in output/covid/diag (same mask, seeds). Analyse with
 Author decisions today: keep the Gamma parametrisation (report theta/s_k and s_k phi as
 the Dirichlet-Gamma decomposition); Dirichlet code kept as a certified option (dir_theta),
 not used. Sparsity (ATHETA=0.3) is the follow-up array if the factors' Rhat stays ~2.
+
+2026-09-14 00:16: all four tasks of 1703820 PREEMPTED on r003 (general partition), requeued
+by SLURM, resumed 00:18 from their sweep-6000/6500 checkpoints on h002 / p001 / m002 (~500
+sweeps and a JIT warm-up lost per chain). Per-sweep cost before preemption: 3.0 -> 3.9 s
+as mean D climbed 5.3 -> 8.3 (four 16-thread tasks sharing one 64-core node). Expect the
+12 h wall clock to end each task around sweep 11-12k; one plain resubmit resumes them.
+
+## 2026-09-14: FULL-MATRIX HYBRID RESULT (SLURM 1703820 + resume 1744367; 4 x 15000)
+
+Window 7500-15000, Rhat med/max (ESS/chain med / min / pooled):
+
+| quantity | thinning (Aug) | hybrid |
+|---|---|---|
+| held-out log density | 2.72 (12/5/17) | 2.96 (12/4/17) |
+| mean D | 3.09 (4/4/16) | 2.92 (4/4/16) |
+| mu (cells) | 1.22/3.63 (25/5/38) | 1.17/2.39 (886/5/60) |
+| theta/s_k aligned | 1.51/3.16 (20/4/25) | 1.40/2.74 (1060/4/34) |
+| s_k*phi aligned | 2.34/4.24 (10/4/18) | 2.37/4.10 (11/4/18) |
+| FACTOR centre of mass | 2.82/3.51 | 3.46/4.27 |
+| FACTOR activity share | 2.96/4.45 | 3.58/3.97 |
+
+Within-chain mixing of mu and the county shares improved ~40x (ESS/chain 25 -> 886,
+20 -> 1060); their median Rhat improved modestly. The time factors, mean D and the
+held-out density did not: chains settle at different D levels (7.7 vs 8.3), different
+fits and different factor shapes -- the same multimodality seen on the 100-county
+subset, now confirmed at N = 3104 with a locally well-mixing sampler. Per-sweep cost
+2.6 s (quiet node) to 5.7 s (shared node); chain 1 and 3 needed one resume after the
+12 h wall clock (preemption at 00:16 cost ~30 min).
+
+### Mode census of the four full-matrix hybrid chains (mode_census.jl, last half)
+
+| chain | held-out ll | mean D | active factors (share > 0.01) | late wave (centre ~270) |
+|---|---|---|---|---|
+| 4 | -27526 (best) | 8.33 | 5 | yes, share 0.28 |
+| 1 | -27935 | 8.19 | 5 | yes, share 0.30 |
+| 3 | -29821 | 7.46 | **4** (one factor share 0.00) | no |
+| 2 | -30524 (worst) | 6.94 | 5 | yes, share 0.23 |
+
+Growth surfaces agree to corr 0.98-0.997 but differ by rms log-ratio 0.2-0.5; the total
+growth trajectory's between-chain sd (1193) exceeds its within-chain sd (822). The modes
+differ in the D level (which the factor fit must support: higher D = less noise) and in
+whether all five factors are alive: chain 3 lost a factor (a dead factor cannot revive
+under the gamma-Markov prior -- phi ~ 0 everywhere, zero thinned counts, prior keeps it
+at 0). The best-fitting mode (chains 1 and 4: all factors active, highest D) is the one
+the paper's Figure 10 describes. Within-mode diagnostics (chains 1 and 4 only) follow.
+
+Within the best mode (chains 1 and 4 only, window 7500-15000): mu 1.08/1.95 (ESS/chain
+968), theta/s_k 1.18/2.02 (1046), s_k*phi 1.93/2.92 (12), centre of mass 2.42, share
+2.41, held-out 2.20, mean D 1.90. So even the two chains in the same mode disagree on
+the factors: the three large waves match (cosine 0.98 / 0.98 / 0.95, 1.00 for the late
+wave), the smallest factor (share ~0.08-0.10) does not (cosine 0.44, centre 159 vs 215) --
+the same weakly-identified small factor as the synthetic "weak wave", now on real data.
+mu and the county shares are diagnosable; the time factors are reportable as three robust
+waves plus one unstable minor factor.
+
+## 2026-09-14 ~17:30: three follow-up full-matrix arrays submitted (hybrid sampler, 4 x 15000 each)
+
+| variant | SLURM | output dir | question |
+|---|---|---|---|
+| K = 4, Q = 25 | 1744887 | output/covid/diag_hybrid_K4 | does dropping the unstable fifth factor remove the dead-factor / minor-factor modes? |
+| K = 5, Q = 1  | 1744891 | output/covid/diag_hybrid_Q1 | is the 25-dim logistic factor model for rho the source of the D-level modes? (per-day rho_t, scalar county loading) |
+| K = 5, Q = 5  | 1744895 | output/covid/diag_hybrid_Q5 | the intermediate D layer (Q = 5 matched Q = 25 on held-out density on the subset) |
+
+KFAC / QDIM env knobs in run_diag_chain.jl, directories by variant in configs.sh. Auto-resume
+after the 12 h wall clock is handled by the session monitor (resume_<variant>.ids on the
+cluster). Reasoning: mean D was the slowest variable of the K = 5 / Q = 25 run (Rhat 2.9,
+ESS 4, chains plateauing at different D levels), the ρ layer's τ random walk with learned
+σ² is self-sustaining once saturated, and Q = 5 bought no held-out density on the subset.
+Sparsity (a < 1) deprioritised: it encourages exactly the dead-factor modes just observed.
+
+## 2026-09-15: Q = 5 (K = 5) full-matrix result (1744895, diag_hybrid_Q5, 4 x 15000)
+
+Window 7500-15000: held-out Rhat 3.30 | mean D 3.75 | mu 1.16/2.19 (ESS 906) | theta/s_k
+1.44/3.13 (1061) | s_k*phi 2.04/4.31 | centre of mass 3.54 | share 3.46.
+Mode census: chains 1 & 4 (held-out -27623 / -27400, D 8.18 / 8.16) agree closely (cosine
+0.96-1.00, rms log-ratio of growth 0.09); chains 2 & 3 each LOST the small first factor
+(share 0.00), D 7.3 / 7.9, held-out worse by 400-1800. The D level tracks whether all
+factors are alive. So the dimension of the rho layer is NOT the source of the D-level
+modes (same pattern at Q = 25 and Q = 5); the recurring mechanism is factor death of the
+smallest factor (2 of 4 chains here, 1 of 4 at Q = 25), which drags D and the fit down
+with it. Q = 5 costs nothing on fit (best chains' held-out ~ equal to Q = 25's) and can be
+adopted for parsimony, but it is not the fix. K = 4 (pending) is the test of the
+factor-death mechanism; Q = 1 (pending) closes the Q question at the extreme.
+
+## 2026-09-15: K = 4 and Q = 1 full-matrix results (window 7500-15000, Rhat med/max, ESS/chain)
+
+| | K5 Q25 (paper) | K5 Q5 | **K5 Q1** | K4 Q25 |
+|---|---|---|---|---|
+| held-out log density | 2.96 (12) | 3.30 (5) | **1.50 (683)** | 2.73 (4) |
+| mean D | 2.92 | 3.75 | **1.75** | 2.27 |
+| mu (cells) | 1.17/2.39 (886) | 1.16/2.19 (906) | **1.07/2.36 (1120)** | 1.09/2.56 (455) |
+| theta/s_k aligned | 1.40/2.74 (1060) | 1.44/3.13 (1061) | **1.20/2.64 (1068)** | 1.49/2.83 (899) |
+| s_k*phi aligned | 2.37/4.10 | 2.04/4.31 | 1.81/4.27 | 2.32/4.42 |
+| FACTOR centre of mass | 3.46 | 3.54 | 2.46 | 4.20 |
+| FACTOR activity share | 3.58 | 3.46 | 2.67 | 3.96 |
+| chains with a dead factor | 1 of 4 | 2 of 4 | **0 of 4** | 1 of 4 (chain 4, share 0.01) |
+| D level across chains | 6.9-8.3 | 7.3-8.2 | **7.90-7.92** | 8.10-8.26 |
+| held-out ll across chains | -30524..-27526 | -29418..-27400 | **-27950..-27810** | -28574..-27790 |
+
+**Q = 1 (per-day rho_t, scalar county loading) removes the D-level modes and the factor
+death**: all four chains keep five live factors, agree on D to 0.02, and agree on the fit
+to within 140 nats (held-out Rhat 1.50 with 683 effective draws per chain). Chains 1, 3, 4
+agree on the factors (cosine 0.92-1.00, growth surfaces within 5-14% rms); chain 2 differs
+only on the smallest factor (share ~0.08, cosine 0.26) -- the same weakly identified minor
+wave as everywhere else. Fit: -27 810 best vs -27 526 for the best K5/Q25 chain (~300 nats
+on 6100 held-out cells), i.e. Q = 1 gives up a little predictive density for a posterior
+that is actually sampled. **K = 4 does NOT remove factor death** (chain 4 lost a factor
+anyway; centre-of-mass Rhat 4.2): the dying factor is a property of the D layer's
+flexibility, not of K. Hypothesis: with a rich rho layer, D can drop to 1 wherever a
+factor stops explaining the data, which makes a dead factor "affordable"; with Q = 1 the
+per-cell D cannot be tailored, so every factor has to keep earning its keep.
+Within-mode (Q = 1, chains 1/3/4): see next block.
+
+Q = 1, chains 1/3/4 only (the three that agree on the minor factor), window 7500-15000:
+held-out 1.08 (ESS 922/chain, pooled 78) | mean D 1.37 | mu 1.01/1.70 (1173, pooled 1475)
+| theta/s_k 1.03/2.18 (1115, pooled 319) | s_k*phi 1.54/3.55 (14) | centre of mass 2.56 |
+share 2.62. So within the mode: mu, the county shares and the held-out density are
+converged; the time factors' Rhat is still ~1.5-2.6 because the factor trajectories
+have within-chain ESS of only ~14 -- phi's PGDS step remains the slow block (thinning
+autocorrelation, expected), and the factor functionals inherit it. That is a run-length /
+phi-mixing issue, not multimodality: it would improve with more sweeps or with the fully
+collapsed phi step (which gained nothing on the subset but was never tried at full N).
+
+### Q = 1 in detail (2026-09-16)
+
+**Fit vs the paper.** Per held-out cell (6410 cells), last half: Q1 chains -4.338 / -4.360 /
+-4.340 / -4.345; the August thinning chains (the paper's fit) -4.346 / -4.771 / -4.578 /
+-4.338; Q25 hybrid -4.358 / -4.762 / -4.652 / -4.294. So Q = 1 reproduces the paper's
+best-chain fit in EVERY chain (the paper's own chains 2 and 3 were 0.2-0.4 nats/cell worse
+-- dead-factor / low-D modes). The 300-nat "cost" quoted earlier was Q25's single best
+chain; against the paper's reported fit there is no cost. Against D = 1 the subset gap was
++0.34 nats/cell; a full-matrix D = 1 fit under the same mask is the outstanding number.
+
+**Factors vs Figure 10.** Aligned to August chain 1 (the figure): Q1 chains 1/3/4 match all
+five factors, cosine 0.90-1.00; centres 219/154/145/246/272 vs 227/147/136/246/272 days;
+durations within a few days; shares 0.09-0.14 / 0.25-0.31 / 0.15-0.16 / 0.21-0.23 /
+0.22-0.29 vs 0.17 / 0.22 / 0.14 / 0.17 / 0.30. The only visible change is the minor
+factor's share (0.17 -> ~0.10). The August chains disagreed with each other MORE (chains 2
+and 3: cosine 0.63 / 0.66 on factor 1; chain 4 lost factor 5) -- the figure was drawn from
+one chain of a run whose other chains did not reproduce it; under Q = 1 three of four do.
+
+**Diagnostics.** Converged at 7500-15000: mu 1.07 (ESS/chain 1120), theta/s_k 1.20 (1068),
+held-out 1.50 (683), mean D 1.75 (7.90 +- 0.005 within AND across chains). NOT converged:
+the time-factor functionals -- per factor, centre Rhat 1.5-4.0, share 1.9-3.8, with
+ESS/chain of 4-5 in 1875 stored draws (autocorrelation ~2000 sweeps). Even chains 1/3/4,
+which agree on the profiles to cosine 0.9-1.0, give Rhat 1.6-3.8 on the functionals: the
+trajectories drift very slowly within a chain, so R-hat has ~2 effective samples per chain
+to work with. This is phi's PGDS step (conditional on ~1e5-1e6 thinned counts per (k,t),
+0.1-0.3% wide) -- the same thinning autocorrelation as theta had, now on the shape of phi.
+Run length cannot fix it (ESS 100 would need ~200k sweeps). Two ways out: (i) report the
+factors by cross-chain agreement of their profiles (cosine, centres) rather than Rhat of
+functionals with ESS 4; (ii) add group moves on each factor's trajectory against the exact
+S-target (time-shift, stretch, tilt exp(b(t - tbar)) -- Liu-Sabatti style, O(NM) per
+evaluation, prior ratio from the gamma-Markov chain), which target the centre / duration
+/ share directly while keeping the PGDS step. (ii) is a sampler change with the same
+composition claim; prototype on the subset within a single chain (ESS of centre of mass
+before / after).
+
+### 2026-09-16: alignment was contaminating the theta / phi Rhat
+
+Labels do not switch within chains (Gibbs), but the per-draw Stephens alignment on the
+60-county theta profiles is ambiguous between similar factors: on the Q = 1 run chain 3's
+assigned permutation flipped among three permutations (933 / 577 / 365 draws) and chain 2's
+in 3% of draws; aligning on the K x M phi trajectories instead gives ONE permutation per
+chain in 100% of draws. A wrong permutation on a draw inflates Rhat for every theta and phi
+element of the two swapped factors. analyze_diag.jl now aligns on phi and also reports the
+modal per-chain permutation; the Q = 1 tables are being recomputed. Reporting set fixed by
+the author: per-element mu_ij, D_ij, theta_ik, phi_kt only (no functionals). Chain files
+now store unthinned draws and full-surface statistics for mu, D and theta (all counties).
+
+Q = 1 re-analysed with phi-based alignment (window 7500-15000; per-chain permutation held
+in 100% of draws in every chain): theta/s_k 1.11/2.64 (ESS/chain 1128, pooled 82; was
+1.20 / 47 under theta-alignment); s_k*phi 2.05/4.17 (ESS 11/chain, pooled 18; was 1.81 --
+the misalignment had been pairing similar factors and hiding part of the disagreement).
+So theta improves to ~1.1 and phi is confirmed as the genuinely slow block. Next: the
+multiplicative group move on each trajectory (phi_group_move!), tilt + curvature.
+
+### phi group moves: tried, not adopted (2026-09-16)
+
+Multiplicative group moves phi_kt -> phi_kt exp(sum_j a_j g_j(t)) with a_j by slice sampling
+on the exact S-target (phi_group_move!, PHI_GROUP switch, off by default). Subset, Q = 1,
+4 x 4000, window 2000-4000, s_k*phi aligned Rhat med/p90/max (ESS/chain):
+  off                 2.19 / 2.96 / 3.69  (24)
+  tilt + curvature    1.85 / 2.86 / 3.74  (21)
+  8 cosine functions  1.83 / 2.54 / 3.11  (28)
+No material gain: the slow directions of the trajectories are not smooth global
+deformations. (First "on" run stalled: Gamma draws with shape ~d underflow tails to 0.0
+and the slice sampler started from log density -Inf -- guarded in slice1d, tails floored.)
+Decision: report phi per element with its honest Rhat/ESS and, alongside, cross-chain
+agreement of the aligned trajectories (Q = 1: 3 of 4 chains at cosine >= 0.9 on every
+factor; the 4th differs on the smallest factor only). The sampler for the paper stays:
+hybrid (theta collapsed, PGDS phi, CRT tol 0.02, scale move), no group moves.
+
+### 2026-09-16 afternoon: smoothness ladder on the subset (Q = 1, hybrid, 4 x 4000)
+
+Rationale: the failed smooth-deformation move says phi's slow directions are LOCAL
+(day-level); the gamma-Markov prior at c = 100 has relative daily step sd 1/sqrt(c phi)
+~ 5% (phi ~ 4 per factor-day at any N, since theta has mean 1), i.e. ~40% wander over a
+60-day wave, so day-level roughness is essentially unconstrained and each phi_kt is pinned
+by its own day's thinned counts. A stiffer c removes the rough modes from the posterior;
+too stiff flattens the waves (a rise is ~5%/day for weeks). Ladder c = 300 / 1000 / 3000
+vs the c = 100 baseline (ab_q1_off: s_k*phi 2.19/2.96/3.69, ESS 24; held-out to be read
+from the per-chain line now printed). Then a D = 1 fit on the subset under the same mask
+(the gain over D = 1 for the Q = 1 model, per cell).
+
+### 2026-09-16: D-update speedup ported to covid_final.jl
+
+The author's Sep 15 rewrite of helper/OrderStatsSampling.jl (Poisson pmf recurrence for
+os_consts and randTruncDirect) reaches the covid sampler automatically for the latent-sum
+step (sampleSumGivenOrderStatistic dispatches on Poisson) -- in every LOCAL run since Sep 15
+13:50, but NOT in the cluster runs (the helper was never rsynced; only speed differs). The
+covid D update had its own cdf/pdf/logpdf calls; now takes F, f, log f from os_consts
+(update_D and the held-out evaluation). Check on 20000 random cells (mu up to 5e5): the
+candidate probabilities differ from the incomplete-gamma formulation by at most 8e-7, at
+Y ~ mu where the recurrence is the more accurate of the two. Re-certification with the
+current helper + this port (Schein synthreg, 1200 reps) and a full-matrix timing are
+queued behind the smoothness ladder.
+
+**Smoothness ladder result** (subset, Q = 1, hybrid, 4 x 4000, window 2000-4000; s_k*phi
+aligned Rhat med/p90/max, ESS/chain; held-out per cell per chain):
+  c = 100    2.19 / 2.96 / 3.69  (24)   ~ -4.58
+  c = 300    2.12 / 2.87 / 3.66  (20)
+  c = 1000   2.21 / 3.39 / 4.02  (17)   -4.51 .. -4.67
+  c = 3000   1.94 / 3.24 / 3.65  (31)   -4.56 .. -4.73
+No improvement in phi mixing from a 30x stiffer chain, and the fit spreads slightly across
+chains at high c. Together with the failed smooth group moves: the slow directions of phi
+are neither the smooth global ones nor removable by a smoothness prior. Closed: keep
+c = 100; report phi per element with its Rhat / ESS-per-chain and cross-chain agreement.
+
+**D = 1 baseline on the subset** (same 210 held-out cells, 2 chains): -4.886 / -4.890 per
+cell vs ~ -4.58 for the Q = 1 inferred-D model: gain +0.30 nats/cell (Q = 25: +0.34). The
+D = 1 fit mixes perfectly with the SAME thinning + PGDS phi step (mu 1.01, theta 1.00,
+phi 1.06, phi ESS/chain 54): phi's slow mixing exists only under the inferred-D
+likelihood, which is ~5x sharper than Poisson at D ~ 8 -- the sharpness that buys the
+information gain is what makes the factor posterior ridged. Not an augmentation defect.
+
+Re-certified (2026-09-16 evening): hybrid + new helper (Poisson recurrence os_consts /
+randTruncDirect) + ported D update, Schein synthreg 1200 x 30: consistent (22 functionals,
+none below 0.01). Certified code synced to the cluster (helper included this time).
+
+## 2026-09-16 ~15:20: FINAL §7.2 RUN SUBMITTED -- SLURM 1778984 (array 1-4), output/covid/diag_final_Q1
+
+Author decision: adopt K = 5, Q = 1 (per-day rho_t with a scalar county loading), c = 100,
+eps fixed 0.5, Dmax = 9. Sampler: hybrid (theta by the collapsed slice step; phi by the
+PGDS CRT/forward pass with CRT tol 0.02; scale move; D / PG layer as in the paper), with
+the author's Poisson-recurrence helper and the ported D update -- all certified. 4 chains x
+15000 sweeps, UNTHINNED, checkpoint every 500; chain files carry mu at 300 cells, D at the
+same cells, the 60-county loading profiles, the K x M trajectories, held-out density,
+and the full-surface per-segment statistics for mu, D and theta (all 915680 cells /
+15520 loadings). Analyse: analyze_diag.jl (per-element Rhat for mu, D, theta, phi; three
+windows) and mode_census.jl. Auto-resume after the 12 h wall clock via the session
+monitor (resume_final.ids). This is the run the paper's diagnostics table and Figure 10
+come from. Still to submit after it (author's call): D = 1 baseline (DFIX=1) and the
+held-out rows under the adopted model.
+
+2026-09-17: final run chain 4 done (10.2 h). Chains 1-3 hit the 12 h wall clock at sweeps
+8000 / 6500 / 6000; the laptop-side auto-resubmit missed it (machine asleep). Resumed as
+1791650 (running on n001 / p001), plus two cluster-side dependent resume blocks 1791654
+(afterany:1791650) and 1791655 (afterany:1791654), so completion no longer depends on the
+laptop. Tasks whose chain is complete exit immediately.
+
+## 2026-09-17: MID-RUN diagnostics of the final Q = 1 run (chains at 13000/13500/11000/15000)
+
+Computed from checkpoints (ckpt_to_diag.jl -> analyze_diag.jl + mode_census.jl on a compute
+node); the chains kept running. Window 5500-11000 (the last common window):
+
+PER-ELEMENT, 300 tracked cells / aligned factors -- Rhat med/max (ESS med/min/pooled):
+  held-out log density   1.68        (163/12/66)
+  mu (cells)             1.17/2.68   (971/12/159)
+  D  (varying cells)     1.01/2.21   (1302/14/1133)   273 of 300 cells vary
+  theta/s_k aligned      1.22/2.86   (1016/12/133)
+  s_k*phi aligned        2.27/4.31   (19/12/49)
+  mean D                 2.08        (18/12/50)
+
+FULL SURFACE, all 915680 cells (split-Rhat from per-segment sufficient statistics):
+  mu         median 1.139  p90 1.985  p99 4.734  max 16.99
+  D          median 1.010  p90 1.073  p99 1.772  max 320.7 (73796 cells constant, 73795 of
+             them identical in every chain -- the Dmax ceiling)
+  theta/s_k  median 1.201  p90 2.178  p99 5.074  max 21.18  (all 15520 loadings)
+
+Alignment by phi: the modal permutation holds in 100% of draws in every chain.
+Census: held-out per chain -27852 / -27866 / -27900 / -28124; mean D 7.856-7.905 (agreeing
+to 0.05); growth surfaces corr 0.985-1.000. Factors: chains 1 and 4 agree on all five
+(cosine 0.94-1.00); chains 2 and 3 agree on four and differ on the smallest (share 0.07-0.09,
+cosine 0.28 / 0.17) -- chain 3 has that factor at share 0.00, i.e. one dead factor even at
+Q = 1 (it did not appear in the Q = 1 exploratory run).
+So: D is now the best-behaved quantity (median Rhat 1.01 over the whole surface), mu and
+theta are close to converged, phi remains the slow block, and the smallest factor remains
+the one the chains disagree about.
+
+### Per-factor diagnostics, final Q = 1 run (mid-run, window 5500-11000, per_factor.jl)
+
+All four chains (one permutation per chain, 100% of draws):
+| rank | share | centre | s_k*phi_k Rhat med/max (ESS/chain) | theta_.k Rhat med/max (ESS/chain) | min pairwise cosine |
+|---|---|---|---|---|---|
+| 1 | 0.29 | 261 | 3.17/4.23 (12) | 1.36/2.86 (22)  | 0.936 |
+| 2 | 0.27 | 246 | 2.10/4.31 (13) | 1.22/2.47 (34)  | 0.922 |
+| 3 | 0.23 | 156 | 2.23/3.65 (13) | 1.12/2.34 (55)  | 0.937 |
+| 4 | 0.14 | 140 | 2.14/3.44 (12) | 1.01/1.78 (636) | 0.925 |
+| 5 | 0.06 | 210 | 2.34/3.69 (12) | 1.52/2.37 (19)  | 0.100 |
+
+Chains 1 and 4 only (the two in the best-fitting mode):
+| 1 | 0.29 | 270 | 2.02/2.75 (13) | 1.03/1.83 (259)  | 0.999 |
+| 2 | 0.25 | 154 | 1.25/3.00 (17) | 1.00/1.26 (1157) | 0.971 |
+| 3 | 0.21 | 248 | 1.20/2.90 (17) | 1.01/1.46 (922)  | 0.994 |
+| 4 | 0.15 | 144 | 1.34/2.52 (15) | 1.00/1.29 (1135) | 0.996 |
+| 5 | 0.09 | 217 | 1.26/2.83 (16) | 1.01/1.30 (853)  | 0.980 |
+
+Within a mode the loadings are converged (theta Rhat ~1.00, ESS 250-1150) and the
+trajectories agree (cosine 0.97-0.999) with phi Rhat 1.2-2.0 limited by ESS 13-17 per
+chain. Pooling all four chains lifts every factor to Rhat 2-3 because chains 2 and 3 are
+in a different mode (chain 3 kills the smallest factor, chain 2 displaces it), which also
+shifts the other factors' shares. Recommended reporting: all-four-chains numbers as the
+headline plus the mode census (which mode each chain found, with its held-out density --
+the chains 1/4 mode fits best: -27852 / -27900 vs -28124), and the within-mode numbers as
+the refinement. Rerun on the completed 15000-sweep files when the chains finish.
+
+### 2026-09-17: the local stalls are a Julia 1.11.2 GC deadlock on macOS, not sleep/wake
+
+Both the annealed and the UNANNEALED subset runs froze at 0% CPU mid-run (sweeps ~2000 and
+~4000). `sample` shows every thread parked in ijl_gc_collect / jl_safepoint_start_gc: the
+stop-the-world GC waiting on a thread that never reaches a safepoint. --gcthreads=1 is
+already set and does not prevent it. This is the same signature as the Sep 13 N = 300
+stall, which was attributed to the laptop sleeping -- that attribution was wrong; the
+machine did not sleep this time. The cluster (Linux, same Julia) has run 15000-sweep
+chains without it, so it is macOS-specific. Consequence: local multi-thousand-sweep runs
+are unreliable; subset experiments move to the cluster via srun. The annealing A/B was
+relaunched there.
+
+### Warm-up annealing of D (author's idea): subset A/B on the cluster, Q = 1, 4 x 6000
+
+Schedule "1:800,3:400,5:400,7:400" -- D pinned at 1, 3, 5, 7 for the first 2000 sweeps,
+then inferred. It only shapes the warm-up (those sweeps are burn-in), so the sampler that
+produces the reported draws is the certified one and no new validity check is needed.
+Window 4000-6000, Rhat med/p90/max (ESS/chain):
+
+| quantity | annealed | plain |
+|---|---|---|
+| held-out log density | 1.55 (39) | 2.11 (13) |
+| mu | 1.17/1.55/2.38 (126) | 1.21/1.67/2.65 (121) |
+| theta/s_k | 1.12/1.57/2.47 (170) | 1.29/1.80/2.78 (166) |
+| s_k*phi | 1.70/2.28/3.24 (28) | 1.96/2.84/3.31 (29) |
+
+Held-out per chain: annealed -4.556..-4.663 (spread 0.107); plain -4.462..-4.602 (0.139).
+Modest but consistent gains on Rhat for held-out density, theta and phi at identical ESS,
+i.e. the chains agree better rather than mixing faster -- consistent with annealing
+placing them in the same basin. Cheap (the annealed sweeps are faster than ordinary ones,
+since D is small during warm-up). Worth adopting for future runs; NOT worth redoing the
+finished full-matrix run for on this evidence alone.
+
+Author's correction to the annealing design (2026-09-18): drop the ladder, just hold D = 1
+for at least the first half of the warm-up. D barely affects the estimate of mu, and the
+intermediate rungs only cost time (the latent-sum draw is O(D): ~1.1 s/sweep at D = 1 vs
+~4.5 s at D ~ 8 on the full matrix). Implemented as ANNEAL=n in the cluster driver
+(run_diag_chain.jl; its own output directory), and as a schedule string in the subset
+driver. The rho layer stays frozen while D is pinned -- conditioning it on D == 1
+everywhere would drive rho to zero rather than leaving it uninformative.
+
+## ===== FINAL §7.2 NUMBERS (SLURM 1778984, output/covid/diag_final_Q1) =====
+K = 5, Q = 1, c = 100, eps = 0.5, Dmax = 9; hybrid sampler (theta collapsed slice, PGDS phi,
+CRT tol 0.02, scale move); 4 chains x 15000 sweeps, unthinned; burn-in 7500, window
+7500-15000 (7500 draws/chain). Per-chain wall clock 471-636 min at 16 threads.
+
+PER ELEMENT (300 tracked cells / aligned factors) -- Rhat med/max, ESS med/min/pooled:
+  held-out log density  1.41        (140 / 22 / 109)
+  mu_it                 1.10/2.43   (1334 / 18 / 289)
+  D_it (varying cells)  1.01/2.16   (1457 / 21 / 1532)     267 of 300 cells vary
+  theta_ik/s_k          1.16/3.18   (1410 / 16 / 214)
+  s_k*phi_kt            2.10/4.20   (26 / 16 / 68)
+  mean D                2.29        (24 / 17 / 66)   [global average: posterior sd ~0.003]
+
+FULL SURFACE (every cell; split-Rhat from the per-segment sufficient statistics):
+  mu         median 1.102  p90 1.829  p99 4.630  max 16.78   (0 of 915680 constant)
+  D          median 1.009  p90 1.064  p99 1.742              (82640 constant, ALL identical
+             across chains -- the Dmax ceiling)
+  theta/s_k  median 1.149  p90 1.855  p99 5.082              (all 15520 loadings)
+Alignment: one permutation per chain, held in 100% of draws in all four chains.
+
+PER FACTOR (window 7500-15000), all four chains:
+| share | centre | s_k*phi_k Rhat med/max (ESS/chain) | theta_.k Rhat med/max (ESS/chain) | min cosine |
+| 0.28 | 268 | 2.66/3.99 (16) | 1.19/3.18 (44)  | 0.974 |
+| 0.27 | 162 | 1.92/3.61 (18) | 1.06/2.08 (120) | 0.943 |
+| 0.26 | 245 | 2.03/4.20 (17) | 1.19/2.21 (52)  | 0.962 |
+| 0.14 | 143 | 1.96/3.23 (17) | 1.01/1.79 (740) | 0.943 |
+| 0.06 | 211 | 2.32/4.00 (17) | 1.52/2.36 (27)  | 0.088 |
+Chains 1 and 4 only (same mode): phi Rhat 1.17-2.01, theta 1.00-1.05 (ESS 161-1578),
+cosine 0.946-0.999 on every factor including the smallest.
+
+MODE CENSUS: held-out per chain -27852 / -27861 / -27889 / -28044; mean D 7.864-7.912;
+growth surfaces corr 0.985-1.000. Chains 1 and 4 agree on all five factors; chain 3 has
+the smallest factor dead (share 0.00) and chain 2 displaces it (cosine 0.29).
+
+## 2026-09-18: what the chains actually disagree about, and the K = 3 runs
+
+phi_disagreement.jl on the final run (window 7500-15000), chain-mean trajectories:
+| factor (share) | peak day / chain | peak height / chain | mass / chain | mean abs diff |
+|---|---|---|---|---|
+| 1 (0.28) | 281/281/281/275 | 172k/142k/162k/139k | 5.6/4.2/6.1/4.6 M | 30% of mean height |
+| 2 (0.27) | 127/135/127/127 | 68k/61k/65k/68k | 4.5/4.4/5.2/5.6 M | 21% |
+| 3 (0.26) | 247/247/247/247 | 106k/134k/103k/109k | 3.8/6.7/4.3/4.2 M | 36% |
+| 4 (0.14) | 29/24/29/29 | 32.5k x4 | 3.0/1.9/2.9/2.8 M | 25% |
+| 5 (0.06) | 212/71/275/212 | 18k/17k/43k/18k | 1.6/1.3/0.09/1.4 M | 126% |
+
+TIMING is robust (peak days agree to 0-8 days on every substantial factor); AMPLITUDE is
+not (masses differ 20-75%), while the total fitted surface agrees (corr 0.985-1.000). The
+chains trade mass between temporally OVERLAPPING factors -- 1 with 3 (centres 272/246) and
+2 with 4 (150/142). That is the shear direction of the factorisation, not a rugged
+landscape: the data pin the waves' position but only weakly pin how the overlap is split.
+
+Author's call: K = 3 (only three factors are reported anyway) provided the fit does not
+collapse; no common init, but a better one. Submitted two full-matrix arrays (4 chains x
+15000, Q = 1, c = 100, eps 0.5, hybrid), each with a dependent resume block:
+  1794432 (+1794437) K = 3, everything else identical to the final run -- the clean
+     comparison against K = 5;
+  1794433 (+1794438) K = 3 + ANNEAL=3750 (D = 1 for the first 3750 sweeps) + NMFINIT=1
+     (each chain starts at its own KL-NMF of the increments; NMF is non-convex so the
+     chains stay dispersed -- data-informed, not a common start).
+Read-outs: held-out log density per chain vs the K = 5 run's -27852..-28044 (fit), and
+phi's per-factor Rhat / cross-chain agreement (identification).
+
+## 2026-09-19: K = 3 with D = 1 warm-up and per-chain NMF init -- the factors agree
+
+output/covid/diag_hybrid_K3_Q1_anneal3750_nmf (1794433/1794438), 4 x 15000, Q = 1, c = 100.
+
+PER FACTOR (window 7500-15000, all four chains, one permutation per chain in 100% of draws):
+| share | centre | s_k*phi_k Rhat med/max (ESS/chain) | theta_.k Rhat med/max (ESS/chain) | min cosine |
+| 0.44 | 202 | 1.36/1.76 (23) | 1.02/1.52 (650)  | 0.999 |
+| 0.41 | 249 | 1.16/1.67 (27) | 1.02/1.61 (313)  | 1.000 |
+| 0.15 | 147 | 1.44/2.19 (19) | 1.00/1.41 (1380) | 0.999 |
+
+TRAJECTORY DIFFERENCES between chain means: 2-5% of each factor's mean height (K = 5 was
+21-36%, and 126% for its smallest factor). Peak days identical across chains; masses agree
+to 1-2%; centres 202 / 249 / 147 in every chain. So at K = 3 the mass-trading between
+overlapping factors is gone and the factorisation is reproducible chain to chain.
+
+FIT: held-out log density per chain -28467 / -28539 / -28642 / -30225, against the K = 5
+run's -27852 / -27861 / -27889 / -28044. Best-to-best that is ~615 nats over 6410 held-out
+cells = 0.10 nats/cell worse. (For scale, inferred D beats D = 1 by ~0.30 nats/cell.)
+
+CAVEAT: chain 1 sits at mean D 5.67 while chains 2-4 are at 7.78-7.80, and its held-out is
+1600 nats worse -- the D-level mode has NOT gone away; annealing from D = 1 left one chain
+short of the D plateau. Its FACTORS still agree with the others (cosine 1.000), so the
+disagreement is confined to the order, not the factorisation. Fix if wanted: a longer
+D-inferred settling stretch after the ladder, or a shorter ladder (D climbs from 1 to ~7.8
+in about 2000 sweeps once released).
+The plain K = 3 run (1794432, no annealing, prior init) is still finishing and will say
+how much of this is K = 3 and how much is the new warm-up / init.
+
+## 2026-09-19: K = 3 plain vs K = 3 with the D = 1 warm-up and NMF init
+
+Same data, same sampler, 4 x 15000, Q = 1, c = 100; window 7500-15000.
+
+| | K3 plain | K3 anneal+NMF | K5 (final) |
+|---|---|---|---|
+| held-out log density Rhat | 1.96 | 2.50 | 1.41 |
+| held-out ll per chain | -28447/-28464/-28569/-29804 | -28467/-28539/-28642/-30225 | -27852..-28044 |
+| mu (cells) | 1.02/1.72 (1520) | 1.02/1.83 (1494) | 1.10/2.43 (1334) |
+| mu, all 915680 cells | 1.019 med, 1.213 p90 | 1.018 med, 1.205 p90 | 1.102 med, 1.829 p90 |
+| theta/s_k aligned | 1.02/2.95 (1624) | 1.01/1.61 (1691) | 1.16/3.18 (1410) |
+| theta, all 9312 loadings | 1.016 med, 1.298 p90 | 1.009 med, 1.117 p90 | 1.149 med, 1.855 p90 |
+| s_k*phi aligned | 1.75/3.49 (28) | 1.30/2.19 (33) | 2.10/4.20 (26) |
+| per-factor phi Rhat | 1.63-1.87 | 1.16-1.44 | 1.92-2.66 (+2.32 for the small one) |
+| per-factor min cosine | 0.968-0.999 | 0.999-1.000 | 0.943-0.974 (+0.088) |
+| trajectory differences | 7-16% | 2-5% | 21-36% (+126%) |
+
+So K = 3 alone gets most of the way (trajectory differences 21-36% -> 7-16%, phi Rhat
+2.1 -> 1.75), and the annealed warm-up with the per-chain NMF init closes most of the rest
+(-> 2-5%, phi Rhat 1.30, theta Rhat 1.01 with p90 1.12 over all 9312 loadings). Both K = 3
+runs put ONE chain at mean D ~5.9 while the other three sit at 7.78-7.81 (held-out 1300
+nats worse), so the D-level mode survives both changes -- it is a property of the order
+layer, not of K or the init. Fit cost of K = 3: best chain -28447 vs -27852 at K = 5,
+i.e. 0.093 nats/cell of the 0.30 nats/cell that inferring D buys over Poisson.
+Note the two K = 3 runs find DIFFERENT third factors: plain has centres 249/195/147,
+annealed+NMF has 202/249/147 -- the middle factor is the unstable one in both.

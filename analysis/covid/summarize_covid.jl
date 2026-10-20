@@ -27,7 +27,12 @@ const DIR  = joinpath(ROOT, "output/covid/revisionsamples")
 
 const MASKS  = [101, 102, 103, 104, 105]
 const CHAINS = [1, 2, 3, 4]
-const K, Q   = 5, 25
+# Q = 1 (per-day rho_t, scalar county loading), not the 25 of the original submission:
+# Q = 25 produced D-level modes and factor death in 1-2 of every 4 chains, while Q = 1
+# removed both and reproduced the submission's reported held-out fit in EVERY chain
+# (per-cell -4.338/-4.360/-4.340/-4.345 against -4.346/-4.771/-4.578/-4.338). See
+# revision2_experiments/covid/FINDINGS.md.
+const K, Q   = 5, 1
 
 # (D, type, label). Every row is scored against the D = 1 row of the same model family.
 const CONFIGS = [

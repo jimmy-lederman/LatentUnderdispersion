@@ -68,9 +68,31 @@ alpha0 = 1.0; beta0 = 1.0   # named to match the struct fields, and to avoid sha
 start_tau = 0.0; tauc = 1.0; taud = 0.0
 Dmax = 9
 
-Nsamples = 500
-nburnin  = 2000
-nthin    = 4
+# eps is PINNED, not inferred (Section 7.2 reports it as a fixed positivity floor; see the
+# epsilon paragraph). The diagnostics runs pin it at the same value, so the information-gain
+# table and the diagnostics table describe the same posterior.
+EPS_PIN = 0.5
+
+# Run lengths. The D-INFERRED arm has a burn-in problem the pinned arms do not: rho's linear
+# predictor is a bilinear form in two zero-mean factors, so it starts at logit^{-1}(0) = 1/2
+# and mean D starts near 1 + (Dmax-1)/2 ~ 5, having to climb to ~7.9. Across the four chains
+# of the final full-matrix run that climb took between under 1000 and about 5000 sweeps (one
+# chain was still at 7.73 at sweep 4000). A 2000-sweep burn-in would retain that chain
+# mid-climb, and ONLY the inferred arm has the climb -- so the old setting would have biased
+# the inferred-vs-pinned comparison in favour of the paper's own claim. With D pinned the
+# whole D / Polya-gamma / beta / tau block is skipped and there is nothing there to converge.
+#
+# Retained draws are held at 500 deliberately: `fit` accumulates whole state dicts, and
+# D_NM alone is 915,680 entries per draw, so 500 draws is already ~4 GB resident.
+if type == 4 && D == 0
+    Nsamples = 500
+    nburnin  = 5000
+    nthin    = 20        # 15000 sweeps, matching output/covid/diag_final_Q1
+else
+    Nsamples = 500
+    nburnin  = 2000
+    nthin    = 8         # 6000 sweeps
+end
 
 # `constantinit` PINS D for the whole run; it is how the fixed-D rows, including the
 # D = 1 Poisson baseline, are produced. `skipupdate` additionally stops the D branch from
@@ -87,8 +109,12 @@ nthin    = 4
 #
 # Only type 4 carries a per-cell D_{i,t} to pin: types 1 and 2 have no order statistic at
 # all, and type 3 takes its fixed order as a model field.
-Dkw = (type == 4 && D > 0) ?
-      (; constantinit = Dict("D_NM" => fill(D, N, M)), skipupdate = ["D_NM"]) : (;)
+cinit = Dict{String,Any}()
+type == 4 && (cinit["eps"] = EPS_PIN)
+(type == 4 && D > 0) && (cinit["D_NM"] = fill(D, N, M))
+Dkw = isempty(cinit) ? (;) :
+      (type == 4 && D > 0) ? (; constantinit = cinit, skipupdate = ["D_NM"]) :
+                             (; constantinit = cinit)
 
 # phi's prior draw is SCALE-CORRECTED before the chain starts. Its structure is left alone,
 # so chains stay as dispersed as a prior draw makes them; only the overall magnitude is
@@ -123,7 +149,11 @@ for i in 1:N
 end
 mean_inc = mean(inc_NM)
 initkw = (; init = Dict("V_KM" => function (st)
-              target = max(mean_inc - st["eps"], 1e-6)
+              # `fit` applies init BEFORE constantinit, so st["eps"] here is still the prior
+              # draw even though the run will hold eps at EPS_PIN. Use the value the chain
+              # will actually run at.
+              epsref = type == 4 ? EPS_PIN : st["eps"]
+              target = max(mean_inc - epsref, 1e-6)
               cur = mean(st["U_NK"] * st["V_KM"])
               return st["V_KM"] .* (target / max(cur, 1e-12))
           end))
@@ -147,8 +177,23 @@ elseif type == 4
     # was: include(ablation/covid3.jl), which does not define covid4 at all, so this
     # branch could never run.
     include(joinpath(ROOTDIR, "models/covid/covid_final.jl"))
+    # The 18-argument constructor defaults every sampler flag to false, which is the ORIGINAL
+    # thinning sampler: theta drawn from the multinomial-thinned counts, no scale move. That
+    # is the kernel whose theta autocorrelation is ~mu/g (10^2-10^4 sweeps on this matrix)
+    # and which does not converge at any affordable run length. The Section 7.2 diagnostics
+    # are reported from the HYBRID sampler, so the information-gain table has to come from
+    # the same kernel or the two tables describe different posteriors.
     model = covid4(N, M, K, Q, Dmax, a, b, c, d, g, h,
-                   start_V1, start_V2, alpha0, beta0, tauc, taud, start_tau)
+                   start_V1, start_V2, alpha0, beta0, tauc, taud, start_tau,
+                   false,   # hier_b
+                   true,    # scale_move: the mu-preserving (theta, phi) rescaling
+                   false,   # eps_mh: off, it did not deliver; eps is pinned anyway
+                   true,    # use_offset
+                   false,   # shear_move
+                   true,    # collapsed: theta by the slice step on the S-target
+                   false,   # iid_phi (test flag only)
+                   true,    # phi_da: HYBRID -- phi keeps the CRT / Gamma forward pass
+                   false)   # dir_theta
 else
     error("unknown type $type (1-3 = ablation models, 4 = Section 7.2 final model)")
 end
@@ -157,9 +202,28 @@ end
 fit(model, data; nsamples=1, nburnin=1, nthin=1, mask=mask_NM, info=info,
     initseed=chainSeed, verbose=false, initkw..., Dkw...)
 
+# Checkpoint every 500 sweeps. The inferred-D arm is 15000 sweeps at roughly 2 s/sweep on
+# the full matrix, i.e. 8-10 h against a 12 h wall clock, so a job that is cut off has to be
+# resumable rather than restarted. Resuming is crash recovery, not reproducibility -- see the
+# caveat in MatrixMF.fit.
+# Checkpoints go to SCRATCH, not to the project space. `fit` accumulates whole state dicts
+# and D_NM alone is 915,680 entries per draw, so a late-run checkpoint is ~4 GB; with 20
+# concurrent tasks that is ~75 GB, against ~117 GB free in /net/projects/schein-lab. Scratch
+# is a different Lustre fileset on the same server with hundreds of TB free, and it is
+# network-mounted, so a resubmitted task lands on any node and still finds its checkpoint.
+# Scratch is PURGED, which is fine: the checkpoint is disposable the moment the output is
+# written, and this script deletes it then. Only the ~40 MB output per run is kept, and that
+# goes to the project space.
+ckptdir = get(ENV, "CKPTDIR", joinpath(ROOTDIR, "output/covid/revisionsamples/ckpt"))
+mkpath(ckptdir)
+ckptfile = joinpath(ckptdir,
+    "ckpt_covid$(type)D$(D)K$(K)Q$(Q)mask$(maskSeed)chain$(chainSeed).jld")
+
 time_result = @elapsed samples = fit(model, data; nsamples=Nsamples, nburnin=nburnin,
                                      nthin=nthin, mask=mask_NM, initseed=chainSeed,
-                                     verbose=true, info=info, initkw..., Dkw...)
+                                     verbose=true, info=info,
+                                     ckptfile=ckptfile, ckptevery=500,
+                                     initkw..., Dkw...)
 
 # ---- held-out predictive density, retained PER DRAW ------------------------------------
 # Same quantities as Section 7.1: a per-draw scalar for ESS/Rhat, and a per-cell posterior
@@ -188,7 +252,14 @@ Random.seed!(20260809)
 mu_cells = [(rand(1:N), rand(1:M)) for _ in 1:200]
 mu_draws = [Float64[sum(s["U_NK"][n, :] .* s["V_KM"][:, m]) for (n, m) in mu_cells] for s in samples]
 Dmean_draws = Float64[mean(s["D_NM"]) for s in samples]
+# theta for ALL counties, as Float32, plus s_k = sum_i theta_{i,k}. phi (V_KM) was already
+# kept per draw; without theta and s_k the scaled trajectory s_k*phi_{k,t} and the loading
+# profile theta_{i,k}/s_k -- the two objects the factor figure actually interprets -- cannot
+# be reconstructed later, which is what forces a refit when the reporting choice changes.
+# 3104 x 5 Float32 is 62 KB/draw, so 500 draws adds ~31 MB per run.
 samplesnew = [Dict("eps" => s["eps"], "V_KM" => s["V_KM"],
+                   "U_NK" => Float32.(s["U_NK"]),
+                   "s_k" => vec(sum(s["U_NK"], dims=1)),
                    "sigma2_beta" => s["sigma2_beta"], "sigma2_tau" => s["sigma2_tau"],
                    "Tau_QM" => s["Tau_QM"]) for s in samples]
 
@@ -223,3 +294,11 @@ save(folder * "covid$(type)D$(D)K$(K)Q$(Q)mask$(maskSeed)chain$(chainSeed).jld",
      "hostname", gethostname(), "slurmjob", get(ENV, "SLURM_JOB_ID", ""),
      "dedicated", get(ENV, "COVID_DEDICATED", "0"))
 println("saved.")
+
+# The checkpoint exists only to survive the wall clock. Once the output is written it is
+# dead weight, and on a throttled array the difference between deleting it here and leaving
+# it is tens of GB of scratch.
+if isfile(ckptfile)
+    rm(ckptfile; force=true)
+    println("removed checkpoint ", ckptfile)
+end
