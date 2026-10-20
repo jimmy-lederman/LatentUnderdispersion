@@ -29,24 +29,35 @@
 # surface diagnostics come out of the same run. diag_final_Q1 is therefore the (D inferred,
 # mask 101) cell of this grid and does not need rerunning.
 #
-# IDENTICAL MCMC SETTINGS FOR EVERY CELL: 4 chains x 15000 sweeps, unthinned, same sampler,
-# same hyperparameters, same eps. No per-arm asymmetry to explain in the paper. Burn-in is
-# an ANALYSIS choice, not a run parameter -- every sweep is stored and analyze_diag.jl /
-# summarize_covid.jl apply the 7500-15000 window, matching diag_final_Q1.
+# IDENTICAL MCMC SETTINGS FOR EVERY CELL: 4 chains x 10000 sweeps, unthinned, 5000 burn-in,
+# same sampler, same hyperparameters, same eps. No per-arm asymmetry to explain in the paper.
+# Every sweep is stored, so the window stays revisitable; BURNIN only governs the derived
+# posterior summaries the run writes.
 #
-# WALL CLOCK: cost is O(D) per cell, so the arms are not equally expensive at a common
-# sweep count -- roughly 4.6 h at D = 1 and ~19 h at D = 9 for 15000 sweeps. The D = 7 and
-# D = 9 arms will exceed the 12 h limit and need ONE resubmission each; checkpointing every
-# 500 sweeps makes that a no-op (completed cells are skipped). Budget ~3 days of wall clock
-# for the grid at 23 concurrent tasks. The cluster allows 24, so %23 leaves one slot free
-# for an interactive srun while the grid runs.
+# WHY 5000 + 5000. The draft reports 2000 burn-in and 2000 retained sweeps. 5000 burn-in is
+# 2.5x that and is what the evidence supports: the slowest D climb seen in diag_final_Q1 took
+# about 4000-5000 sweeps, and once D settles it stays (mean D was already 7.78 by sweep 500
+# in the first cell of the cancelled 15000-sweep attempt). 5000 retained, unthinned, gives
+# per-chain ESS of roughly 980 on D, 943 on theta, 893 on mu and 93 on the held-out density
+# -- the latter from its measured autocorrelation time of ~54 sweeps. s_k*phi stays the weak
+# one at ~17/chain; at tau ~ 288 sweeps even 15000 draws only reached 26, so that is a
+# property of the phi block rather than of the run length.
+#
+# WALL CLOCK: cost per sweep is FLAT in D at Q = 1 (measured: 1.48-1.76 s locally across
+# D = 1..9 and inferred, arm_cost.jl; 3.38 s on an EPYC 9115 at 16 threads). So 10000 sweeps
+# is ~9.4 h per cell, inside the 12 h limit with ~2.6 h of margin -- ONE pass, no
+# resubmission, no wall-clock kills. Budget ~2 days for the grid at 23 concurrent tasks. The
+# cluster allows 24, so %23 leaves one slot free for an interactive srun while the grid runs.
+#
+# (The earlier 15000-sweep attempt, array 2204211, was cancelled: at 3.38 s/sweep it needed
+# 14.1 h and would have required a resubmission per cell for a window nobody needed.)
 #
 # STORAGE, and the two places it goes:
-#   SCRATCH  gets the full chain file, ~1.1 GB/chain with THETAFULL=1 (the theta trace alone
-#            is 3104 x 5 Float32 x 15000 = 931 MB). ~135 GB for the grid, against hundreds of
+#   SCRATCH  gets the full chain file, ~880 MB/chain with THETAFULL=1 (the theta trace alone
+#            is 3104 x 5 Float32 x 10000 = 620 MB). ~106 GB for the grid, against hundreds of
 #            TB free. Scratch PURGES, so nothing the paper needs may live only here.
-#   PROJECT  gets a durable companion: the same file minus the theta trace, ~190 MB/chain and
-#            ~23 GB for the grid. Every table and figure is built from this. summarize_covid.jl
+#   PROJECT  gets a durable companion: the same file minus the theta trace, ~260 MB/chain and
+#            ~31 GB for the grid. Every table and figure is built from this. summarize_covid.jl
 #            reads the companions, so a purge costs only the ability to recompute per-draw
 #            theta diagnostics later -- not any reported number.
 # FULLSURF=1 keeps the N x M statistics for mu and D (117 MB/chain), so the full-surface
@@ -55,8 +66,11 @@
 # 10th sweep; the per-draw SUM is stored every sweep. That is a storage cadence, not a
 # sampling one -- the chain itself is never thinned.
 #
-# CHECKPOINT I/O: with THETAFULL=1 a checkpoint is ~1.1 GB and is rewritten every 500 sweeps,
-# so each chain writes ~33 GB over its life. That is why checkpoints live on scratch too.
+# CHECKPOINT I/O: with THETAFULL=1 a checkpoint is ~880 MB and is rewritten every 500 sweeps,
+# so each chain writes ~18 GB over its life. That is why checkpoints live on scratch too.
+# STALE CHECKPOINTS ARE A TRAP: run_diag_chain.jl resumes from any checkpoint it finds, so a
+# leftover from a run with different settings would silently continue under the OLD config.
+# Clear the scratch tree before relaunching with changed settings.
 #
 # Submit from this directory:  sbatch submit_infogain.sbatch
 # Then:  julia --project=../../.. ../../../analysis/covid/summarize_covid.jl
@@ -82,8 +96,9 @@ export THIN=1            # the chain is NOT thinned
 export HOTHIN=10         # per-cell held-out densities every 10th sweep (storage only)
 export FULLSURF=1        # full-surface split-Rhat for mu and D on all 915,680 cells, every
                          # cell of the grid: +117 MB/chain durable (37 GB total) and <1% runtime
-export THETAFULL=1       # theta for every county, every sweep (931 MB/chain, on scratch)
-NSWEEPS=15000
+export THETAFULL=1       # theta for every county, every sweep (620 MB/chain, on scratch)
+export BURNIN=5000       # warm-up excluded from the derived posterior summaries
+NSWEEPS=10000
 
 # --- the three things that vary across the grid -------------------------------------
 DLIST=(0 1 3 5 7 9)
