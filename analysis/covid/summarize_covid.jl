@@ -23,7 +23,12 @@ using JLD, Statistics, Printf, LogExpFunctions
 using MCMCDiagnosticTools
 
 const ROOT = abspath(joinpath(@__DIR__, "..", ".."))
-const DIR  = joinpath(ROOT, "output/covid/revisionsamples")
+# The grid is produced by revision2_experiments/covid/cluster/run_diag_chain.jl, which
+# evaluates the held-out likelihood INSIDE the sweep loop and stores functionals instead of
+# whole state dicts. That is why the chains are unthinned and every arm shares one set of
+# MCMC settings. Its key names differ from the older runcovid_heldout.jl format and it
+# stores warm-up sweeps too, so loadrun below maps the names and applies the window.
+const DIR  = joinpath(ROOT, "output/covid/infogain")
 
 const MASKS  = [101, 102, 103, 104, 105]
 const CHAINS = [1, 2, 3, 4]
@@ -44,10 +49,31 @@ const CONFIGS = [
 ]
 const BASELINE = (1, 4, "Poisson (D = 1)")
 
-fname(D, t, m, c) = "covid$(t)D$(D)K$(K)Q$(Q)mask$(m)chain$(c).jld"
-path(D, t, m, c)  = joinpath(DIR, fname(D, t, m, c))
-have(D, t, m, c)  = isfile(path(D, t, m, c)) && filesize(path(D, t, m, c)) > 0
-loadrun(D, t, m, c) = load(path(D, t, m, c))
+# The DURABLE companion, not the full chain file: the latter carries a 931 MB per-draw theta
+# trace and lives on scratch, which purges. The companion is the same file without that trace
+# and holds everything any table or figure is built from.
+path(D, t, m, c) = joinpath(DIR, "D$(D)_mask$(m)", "summary_chain$(c).jld")
+have(D, t, m, c) = isfile(path(D, t, m, c)) && filesize(path(D, t, m, c)) > 0
+
+# diag key -> the name the rest of this script uses
+const KEYMAP = Dict("heldout_loglik_draws" => "ll", "mu_draws" => "mu",
+                    "Dmean_draws" => "dm", "time" => "seconds")
+
+function loadrun(D, t, m, c)
+    r = load(path(D, t, m, c))
+    for (want, have_) in KEYMAP
+        !haskey(r, want) && haskey(r, have_) && (r[want] = r[have_])
+    end
+    # Drop warm-up. run_diag_chain.jl stores EVERY sweep, so without this the per-draw
+    # traces would carry burn-in into both the ESS/Rhat figures and the timing column.
+    if haskey(r, "sw") && haskey(r, "burnin")
+        keep = findall(>(r["burnin"]), r["sw"])
+        for k in ("heldout_loglik_draws", "mu_draws", "Dmean_draws")
+            haskey(r, k) && (r[k] = r[k][keep])
+        end
+    end
+    return r
+end
 
 # Pooled held-out information rate for one split: the four chains form a single posterior,
 # so this is a logsumexp over chains per cell, not an average of per-chain rates.
