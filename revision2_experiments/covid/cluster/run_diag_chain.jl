@@ -36,7 +36,12 @@ mkpath(outdir)
 # full-surface sufficient statistics), which is fine in project space.
 const THIN       = parse(Int, get(ENV, "THIN", "1"))
 const NSEG       = 8       # segments of the run for the full-surface sufficient statistics
-const CKPT_EVERY = 500     # checkpoint cadence
+# Checkpoint cadence. Each checkpoint is a full rewrite (~880 MB with THETAFULL=1), and
+# writing a 29 MB HDF5 dataset to this Lustre filesystem intermittently fails with
+# errno 14 'Bad address' -- measured at roughly 1 chain in 4 over a 10000-sweep run. Fewer
+# writes means fewer chances to hit it; the cost is re-running up to CKPT_EVERY sweeps after
+# a kill. The save is also guarded below, so a failure is no longer fatal.
+const CKPT_EVERY = parse(Int, get(ENV, "CKPT_EVERY", "500"))
 const NCELLS     = 300     # cells for mu
 const NCTY       = 200     # counties whose theta profile is tracked
 # THETAFULL=1: track theta for EVERY county per draw rather than a subset of NCTY. This is
@@ -170,8 +175,22 @@ ckptfile = joinpath(outdir, "ckpt_chain$(chainSeed).jld")
 outfile  = joinpath(outdir, "diag_chain$(chainSeed).jld")
 
 # ---- initialise, or resume ------------------------------------------------------------
+# A checkpoint truncated by an earlier crash or kill must not take the chain down with it;
+# if it will not load, start the chain over rather than failing the task.
+ckpt_ok = false
 if isfile(ckptfile)
-    ck = load(ckptfile)
+    global ck = nothing
+    try
+        # `global` because try is a SOFT scope: at top level an assignment inside it would
+        # otherwise create a new local and leave ck/ckpt_ok untouched outside the block.
+        global ck = load(ckptfile)
+        global ckpt_ok = true
+    catch e
+        @warn "checkpoint at $ckptfile is unreadable; starting this chain from scratch" exception=e
+        flush(stderr)
+    end
+end
+if ckpt_ok
     state = ck["state"]; s0 = ck["sweep"]
     sw = ck["sw"]; ll = ck["ll"]; mu = ck["mu"]; th = ck["th"]; ph = ck["ph"]
     dm = ck["dm"]; dc = get(ck, "dc", Vector{Vector{Int8}}())
@@ -279,10 +298,22 @@ for s in (s0+1):nsweeps
         segn[seg] += 1
     end
     if s % CKPT_EVERY == 0
-        save(ckptfile, "state", state, "sweep", s, "sw", sw, "ll", ll,
-             "mu", mu, "th", th, "ph", ph, "dm", dm, "dc", dc,
-             "hoc", hoc, "hosw", hosw, "fc", fc,
-             "S1mu", S1mu, "S2mu", S2mu, "S1d", S1d, "S2d", S2d, "segn", segn, "S1th", S1th, "S2th", S2th)
+        # A failed checkpoint must NOT kill the chain. HDF5 writes to this filesystem fail
+        # intermittently (errno 14), and losing crash-protection is a far smaller cost than
+        # losing a 10-hour chain. Write to a temporary and move, so a failure or a
+        # wall-clock kill mid-write cannot leave a truncated file that the next attempt
+        # would try to resume from.
+        try
+            tmpck = ckptfile * ".tmp"
+            save(tmpck, "state", state, "sweep", s, "sw", sw, "ll", ll,
+                 "mu", mu, "th", th, "ph", ph, "dm", dm, "dc", dc,
+                 "hoc", hoc, "hosw", hosw, "fc", fc,
+                 "S1mu", S1mu, "S2mu", S2mu, "S1d", S1d, "S2d", S2d, "segn", segn, "S1th", S1th, "S2th", S2th)
+            mv(tmpck, ckptfile; force=true)
+        catch e
+            @warn "checkpoint write failed at sweep $s; continuing without it" exception=e
+            flush(stderr)
+        end
         @printf("  sweep %d/%d  %.1f min  (%.2f s/sweep)  meanD %.2f\n",
                 s, nsweeps, (time()-t0)/60, (time()-t0)/(s-s0), dm[end]); flush(stdout)
     end

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=covidig
-#SBATCH --array=1-120%23
+#SBATCH --array=1-120%12
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -46,8 +46,22 @@
 # WALL CLOCK: cost per sweep is FLAT in D at Q = 1 (measured: 1.48-1.76 s locally across
 # D = 1..9 and inferred, arm_cost.jl; 3.38 s on an EPYC 9115 at 16 threads). So 10000 sweeps
 # is ~9.4 h per cell, inside the 12 h limit with ~2.6 h of margin -- ONE pass, no
-# resubmission, no wall-clock kills. Budget ~2 days for the grid at 23 concurrent tasks. The
-# cluster allows 24, so %23 leaves one slot free for an interactive srun while the grid runs.
+# resubmission, no wall-clock kills -- PROVIDED tasks are not packed onto shared nodes.
+#
+# CONCURRENCY: %23 was tried and Slurm packed up to EIGHT tasks onto one node (r002), where
+# they contend for memory bandwidth: 3.9-5.9 s/sweep against 3.38 s/sweep on a less crowded
+# node. That pushed cells past the 12 h limit and produced 18 TIMEOUTs. %12 trades
+# parallelism for per-task speed at roughly constant throughput and keeps cells inside the
+# wall clock.
+#
+# RELIABILITY (learned the hard way in arrays 2204211 and 2205122):
+#   * checkpoint WRITES are guarded in run_diag_chain.jl -- an HDF5 'Bad address' failure
+#     logs a warning instead of killing a 10-hour chain. Roughly 1 chain in 4 hit this.
+#   * checkpoint READS are guarded too, so a truncated checkpoint restarts that chain
+#     rather than failing the task.
+#   * this script checks Julia's exit code AND that the output file exists, so a crash can
+#     never again be recorded as COMPLETED. In array 2205122, 9 of 15 "completed" tasks had
+#     actually died and written nothing.
 #
 # (The earlier 15000-sweep attempt, array 2204211, was cancelled: at 3.38 s/sweep it needed
 # 14.1 h and would have required a resubmission per cell for a window nobody needed.)
@@ -98,6 +112,7 @@ export FULLSURF=1        # full-surface split-Rhat for mu and D on all 915,680 c
                          # cell of the grid: +117 MB/chain durable (37 GB total) and <1% runtime
 export THETAFULL=1       # theta for every county, every sweep (620 MB/chain, on scratch)
 export BURNIN=5000       # warm-up excluded from the derived posterior summaries
+export CKPT_EVERY=2500   # fewer 880 MB rewrites -> fewer chances to hit the Lustre HDF5 fault
 NSWEEPS=10000
 
 # --- the three things that vary across the grid -------------------------------------
@@ -128,8 +143,17 @@ if [ -s "$OUT" ]; then
   exit 0
 fi
 
-"$JULIA" --project=$REPO --threads=${CPUS} --gcthreads=1 \
+if ! "$JULIA" --project=$REPO --threads=${CPUS} --gcthreads=1 \
     "$REPO/revision2_experiments/covid/cluster/run_diag_chain.jl" \
-    "$CHAIN" "$NSWEEPS" "$SCRATCHDIR"
+    "$CHAIN" "$NSWEEPS" "$SCRATCHDIR"; then
+  rc=$?
+  echo "=== JULIA FAILED (exit ${rc}): D=${DVAL} mask=${MASK} chain=${CHAIN}"
+  exit ${rc}
+fi
+
+if [ ! -s "$OUT" ]; then
+  echo "=== NO DURABLE OUTPUT WRITTEN: D=${DVAL} mask=${MASK} chain=${CHAIN}"
+  exit 1
+fi
 
 echo "=== D=${DVAL} mask=${MASK} chain=${CHAIN} finished $(date)"
