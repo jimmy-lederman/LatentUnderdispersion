@@ -143,12 +143,16 @@ if [ -s "$OUT" ]; then
   exit 0
 fi
 
-if ! "$JULIA" --project=$REPO --threads=${CPUS} --gcthreads=1 \
+# Capture the exit status DIRECTLY. `if ! cmd; then rc=$?` captures the status of the
+# negation, which is 0 whenever cmd failed -- so the first attempt at this check exited 0 and
+# Slurm still recorded COMPLETED for crashed tasks.
+"$JULIA" --project=$REPO --threads=${CPUS} --gcthreads=1 \
     "$REPO/revision2_experiments/covid/cluster/run_diag_chain.jl" \
-    "$CHAIN" "$NSWEEPS" "$SCRATCHDIR"; then
-  rc=$?
+    "$CHAIN" "$NSWEEPS" "$SCRATCHDIR"
+rc=$?
+if [ "$rc" -ne 0 ]; then
   echo "=== JULIA FAILED (exit ${rc}): D=${DVAL} mask=${MASK} chain=${CHAIN}"
-  exit ${rc}
+  exit "$rc"
 fi
 
 if [ ! -s "$OUT" ]; then

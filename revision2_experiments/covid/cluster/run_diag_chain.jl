@@ -184,7 +184,19 @@ if isfile(ckptfile)
         # `global` because try is a SOFT scope: at top level an assignment inside it would
         # otherwise create a new local and leave ck/ckpt_ok untouched outside the block.
         global ck = load(ckptfile)
-        global ckpt_ok = true
+        # A checkpoint truncated mid-write can still OPEN: HDF5 reads the file structure and
+        # `load` returns only the datasets that reached disk. That is not a usable resume
+        # point, and reading a missing key from it is a KeyError that kills the task, so
+        # require every key the resume path below reads.
+        local need = ["state", "sweep", "sw", "ll", "mu", "th", "ph", "dm",
+                      "S1mu", "S2mu", "S1d", "S2d", "segn", "S1th", "S2th"]
+        local absent = [k for k in need if !haskey(ck, k)]
+        if isempty(absent)
+            global ckpt_ok = true
+        else
+            @warn "checkpoint at $ckptfile is INCOMPLETE (missing $(join(absent, ", "))); starting this chain from scratch"
+            flush(stderr)
+        end
     catch e
         @warn "checkpoint at $ckptfile is unreadable; starting this chain from scratch" exception=e
         flush(stderr)
