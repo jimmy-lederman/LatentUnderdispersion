@@ -316,7 +316,12 @@ for s in (s0+1):nsweeps
         # wall-clock kill mid-write cannot leave a truncated file that the next attempt
         # would try to resume from.
         try
-            tmpck = ckptfile * ".tmp"
+            # ".tmp.jld", NOT ".tmp": FileIO picks the writer from the EXTENSION, so a
+            # name ending .jld.tmp raises "No applicable_savers found for UNKNOWN" and
+            # every checkpoint silently fails. That bug broke checkpointing completely
+            # between 3da5b19 and here, which is why timed-out cells had nothing to
+            # resume from.
+            tmpck = ckptfile * ".tmp.jld"
             save(tmpck, "state", state, "sweep", s, "sw", sw, "ll", ll,
                  "mu", mu, "th", th, "ph", ph, "dm", dm, "dc", dc,
                  "hoc", hoc, "hosw", hosw, "fc", fc,

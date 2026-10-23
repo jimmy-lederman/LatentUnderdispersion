@@ -219,7 +219,9 @@ function fit(model::MatrixMF, data; nsamples=1000, nburnin=200, nthin=5, initial
         if !isnothing(ckptfile) && mod(s, ckptevery) == 0
             # write to a temporary and move, so a job killed mid-write does not leave a
             # truncated checkpoint that the next attempt would try to resume from
-            tmp = ckptfile * ".tmp"
+            # ".tmp.jld", NOT ".tmp" -- FileIO selects the writer by extension and a
+            # name ending .jld.tmp fails with "No applicable_savers found for UNKNOWN".
+            tmp = ckptfile * ".tmp.jld"
             JLD.save(tmp, "state", state, "sweep", s, "samplelist", samplelist)
             mv(tmp, ckptfile; force=true)
         end
