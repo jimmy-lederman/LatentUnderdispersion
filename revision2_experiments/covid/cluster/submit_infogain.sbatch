@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=covidig
-#SBATCH --array=1-120%12
+#SBATCH --array=1-120%23
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -48,11 +48,11 @@
 # is ~9.4 h per cell, inside the 12 h limit with ~2.6 h of margin -- ONE pass, no
 # resubmission, no wall-clock kills -- PROVIDED tasks are not packed onto shared nodes.
 #
-# CONCURRENCY: %23 was tried and Slurm packed up to EIGHT tasks onto one node (r002), where
-# they contend for memory bandwidth: 3.9-5.9 s/sweep against 3.38 s/sweep on a less crowded
-# node. That pushed cells past the 12 h limit and produced 18 TIMEOUTs. %12 trades
-# parallelism for per-task speed at roughly constant throughput and keeps cells inside the
-# wall clock.
+# CONCURRENCY: %12 was tried and was a MISTAKE. The theory was that packing tasks onto one
+# node (up to eight on r002) was costing per-sweep speed, but halving concurrency barely
+# moved the rate -- median 5.54 s/sweep at %12 against 5.90 at %23 -- so it halved throughput
+# for nothing. Measured at %12: p25 4.60, median 5.54, p75 6.06 s/sweep, and a 31% TIMEOUT
+# rate at 10000 sweeps. Back to %23: ~1.7 days for 74 cells against ~3.2 days at %12.
 #
 # RELIABILITY (learned the hard way in arrays 2204211 and 2205122):
 #   * checkpoint WRITES are guarded in run_diag_chain.jl -- an HDF5 'Bad address' failure
