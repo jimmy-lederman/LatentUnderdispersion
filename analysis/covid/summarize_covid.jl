@@ -19,7 +19,7 @@
 # Polya-Gamma layer, up to sign/rotation. That is the same point response_plan WS1.2
 # makes for Section 6.3.
 
-using JLD, Statistics, Printf, LogExpFunctions
+using JLD, Statistics, Printf, LogExpFunctions, LinearAlgebra, Combinatorics
 using MCMCDiagnosticTools
 
 const ROOT = abspath(joinpath(@__DIR__, "..", ".."))
@@ -106,6 +106,91 @@ safe(f, x) = try f(x) catch; [NaN] end
 ess_bulk(x) = safe(y -> ess(y; kind = :bulk), x)
 ess_tail(x) = safe(y -> ess(y; kind = :tail), x)
 
+# (draws, chains, params) for D on the SAME 300 cells mu uses. Cells where D never moves
+# -- pinned arms, and the cells wedged at the Dmax ceiling -- make rhat/ess NaN, so they are
+# excluded and counted rather than silently averaged in.
+function d_array(D, t, mask)
+    per = [loadrun(D, t, mask, c)["dc"] for c in CHAINS]
+    S, P = length(per[1]), length(per[1][1])
+    A = Array{Float64}(undef, S, length(CHAINS), P)
+    for ci in eachindex(CHAINS), s in 1:S, p in 1:P
+        A[s, ci, p] = Float64(per[ci][s][p])
+    end
+    return A
+end
+
+# Split-Rhat for every element of a surface, from the per-segment sufficient statistics
+# (ported from revision2_experiments/covid/cluster/analyze_diag.jl). A window is a set of
+# whole segments; each chain's window is split into first and second half, giving 2*nchains
+# half-chains of n draws. Elements constant in every half are excluded and counted.
+function surface_rhat(S1, S2, segn, segs)
+    nh = length(segs) ÷ 2
+    halves = [segs[1:nh], segs[nh+1:end]]
+    means = Matrix{Float64}[]; vars = Matrix{Float64}[]; n = 0
+    for c in eachindex(S1), h in halves
+        s1 = sum(Float64.(S1[c][:, :, k]) for k in h); s2 = sum(Float64.(S2[c][:, :, k]) for k in h)
+        n = sum(segn[c][k] for k in h)
+        m = s1 ./ n; v = max.(s2 ./ n .- m .^ 2, 0.0) .* (n / max(n - 1, 1))
+        push!(means, m); push!(vars, v)
+    end
+    W = mean(vars); Mbar = mean(means)
+    B = n .* mean([(m .- Mbar).^2 for m in means]) .* (length(means) / max(length(means)-1, 1))
+    R = sqrt.(((n - 1) / n .* W .+ B ./ n) ./ W)
+    const_all = [all(vars[j][i] == 0 for j in eachindex(vars)) for i in eachindex(W)]
+    (R = R, ok = .!const_all)
+end
+
+# Labels are arbitrary ACROSS chains, so theta and phi must be aligned before any
+# cross-chain statistic. One permutation per chain, chosen on the mean phi trajectories
+# (aligning on theta is ambiguous between similar factors and inflates Rhat -- FINDINGS).
+#
+# phi comes from the per-draw trace, so it gets Rhat AND ESS. theta comes from the
+# per-segment sufficient statistics instead: the durable companion drops the per-draw theta
+# trace (931 MB/chain, kept only on scratch), and S1th/S2th cover ALL 3104 counties rather
+# than a subsample -- a stronger statement, at the cost of no ESS, which moments cannot give.
+function aligned_phi_theta(D, t, mask)
+    rs  = [loadrun(D, t, mask, c) for c in CHAINS]
+    phs = [r["ph"] for r in rs]
+    K, M = size(phs[1][1])
+    mp = [reduce(+, Float64.(p[i]) for i in eachindex(p)) ./ length(p) for p in phs]
+    perms = [collect(1:K)]
+    for c in 2:length(CHAINS)
+        best, bs = collect(1:K), -Inf
+        for pp in permutations(1:K)
+            sc = sum(dot(mp[1][k,:], mp[c][pp[k],:]) /
+                     (norm(mp[1][k,:])*norm(mp[c][pp[k],:]) + 1e-300) for k in 1:K)
+            sc > bs && (bs = sc; best = collect(pp))
+        end
+        push!(perms, best)
+    end
+    S = minimum(length.(phs))
+    PH = Array{Float64}(undef, S, length(CHAINS), K*M)
+    for ci in eachindex(CHAINS), s in 1:S
+        PH[s, ci, :] = vec(Float64.(phs[ci][s])[perms[ci], :])
+    end
+    # theta: aligned columns of the segment statistics -> split-Rhat over all N x K loadings
+    nseg = rs[1]["nseg"]; nsw = rs[1]["nsweeps"]; bi = rs[1]["burnin"]
+    per = max(nsw ÷ nseg, 1)
+    segs = [k for k in 1:nseg if (k - 1) * per >= bi]
+    thR = Float64[]
+    if length(segs) >= 2 && all(haskey(r, "S1th") for r in rs)
+        S1 = [rs[c]["S1th"][:, perms[c], :] for c in eachindex(CHAINS)]
+        S2 = [rs[c]["S2th"][:, perms[c], :] for c in eachindex(CHAINS)]
+        sg = [rs[c]["segn"] for c in eachindex(CHAINS)]
+        out = surface_rhat(S1, S2, sg, segs)
+        thR = filter(isfinite, vec(out.R[out.ok]))
+    end
+    (PH, thR)
+end
+
+# median / p90 / mean-ESS of a (draws, chains, params) array, ignoring degenerate params
+function quant3(A)
+    rs = filter(isfinite, vec(safe(rhat, A)))
+    es = filter(isfinite, vec(ess_bulk(A)))
+    (isempty(rs) ? NaN : median(rs), isempty(rs) ? NaN : quantile(rs, 0.9),
+     isempty(es) ? NaN : mean(es), length(rs))
+end
+
 function complete_masks(D, t)
     [m for m in MASKS if all(have(D, t, m, c) for c in CHAINS)]
 end
@@ -156,38 +241,60 @@ function main()
     # the max over 300 cells is an extreme statistic, and a handful of genuinely hard
     # low-count counties sitting at 2.5 reads as "nothing converged" when the median cell is
     # at 1.16. This is the same convention Section 6.3 and FINDINGS.md use.
-    @printf("%-30s %8s %8s %8s %9s %9s %9s %9s\n",
-            "model", "Rhat_lp", "ESSb_lp", "ESSt_lp",
-            "Rhat_mu50", "Rhat_mu90", "Rhat_muMax", "ESSb_mu")
-    println("-"^116)
+    ctr(s, w) = (pad = w - length(s); lpad(s, length(s) + pad ÷ 2) * " "^(pad - pad ÷ 2))
+    @printf("%-28s |%s|%s|%s|%s\n", "",
+            ctr("mu_it", 27), ctr("D_it", 27), ctr("theta_ik/s_k", 27), ctr("s_k*phi_kt", 27))
+    @printf("%-28s |%s|%s|%s|%s\n", "model",
+            ctr("Rhat med   p90   ESS/ch", 27), ctr("Rhat med   p90   ESS/ch", 27),
+            ctr("Rhat med   p90   ESS/ch", 27), ctr("Rhat med   p90   ESS/ch", 27))
+    println("-"^(28 + 4*28 + 1))
     for (D, t, lab) in allcfg
         ms = avail[(D,t)]
         isempty(ms) && continue
-        rh_lp = Float64[]; eb_lp = Float64[]; et_lp = Float64[]
-        rh50 = Float64[]; rh90 = Float64[]; rhmx = Float64[]; eb_mu = Float64[]
+        # The held-out log predictive density is deliberately NOT diagnosed here. It is the
+        # quantity the information-gain table above is built from, and the author's choice is
+        # to report that table on its own terms rather than attach a convergence statistic to
+        # it in this block.
+        mu5 = Float64[]; mu9 = Float64[]; mue = Float64[]
+        d5  = Float64[]; d9  = Float64[]; de  = Float64[]; dvary = Int[]; dtot = Int[]
+        th5 = Float64[]; th9 = Float64[]
+        ph5 = Float64[]; ph9 = Float64[]; phe = Float64[]
         for m in ms
-            L = draws_matrix(D, t, m, "heldout_loglik_draws")   # (draws, chains)
-            A3 = reshape(L, size(L,1), size(L,2), 1)
-            push!(rh_lp, safe(rhat, A3)[1])
-            push!(eb_lp, ess_bulk(A3)[1]); push!(et_lp, ess_tail(A3)[1])
-            MU = mu_array(D, t, m)
-            # `safe` returns a scalar NaN if rhat throws, and filter cannot iterate that
-            rs = let r = safe(rhat, MU)
-                r isa AbstractArray ? filter(isfinite, vec(r)) : Float64[]
-            end
-            if !isempty(rs)
-                push!(rh50, median(rs)); push!(rh90, quantile(rs, 0.9)); push!(rhmx, maximum(rs))
-            end
-            push!(eb_mu, mean(filter(isfinite, ess_bulk(MU))))
+            (a, b, e, _) = quant3(mu_array(D, t, m));  push!(mu5, a); push!(mu9, b); push!(mue, e)
+
+            DA = d_array(D, t, m)
+            (a, b, e, nvary) = quant3(DA)
+            push!(d5, a); push!(d9, b); push!(de, e)
+            push!(dvary, nvary); push!(dtot, size(DA, 3))
+
+            (PH, thR) = aligned_phi_theta(D, t, m)
+            isempty(thR) || (push!(th5, median(thR)); push!(th9, quantile(thR, 0.9)))
+            (a, b, e, _) = quant3(PH); push!(ph5, a); push!(ph9, b); push!(phe, e)
         end
-        @printf("%-30s %8.2f %8.0f %8.0f %9.2f %9.2f %9.2f %9.0f\n",
-                lab, median(rh_lp), mean(eb_lp), mean(et_lp),
-                median(rh50), median(rh90), maximum(rhmx), mean(eb_mu))
+        md(v) = (w = filter(isfinite, v); isempty(w) ? NaN : median(w))
+        # D is PINNED in the fixed-order arms: it is a constant, not an estimand, so there is
+        # nothing to diagnose and the columns print as dashes rather than a misleading NaN.
+        trip(a, b, e) = @sprintf("   %6.2f %6.2f %8.0f  ", a, b, e)
+        dash3 = "       ---    ---      ---  "
+        dcell = D > 0 ? dash3 : trip(md(d5), md(d9), md(de))
+        thcell = @sprintf("   %6.2f %6.2f %8s  ", md(th5), md(th9), "---")
+        @printf("%-28s |%s|%s|%s|%s\n", lab,
+                trip(md(mu5), md(mu9), md(mue)), dcell, thcell,
+                trip(md(ph5), md(ph9), md(phe)))
+        D == 0 && !isempty(dvary) &&
+            @printf("%-28s   (D varies in %d of %d tracked cells; the rest sit at the Dmax ceiling)\n",
+                    "", round(Int, median(dvary)), round(Int, median(dtot)))
     end
 
-    println("Rhat_lp is the median across splits; Rhat_mu50/90/Max are over the 300 tracked")
-    println("cells, pooled across splits. ESS figures are per chain. No timing is reported --")
-    println("see the environment block.")
+    println()
+    println("Every figure is the median across the available train/test splits. med / p90 are")
+    println("quantiles of Rhat over PARAMETERS: 300 tracked cells for mu and D, ALL N x K")
+    println("loadings for theta (from the per-segment sufficient statistics, hence no ESS), and")
+    println("K x M entries for phi. ESS is bulk ESS per chain. theta and phi")
+    println("are aligned across chains by one permutation per chain chosen on the phi")
+    println("trajectories -- without that, cross-chain statistics on them are meaningless.")
+    println("D is pinned in the fixed-order arms, hence the dashes. No timing is reported; see")
+    println("the environment block.")
 
     # Environment: kept as provenance even though no timing is reported, because it records
     # which code revision produced each cell.
